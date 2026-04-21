@@ -60,17 +60,10 @@ python run.py
 
 ### In-app controls
 
-- `M`: cycle game mode (`human_vs_ai`, `human_vs_human`, `ai_vs_ai`)
-- `E`: switch engine (`mentor` / `uci`)
-- `S` / `A`: increase/decrease AI strength
-- `O`: cycle opening strategy (`weighted`, `best`, `random`, `off`)
-- `C`: toggle human side (white/black)
-- `B`: toggle book selection mode (auto-rotate vs fixed)
-- `N`: cycle active book (fixed mode)
-- `P`: cycle common UCI engine path candidates
-- `T` / `G`: increase/decrease UCI threads
-- `Y` / `H`: increase/decrease UCI move time
-- `R`: rotate board, `U`: undo
+- Use the HUD **buttons** for game controls (mode, engine, strength, opening, side, books, threads, move time, path, rotate, undo, and exports).
+- FEN / PGN / board image export are available directly from HUD buttons.
+- The window is resizable and the layout adapts for wide and narrow (stacked) viewports.
+- Keyboard shortcuts remain available for power users (`M/E/S/A/O/C/B/N/P/T/G/Y/H/R/U/F/J/I`).
 
 ## Tests
 

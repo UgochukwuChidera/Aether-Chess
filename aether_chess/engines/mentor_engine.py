@@ -4,6 +4,7 @@ import math
 import random
 import time
 import threading
+from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
@@ -125,7 +126,7 @@ class TTEntry:
 class MentorEngine:
     def __init__(self, config: Optional[SearchConfig] = None):
         self.config = config or SearchConfig()
-        self.tt: Dict[int, TTEntry] = {}
+        self.tt: OrderedDict[int, TTEntry] = OrderedDict()
         self.tt_lock = threading.Lock()
         self.nodes = 0
         self.nodes_lock = threading.Lock()
@@ -144,7 +145,7 @@ class MentorEngine:
 
     def evaluate(self, board: chess.Board) -> int:
         if board.is_checkmate():
-            return -MATE_SCORE + (board.ply() if board.turn else -board.ply())
+            return -MATE_SCORE + board.ply()
         if board.is_stalemate() or board.is_insufficient_material():
             return 0
 
@@ -194,7 +195,7 @@ class MentorEngine:
         if len(board.pieces(chess.BISHOP, chess.BLACK)) >= 2:
             score -= 50
 
-        return score
+        return score if board.turn == chess.WHITE else -score
 
     # ------------------------ Move Ordering ------------------------
     def see(self, board: chess.Board, move: chess.Move) -> int:
@@ -237,10 +238,15 @@ class MentorEngine:
     # ------------------------ TT Helpers ------------------------
     def _store_tt(self, key: int, depth: int, value: int, flag: str, move: Optional[chess.Move]):
         with self.tt_lock:
-            if len(self.tt) >= self.config.tt_max_entries:
-                min_key = min(self.tt.items(), key=lambda kv: kv[1].depth)[0]
-                del self.tt[min_key]
+            existing = self.tt.get(key)
+            # Keep the deepest result for a position; shallower rewrites are ignored
+            # even when the table has space because they reduce TT quality.
+            if existing and existing.depth > depth:
+                return
+            if key not in self.tt and len(self.tt) >= self.config.tt_max_entries:
+                self.tt.popitem(last=False)
             self.tt[key] = TTEntry(depth, value, flag, move)
+            self.tt.move_to_end(key)
 
     def _probe_tt(self, key: int, depth: int, alpha: int, beta: int) -> Tuple[Optional[int], Optional[chess.Move]]:
         entry = self.tt.get(key)
@@ -296,6 +302,8 @@ class MentorEngine:
         self._inc_nodes()
         if self._out_of_resources():
             return self.evaluate(board)
+        if depth <= 0:
+            return self._quiescence(board, alpha, beta)
 
         if board.is_repetition(3) or board.is_fifty_moves() or board.is_stalemate():
             return 0
@@ -391,27 +399,32 @@ class MentorEngine:
             if self._out_of_resources():
                 break
             window = 50
-            alpha = best_score - window if depth > 1 else -INF
-            beta = best_score + window if depth > 1 else INF
+            window_alpha = best_score - window if depth > 1 else -INF
+            window_beta = best_score + window if depth > 1 else INF
+            root_key = chess.polyglot.zobrist_hash(board)
+            tt_entry = self.tt.get(root_key) if depth > 1 else None
+            tt_move = tt_entry.best_move if tt_entry else None
             while True:
+                search_alpha = window_alpha
+                search_beta = window_beta
                 local_best = None
                 local_best_score = -INF
-                moves = self._ordered_moves(board, None, 0)
+                moves = self._ordered_moves(board, tt_move, 0)
                 for move in moves:
                     board.push(move)
-                    score = -self._search(board, depth - 1, -beta, -alpha, 1)
+                    score = -self._search(board, depth - 1, -search_beta, -search_alpha, 1)
                     board.pop()
                     if score > local_best_score:
                         local_best_score = score
                         local_best = move
-                    alpha = max(alpha, score)
-                    if alpha >= beta:
+                    search_alpha = max(search_alpha, score)
+                    if search_alpha >= search_beta:
                         break
-                if local_best_score <= alpha and depth > 1:
-                    alpha = max(-INF, alpha - window)
+                if local_best_score <= window_alpha and depth > 1:
+                    window_alpha = max(-INF, window_alpha - window)
                     window *= 2
-                elif local_best_score >= beta and depth > 1:
-                    beta = min(INF, beta + window)
+                elif local_best_score >= window_beta and depth > 1:
+                    window_beta = min(INF, window_beta + window)
                     window *= 2
                 else:
                     break
