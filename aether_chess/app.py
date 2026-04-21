@@ -23,6 +23,18 @@ PIECE_GLYPHS = {
 }
 STATUS_MAX_LENGTH = 30
 STATUS_TRUNCATE_LENGTH = 27
+MIN_SQUARE_SIZE = 30
+MIN_STACKED_HUD_HEIGHT = 190
+MIN_HUD_WIDTH = 260
+MAX_HUD_WIDTH = 360
+MIN_TWO_COLUMN_BUTTON_WIDTH = 300
+MOVE_LIST_PADDING = 8
+MOVE_LIST_EXTRA_WIDTH = 2
+SCROLL_INCREMENT = 24
+DISPLAY_FLAGS = pygame.RESIZABLE
+MIN_WIDE_LAYOUT_WIDTH = 940
+
+ButtonDef = Tuple[str, Callable[[], None], bool, bool]
 
 
 @dataclass
@@ -39,13 +51,14 @@ class UIButton:
     action: Callable[[], None]
     rect: pygame.Rect
     needs_sync: bool = True
+    start_engine: bool = True
 
 
 class AetherChessApp:
     def __init__(self, width: int = 960, height: int = 720):
         pygame.init()
         pygame.font.init()
-        self.screen = pygame.display.set_mode((width, height), pygame.RESIZABLE)
+        self.screen = pygame.display.set_mode((width, height), DISPLAY_FLAGS)
         pygame.display.set_caption("Aether Chess")
         self.clock = pygame.time.Clock()
 
@@ -59,9 +72,11 @@ class AetherChessApp:
 
         self.square_size = min(height - 40, 640) // 8
         self.board_origin = (20, 20)
+        # Layout-driven placeholders. Real values are set in _recompute_layout().
         self.hud_rect = pygame.Rect(0, 0, 0, 0)
         self.moves_rect = pygame.Rect(0, 0, 0, 0)
         self.hud_buttons: List[UIButton] = []
+        self._button_layout_signature: Optional[Tuple[int, ...]] = None
 
         self.piece_font = pygame.font.SysFont("DejaVu Sans,Segoe UI Symbol,Arial Unicode MS", self.square_size - 8)
         self.text_font = pygame.font.SysFont("Arial", 20)
@@ -82,25 +97,25 @@ class AetherChessApp:
         self._recompute_layout()
 
     def _recompute_layout(self) -> None:
+        # Layout scales down to keep board + HUD usable on small windows.
         width, height = self.screen.get_size()
         margin = max(10, min(width, height) // 50)
-        stacked = width < 940
-        min_square = 30
+        stacked = width < MIN_WIDE_LAYOUT_WIDTH
         if stacked:
-            board_space_h = max(8 * min_square, height - (4 * margin + 190))
+            board_space_h = max(8 * MIN_SQUARE_SIZE, height - (4 * margin + MIN_STACKED_HUD_HEIGHT))
             board_px = min(width - 2 * margin, board_space_h)
-            self.square_size = max(min_square, board_px // 8)
+            self.square_size = max(MIN_SQUARE_SIZE, board_px // 8)
             board_px = self.square_size * 8
             self.board_origin = (max(margin, (width - board_px) // 2), margin)
             hud_y = self.board_origin[1] + board_px + margin
             hud_h = max(120, height - hud_y - margin)
             self.hud_rect = pygame.Rect(margin, hud_y, width - 2 * margin, hud_h)
         else:
-            target_hud_w = max(260, min(360, width // 3))
+            target_hud_w = max(MIN_HUD_WIDTH, min(MAX_HUD_WIDTH, width // 3))
             board_space_w = width - target_hud_w - 3 * margin
             board_space_h = height - 2 * margin
             board_px = min(board_space_w, board_space_h)
-            self.square_size = max(min_square, board_px // 8)
+            self.square_size = max(MIN_SQUARE_SIZE, board_px // 8)
             board_px = self.square_size * 8
             self.board_origin = (margin, max(margin, (height - board_px) // 2))
             hud_x = self.board_origin[0] + board_px + margin
@@ -142,40 +157,59 @@ class AetherChessApp:
         else:
             self.game_state.pop()
 
-    def _button_defs(self) -> List[Tuple[str, Callable[[], None], bool]]:
+    def _button_defs(self) -> List[ButtonDef]:
         return [
-            ("Rotate", lambda: setattr(self.ui_state, "rotate", not self.ui_state.rotate), False),
-            ("Undo", self._undo_last, False),
-            ("Mode", self.settings.cycle_mode, True),
-            ("Engine", self.settings.cycle_engine_type, True),
-            ("Strength +", lambda: self.settings.bump_strength(1), True),
-            ("Strength -", lambda: self.settings.bump_strength(-1), True),
-            ("Opening", self.settings.cycle_opening_strategy, True),
-            ("Side", self.settings.cycle_human_color, True),
-            ("Book Mode", self.settings.cycle_book_mode, True),
-            ("Next Book", self.settings.cycle_active_book, True),
-            ("Threads +", lambda: self.settings.bump_threads(1), True),
-            ("Threads -", lambda: self.settings.bump_threads(-1), True),
-            ("Move +100", lambda: self.settings.bump_movetime(100), True),
-            ("Move -100", lambda: self.settings.bump_movetime(-100), True),
-            ("Path", self._cycle_uci_path, False),
-            ("Export FEN", self.export_fen, False),
-            ("Export PGN", self.export_pgn, False),
-            ("Export Image", self.export_screenshot, False),
+            ("Rotate", lambda: setattr(self.ui_state, "rotate", not self.ui_state.rotate), False, False),
+            ("Undo", self._undo_last, False, True),
+            ("Mode", self.settings.cycle_mode, True, True),
+            ("Engine", self.settings.cycle_engine_type, True, True),
+            ("Strength +", lambda: self.settings.bump_strength(1), True, True),
+            ("Strength -", lambda: self.settings.bump_strength(-1), True, True),
+            ("Opening", self.settings.cycle_opening_strategy, True, True),
+            ("Side", self.settings.cycle_human_color, True, True),
+            ("Book Mode", self.settings.cycle_book_mode, True, True),
+            ("Next Book", self.settings.cycle_active_book, True, True),
+            ("Threads +", lambda: self.settings.bump_threads(1), True, True),
+            ("Threads -", lambda: self.settings.bump_threads(-1), True, True),
+            ("Move +100", lambda: self.settings.bump_movetime(100), True, True),
+            ("Move -100", lambda: self.settings.bump_movetime(-100), True, True),
+            ("Path", self._cycle_uci_path, False, False),
+            ("Export FEN", self.export_fen, False, False),
+            ("Export PGN", self.export_pgn, False, False),
+            ("Export Image", self.export_screenshot, False, False),
         ]
 
-    def _invoke_button_action(self, action: Callable[[], None], needs_sync: bool) -> None:
+    def _invoke_button_action(self, action: Callable[[], None], needs_sync: bool, start_engine: bool) -> None:
         action()
         if needs_sync:
             self._sync_engine_settings()
-        self.start_engine_reply()
+        if start_engine:
+            self.start_engine_reply()
 
     def _handle_button_click(self, x: int, y: int) -> bool:
         for button in self.hud_buttons:
             if button.rect.collidepoint(x, y):
-                self._invoke_button_action(button.action, button.needs_sync)
+                self._invoke_button_action(button.action, button.needs_sync, button.start_engine)
                 return True
         return False
+
+    def _ensure_hud_buttons(self, x: int, y: int, width: int, cols: int, button_w: int, button_h: int, gap: int) -> None:
+        """Build and cache HUD button rectangles when the layout signature changes."""
+        defs = self._button_defs()
+        signature = (x, y, width, cols, button_w, button_h, gap, len(defs))
+        if signature == self._button_layout_signature:
+            return
+        self._button_layout_signature = signature
+        self.hud_buttons = []
+        for idx, (label, action, needs_sync, start_engine) in enumerate(defs):
+            col = idx % cols
+            row = idx // cols
+            bx = x + col * (button_w + gap)
+            by = y + row * (button_h + gap)
+            rect = pygame.Rect(bx, by, button_w, button_h)
+            self.hud_buttons.append(
+                UIButton(label=label, action=action, rect=rect, needs_sync=needs_sync, start_engine=start_engine)
+            )
 
     def square_to_screen(self, square: int) -> Tuple[int, int]:
         file = chess.square_file(square)
@@ -300,15 +334,15 @@ class AetherChessApp:
 
         pad = 12
         x = self.hud_rect.x + pad
-        y = self.hud_rect.y + pad
+        current_y = self.hud_rect.y + pad
         width = self.hud_rect.width - 2 * pad
 
-        self.screen.blit(self.text_font.render("Aether Chess", True, accent), (x, y))
-        y += self.text_font.get_height() + 4
+        self.screen.blit(self.text_font.render("Aether Chess", True, accent), (x, current_y))
+        current_y += self.text_font.get_height() + 4
 
         status = "Game Over" if self.game_state.board.is_game_over() else ("White to move" if self.game_state.board.turn else "Black to move")
-        self.screen.blit(self.text_font.render(status, True, fg), (x, y))
-        y += self.text_font.get_height() + 6
+        self.screen.blit(self.text_font.render(status, True, fg), (x, current_y))
+        current_y += self.text_font.get_height() + 6
 
         info_font = pygame.font.SysFont("Arial", max(12, self.text_font.get_height() - 4))
         info_items = [
@@ -319,46 +353,45 @@ class AetherChessApp:
             f"Books: {'auto' if self.settings.auto_rotate_books else f'fixed#{self.settings.active_book_index + 1}'}",
         ]
         for item in info_items:
-            self.screen.blit(info_font.render(item, True, muted), (x, y))
-            y += info_font.get_height() + 2
-        y += 6
+            self.screen.blit(info_font.render(item, True, muted), (x, current_y))
+            current_y += info_font.get_height() + 2
+        current_y += 6
 
-        button_defs = self._button_defs()
-        cols = 2 if width >= 300 else 1
+        cols = 2 if width >= MIN_TWO_COLUMN_BUTTON_WIDTH else 1
         gap = 6
         button_h = max(24, min(34, info_font.get_height() + 10))
         button_w = (width - gap * (cols - 1)) // cols
-        self.hud_buttons = []
-        for idx, (label, action, needs_sync) in enumerate(button_defs):
-            col = idx % cols
-            row = idx // cols
-            bx = x + col * (button_w + gap)
-            by = y + row * (button_h + gap)
-            rect = pygame.Rect(bx, by, button_w, button_h)
-            self.hud_buttons.append(UIButton(label=label, action=action, rect=rect, needs_sync=needs_sync))
+        self._ensure_hud_buttons(x, current_y, width, cols, button_w, button_h, gap)
+        for button in self.hud_buttons:
+            rect = button.rect
             pygame.draw.rect(self.screen, pygame.Color("#0f0f0f"), rect, border_radius=8)
             pygame.draw.rect(self.screen, accent, rect, width=1, border_radius=8)
-            label_surface = info_font.render(label, True, fg)
+            label_surface = info_font.render(button.label, True, fg)
             lx = rect.x + (rect.width - label_surface.get_width()) // 2
             ly = rect.y + (rect.height - label_surface.get_height()) // 2
             self.screen.blit(label_surface, (lx, ly))
 
-        button_rows = (len(button_defs) + cols - 1) // cols
-        y = y + button_rows * (button_h + gap) + 6
+        button_rows = (len(self.hud_buttons) + cols - 1) // cols
+        current_y = current_y + button_rows * (button_h + gap) + 6
 
         status_line = self.engine_controller.last_error or self.engine_controller.status
         status_display = status_line if len(status_line) <= STATUS_MAX_LENGTH else f"{status_line[:STATUS_TRUNCATE_LENGTH]}..."
-        self.screen.blit(info_font.render(status_display, True, accent), (x, y))
-        y += info_font.get_height() + 6
+        self.screen.blit(info_font.render(status_display, True, accent), (x, current_y))
+        current_y += info_font.get_height() + 6
 
-        moves_h = max(70, self.hud_rect.bottom - y - pad)
-        self.moves_rect = pygame.Rect(x, y, width, moves_h)
+        moves_h = max(70, self.hud_rect.bottom - current_y - pad)
+        self.moves_rect = pygame.Rect(x, current_y, width, moves_h)
         pygame.draw.rect(self.screen, pygame.Color("#121212"), self.moves_rect, border_radius=8)
 
         moves = self.game_state.board.move_stack
         move_line_height = max(18, info_font.get_height() + 4)
         total_move_height = (len(moves) + 1) // 2 * move_line_height
-        move_surface = pygame.Surface((max(10, self.moves_rect.width - 10), max(self.moves_rect.height - 8, total_move_height + 8)))
+        move_surface = pygame.Surface(
+            (
+                max(10, self.moves_rect.width - (MOVE_LIST_PADDING + MOVE_LIST_EXTRA_WIDTH)),
+                max(self.moves_rect.height - MOVE_LIST_PADDING, total_move_height + MOVE_LIST_PADDING),
+            )
+        )
         move_surface.fill(pygame.Color("#121212"))
         my = 4
         for i in range(0, len(moves), 2):
@@ -367,10 +400,16 @@ class AetherChessApp:
             move_text = f"{i // 2 + 1:>2}. {w:<6} {b:<6}"
             move_surface.blit(info_font.render(move_text, True, fg), (4, my))
             my += move_line_height
-        max_offset = max(0, move_surface.get_height() - self.moves_rect.height + 8)
+        max_offset = max(0, move_surface.get_height() - self.moves_rect.height + MOVE_LIST_PADDING)
         self.ui_state.scroll_offset = min(self.ui_state.scroll_offset, max_offset)
-        clip_rect = pygame.Rect(0, self.ui_state.scroll_offset, move_surface.get_width(), self.moves_rect.height - 8)
-        self.screen.blit(move_surface, (self.moves_rect.x + 5, self.moves_rect.y + 4), area=clip_rect)
+        clip_rect = pygame.Rect(
+            0, self.ui_state.scroll_offset, move_surface.get_width(), self.moves_rect.height - MOVE_LIST_PADDING
+        )
+        self.screen.blit(
+            move_surface,
+            (self.moves_rect.x + MOVE_LIST_PADDING // 2 + 1, self.moves_rect.y + MOVE_LIST_PADDING // 2),
+            area=clip_rect,
+        )
 
     def render(self, dt_ms: int = 16) -> None:
         self.screen.fill((12, 12, 12))
@@ -434,11 +473,11 @@ class AetherChessApp:
                     if event.button == 1:
                         self.handle_click(*event.pos)
                     elif event.button == 4 and self.moves_rect.collidepoint(*event.pos):
-                        self.ui_state.scroll_offset = max(0, self.ui_state.scroll_offset - 24)
+                        self.ui_state.scroll_offset = max(0, self.ui_state.scroll_offset - SCROLL_INCREMENT)
                     elif event.button == 5 and self.moves_rect.collidepoint(*event.pos):
-                        self.ui_state.scroll_offset += 24
+                        self.ui_state.scroll_offset += SCROLL_INCREMENT
                 elif event.type == pygame.VIDEORESIZE:
-                    self.screen = pygame.display.set_mode((event.w, event.h), pygame.RESIZABLE)
+                    self.screen = pygame.display.set_mode((event.w, event.h), DISPLAY_FLAGS)
                     self._recompute_layout()
                 elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_r:
