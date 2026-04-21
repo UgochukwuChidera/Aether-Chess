@@ -1,0 +1,4 @@
+python-chess>=1.999
+pygame>=2.6
+fpdf2>=2.8
+onnxruntime>=1.20
