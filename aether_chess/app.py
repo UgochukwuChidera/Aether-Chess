@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import threading
+from datetime import datetime, timezone
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Optional, Tuple
@@ -67,6 +68,7 @@ class AetherChessApp:
         self.engine_controller = EngineController(self.settings)
         self.engine_thread: Optional[threading.Thread] = None
         self.pending_engine_move: Optional[chess.Move] = None
+        self.export_dir = Path.cwd() / "exports"
 
     def _sync_engine_settings(self) -> None:
         self.engine_controller.apply_settings(self.settings)
@@ -271,7 +273,8 @@ class AetherChessApp:
             "R rotate | U undo | M mode",
             "E eng | S/A +/- str | O open",
             "C side | B auto/fix | N book",
-            "P path | T/G threads | Y/H move"
+            "P path | T/G threads | Y/H move",
+            "F FEN | J PGN | I image",
         ]
         y_bottom += 30
         for inst in instructions:
@@ -290,6 +293,43 @@ class AetherChessApp:
         out = str(Path(path).resolve())
         pygame.image.save(self.screen, out)
         return out
+
+    def _timestamp(self) -> str:
+        return datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+
+    def _copy_to_clipboard(self, text: str) -> bool:
+        try:
+            if not pygame.scrap.get_init():
+                pygame.scrap.init()
+            pygame.scrap.put_text(text)
+            return True
+        except Exception:
+            return False
+
+    def export_fen(self) -> str:
+        fen = self.game_state.to_fen()
+        self.export_dir.mkdir(parents=True, exist_ok=True)
+        out = self.export_dir / f"aether-fen-{self._timestamp()}.txt"
+        out.write_text(fen + "\n", encoding="utf-8")
+        copied = self._copy_to_clipboard(fen)
+        self.engine_controller.status = "FEN copied and exported" if copied else f"FEN exported: {out.name}"
+        return str(out)
+
+    def export_pgn(self) -> str:
+        pgn = self.game_state.to_pgn()
+        self.export_dir.mkdir(parents=True, exist_ok=True)
+        out = self.export_dir / f"aether-game-{self._timestamp()}.pgn"
+        out.write_text(pgn + "\n", encoding="utf-8")
+        copied = self._copy_to_clipboard(pgn)
+        self.engine_controller.status = "PGN copied and exported" if copied else f"PGN exported: {out.name}"
+        return str(out)
+
+    def export_screenshot(self) -> str:
+        self.export_dir.mkdir(parents=True, exist_ok=True)
+        out = self.export_dir / f"aether-board-{self._timestamp()}.png"
+        path = self.save_screenshot(str(out))
+        self.engine_controller.status = f"Image exported: {Path(path).name}"
+        return path
 
     def run(self) -> None:
         self.start_engine_reply()
@@ -353,6 +393,12 @@ class AetherChessApp:
                         self._sync_engine_settings()
                     elif event.key == pygame.K_p:
                         self._cycle_uci_path()
+                    elif event.key == pygame.K_f:
+                        self.export_fen()
+                    elif event.key == pygame.K_j:
+                        self.export_pgn()
+                    elif event.key == pygame.K_i:
+                        self.export_screenshot()
                     self.start_engine_reply()
             self.render(dt)
         self.engine_controller.stop_uci()
