@@ -1,0 +1,24 @@
+{
+  "name": "Aether Dark",
+  "board": {
+    "light": "#EEEED2",
+    "dark": "#769656",
+    "highlight": "#F6F669",
+    "last_move": "#FFD54F"
+  },
+  "hud": {
+    "background": "#1E1E1E",
+    "text": "#F5F5F5",
+    "accent": "#00BCD4"
+  },
+  "pieces": {
+    "set": "alpha"
+  },
+  "sounds": {
+    "move": "aether_chess/assets/sounds/move.wav",
+    "capture": "aether_chess/assets/sounds/capture.wav",
+    "check": "aether_chess/assets/sounds/check.wav",
+    "castle": "aether_chess/assets/sounds/castle.wav",
+    "game_end": "aether_chess/assets/sounds/game_end.wav"
+  }
+}
