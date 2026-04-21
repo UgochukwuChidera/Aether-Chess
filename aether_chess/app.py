@@ -30,6 +30,7 @@ MAX_HUD_WIDTH = 360
 MIN_TWO_COLUMN_BUTTON_WIDTH = 300
 MOVE_LIST_PADDING = 8
 MOVE_LIST_EXTRA_WIDTH = 2
+MOVE_LIST_X_OFFSET = 1
 SCROLL_INCREMENT = 24
 DISPLAY_FLAGS = pygame.RESIZABLE
 MIN_WIDE_LAYOUT_WIDTH = 940
@@ -407,7 +408,7 @@ class AetherChessApp:
         )
         self.screen.blit(
             move_surface,
-            (self.moves_rect.x + MOVE_LIST_PADDING // 2 + 1, self.moves_rect.y + MOVE_LIST_PADDING // 2),
+            (self.moves_rect.x + MOVE_LIST_PADDING // 2 + MOVE_LIST_X_OFFSET, self.moves_rect.y + MOVE_LIST_PADDING // 2),
             area=clip_rect,
         )
 
