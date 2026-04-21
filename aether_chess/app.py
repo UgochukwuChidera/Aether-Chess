@@ -12,6 +12,7 @@ from aether_chess.engines.mentor_engine import MentorEngine
 from aether_chess.models.game_state import GameState
 from aether_chess.ui.animation import PieceAnimation
 from aether_chess.ui.theme import ThemeManager
+from aether_chess.ui.pieces import PieceManager
 
 PIECE_GLYPHS = {
     "P": "♙", "N": "♘", "B": "♗", "R": "♖", "Q": "♕", "K": "♔",
@@ -38,6 +39,9 @@ class AetherChessApp:
         self.ui_state = UIState()
         self.theme_manager = ThemeManager("aether_chess/config/default_theme.json")
         self.theme = self.theme_manager.theme
+
+        self.piece_manager = PieceManager()
+        self.piece_manager.set_current(self.theme.get("pieces", "set", default="alpha"))
 
         self.square_size = min(height - 40, 640) // 8
         self.board_origin = (20, 20)
@@ -152,9 +156,13 @@ class AetherChessApp:
                 if done:
                     self.animations.pop(square, None)
             piece_set = str(self.theme.get("pieces", "set", default="alpha")).lower()
-            glyph = PIECE_GLYPHS[piece.symbol()] if piece_set == "unicode" else piece.symbol()
-            color = pygame.Color("black") if piece.color else pygame.Color("white")
-            self.screen.blit(self.piece_font.render(glyph, True, color), (x + 6, y + 2))
+            if piece_set == "unicode":
+                glyph = PIECE_GLYPHS[piece.symbol()]
+                color = pygame.Color("black") if piece.color else pygame.Color("white")
+                self.screen.blit(self.piece_font.render(glyph, True, color), (x + 6, y + 2))
+            else:
+                img = self.piece_manager.get_image(piece.symbol(), self.square_size)
+                self.screen.blit(img, (x, y))
 
     def draw_hud(self) -> None:
         bg = pygame.Color(self.theme.get("hud", "background", default="#1E1E1E"))
