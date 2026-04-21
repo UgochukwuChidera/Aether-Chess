@@ -75,6 +75,13 @@ class MentorEngine:
         self.killers: Dict[int, Tuple[Optional[chess.Move], Optional[chess.Move]]] = {}
         self.history: Dict[Tuple[bool, int, int], int] = {}
 
+    def _prune_tt(self) -> None:
+        if len(self.tt) < self.config.tt_max_entries:
+            return
+        keep = max(1, int(self.config.tt_max_entries * 0.75))
+        top = sorted(self.tt.items(), key=lambda item: item[1].depth, reverse=True)[:keep]
+        self.tt = dict(top)
+
     def evaluate(self, board: chess.Board) -> int:
         if board.is_checkmate():
             return -MATE_SCORE if board.turn else MATE_SCORE
@@ -215,8 +222,7 @@ class MentorEngine:
             flag = "UPPER"
         elif best_score >= beta:
             flag = "LOWER"
-        if len(self.tt) >= self.config.tt_max_entries:
-            self.tt.clear()
+        self._prune_tt()
         self.tt[key] = TTEntry(depth=depth, value=best_score, flag=flag, best_move=best_move)
         return best_score
 

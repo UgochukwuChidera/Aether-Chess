@@ -26,18 +26,18 @@ class OpeningBook:
             return []
 
     @staticmethod
-    def _weighted_pick(entries: Iterable[chess.polyglot.Entry]) -> Optional[chess.Move]:
-        entries = list(entries)
-        if not entries:
+    def _weighted_pick(entries_iterable: Iterable[chess.polyglot.Entry]) -> Optional[chess.Move]:
+        entries_list = list(entries_iterable)
+        if not entries_list:
             return None
-        total = sum(max(1, e.weight) for e in entries)
+        total = sum(max(1, e.weight) for e in entries_list)
         roll = random.randint(1, total)
         running = 0
-        for e in entries:
+        for e in entries_list:
             running += max(1, e.weight)
             if running >= roll:
                 return e.move
-        return entries[0].move
+        return entries_list[0].move
 
     def choose(
         self,

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import replace
 from typing import Optional
 
 import chess
@@ -56,7 +55,7 @@ class EngineController:
                 self.last_error = "Failed to reconfigure UCI engine"
 
     def apply_settings(self, settings: GameSettings) -> None:
-        self.settings = replace(settings)
+        self.settings = GameSettings(**vars(settings))
         self._apply_strength()
         if self.settings.engine_type == EngineType.UCI:
             self.ensure_uci_ready()

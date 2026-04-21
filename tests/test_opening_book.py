@@ -36,7 +36,7 @@ class OpeningBookTests(unittest.TestCase):
         def entries_for(path):
             return [FakeEntry(self.e4, 10)] if path == "bookB" else []
 
-        with patch.object(book, "_entries_for_path", side_effect=lambda _board, p: entries_for(p)):
+        with patch.object(book, "_entries_for_path", side_effect=lambda board, p: entries_for(p)):
             move = book.choose(self.board, strategy="weighted", auto_rotate_books=False, active_book_index=1)
         self.assertEqual(self.e4, move)
 
