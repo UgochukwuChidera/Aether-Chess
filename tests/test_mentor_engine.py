@@ -1,5 +1,6 @@
 import unittest
 import time
+from unittest.mock import patch
 
 import chess
 
@@ -28,7 +29,15 @@ class MentorEngineTests(unittest.TestCase):
         move = engine.search(board)
         elapsed = time.time() - start
         self.assertIn(move, board.legal_moves)
-        self.assertLess(elapsed, 3.0)
+        self.assertLess(elapsed, 1.0)
+
+    def test_depth_zero_calls_quiescence(self):
+        board = chess.Board()
+        engine = MentorEngine(SearchConfig(max_depth=1, max_nodes=10_000, time_limit_sec=10**12))
+        with patch.object(engine, "_quiescence", return_value=42) as mock_quiescence:
+            value = engine._search(board, 0, -100, 100)
+        self.assertEqual(42, value)
+        mock_quiescence.assert_called_once_with(board, -100, 100)
 
 
 if __name__ == "__main__":

@@ -126,7 +126,7 @@ class TTEntry:
 class MentorEngine:
     def __init__(self, config: Optional[SearchConfig] = None):
         self.config = config or SearchConfig()
-        self.tt: "OrderedDict[int, TTEntry]" = OrderedDict()
+        self.tt: OrderedDict[int, TTEntry] = OrderedDict()
         self.tt_lock = threading.Lock()
         self.nodes = 0
         self.nodes_lock = threading.Lock()
@@ -239,12 +239,14 @@ class MentorEngine:
     def _store_tt(self, key: int, depth: int, value: int, flag: str, move: Optional[chess.Move]):
         with self.tt_lock:
             existing = self.tt.get(key)
+            # Keep the deepest result for a position; shallower rewrites are ignored
+            # even when the table has space because they reduce TT quality.
             if existing and existing.depth > depth:
                 return
-            self.tt.pop(key, None)
-            if len(self.tt) >= self.config.tt_max_entries:
+            if key not in self.tt and len(self.tt) >= self.config.tt_max_entries:
                 self.tt.popitem(last=False)
             self.tt[key] = TTEntry(depth, value, flag, move)
+            self.tt.move_to_end(key)
 
     def _probe_tt(self, key: int, depth: int, alpha: int, beta: int) -> Tuple[Optional[int], Optional[chess.Move]]:
         entry = self.tt.get(key)
@@ -319,7 +321,7 @@ class MentorEngine:
             score = -self._search(board, depth - R, -beta, -beta + 1, ply + 1, False)
             board.pop()
             if score >= beta:
-                return score
+                return beta
 
         if depth <= 2 and not board.is_check():
             static = self.evaluate(board)
@@ -397,14 +399,14 @@ class MentorEngine:
             if self._out_of_resources():
                 break
             window = 50
-            alpha = best_score - window if depth > 1 else -INF
-            beta = best_score + window if depth > 1 else INF
+            window_alpha = best_score - window if depth > 1 else -INF
+            window_beta = best_score + window if depth > 1 else INF
             root_key = chess.polyglot.zobrist_hash(board)
             tt_entry = self.tt.get(root_key) if depth > 1 else None
             tt_move = tt_entry.best_move if tt_entry else None
             while True:
-                search_alpha = alpha
-                search_beta = beta
+                search_alpha = window_alpha
+                search_beta = window_beta
                 local_best = None
                 local_best_score = -INF
                 moves = self._ordered_moves(board, tt_move, 0)
@@ -418,11 +420,11 @@ class MentorEngine:
                     search_alpha = max(search_alpha, score)
                     if search_alpha >= search_beta:
                         break
-                if local_best_score <= alpha and depth > 1:
-                    alpha = max(-INF, alpha - window)
+                if local_best_score <= window_alpha and depth > 1:
+                    window_alpha = max(-INF, window_alpha - window)
                     window *= 2
-                elif local_best_score >= beta and depth > 1:
-                    beta = min(INF, beta + window)
+                elif local_best_score >= window_beta and depth > 1:
+                    window_beta = min(INF, window_beta + window)
                     window *= 2
                 else:
                     break
