@@ -11,6 +11,9 @@ Aether Chess is a standalone Python chess application scaffold with a modern Pyg
   - Theme loading from JSON
   - Move list/HUD panel
   - Board rotation and undo hotkeys
+  - Game modes: Human vs AI, Human vs Human, AI vs AI
+  - AI side selection and in-app strength controls
+  - Opening strategy controls (weighted/best/random/off)
 - Mentor engine module with:
   - Iterative deepening
   - PVS-style search loop
@@ -49,6 +52,25 @@ Aether Chess is a standalone Python chess application scaffold with a modern Pyg
 python -m pip install -r requirements.txt
 python run.py
 ```
+
+### Optional environment setup
+
+- `AETHER_UCI_PATH`: path to UCI bot executable (default: `stockfish`)
+- `AETHER_OPENING_BOOKS`: comma-separated polyglot `.bin` paths
+
+### In-app controls
+
+- `M`: cycle game mode (`human_vs_ai`, `human_vs_human`, `ai_vs_ai`)
+- `E`: switch engine (`mentor` / `uci`)
+- `S` / `A`: increase/decrease AI strength
+- `O`: cycle opening strategy (`weighted`, `best`, `random`, `off`)
+- `C`: toggle human side (white/black)
+- `B`: toggle book selection mode (auto-rotate vs fixed)
+- `N`: cycle active book (fixed mode)
+- `P`: cycle common UCI engine path candidates
+- `T` / `G`: increase/decrease UCI threads
+- `Y` / `H`: increase/decrease UCI move time
+- `R`: rotate board, `U`: undo
 
 ## Tests
 
