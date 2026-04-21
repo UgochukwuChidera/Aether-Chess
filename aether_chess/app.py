@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import threading
 from dataclasses import dataclass
 from pathlib import Path
@@ -8,8 +9,9 @@ from typing import Dict, Optional, Tuple
 import chess
 import pygame
 
-from aether_chess.engines.mentor_engine import MentorEngine
+from aether_chess.engines.controller import EngineController
 from aether_chess.models.game_state import GameState
+from aether_chess.models.settings import EngineType, GameMode, GameSettings
 from aether_chess.ui.animation import PieceAnimation
 from aether_chess.ui.theme import ThemeManager
 from aether_chess.ui.pieces import PieceManager
@@ -18,6 +20,8 @@ PIECE_GLYPHS = {
     "P": "♙", "N": "♘", "B": "♗", "R": "♖", "Q": "♕", "K": "♔",
     "p": "♟", "n": "♞", "b": "♝", "r": "♜", "q": "♛", "k": "♚",
 }
+STATUS_MAX_LENGTH = 30
+STATUS_TRUNCATE_LENGTH = 27
 
 
 @dataclass
@@ -53,9 +57,39 @@ class AetherChessApp:
         self.animations: Dict[int, PieceAnimation] = {}
         self.running = True
 
-        self.mentor_engine = MentorEngine()
+        opening_books_env = os.getenv("AETHER_OPENING_BOOKS", "").strip()
+        opening_books = [p.strip() for p in opening_books_env.split(",") if p.strip()]
+        self.settings = GameSettings(
+            uci_path=os.getenv("AETHER_UCI_PATH", "stockfish"),
+            opening_books=opening_books,
+        )
+        self.engine_controller = EngineController(self.settings)
         self.engine_thread: Optional[threading.Thread] = None
         self.pending_engine_move: Optional[chess.Move] = None
+
+    def _sync_engine_settings(self) -> None:
+        self.engine_controller.apply_settings(self.settings)
+
+    def _is_ai_turn(self) -> bool:
+        if self.game_state.board.is_game_over():
+            return False
+        return not self.settings.is_human_turn(self.game_state.board)
+
+    def _cycle_uci_path(self) -> None:
+        candidates = [
+            self.settings.uci_path,
+            "stockfish",
+            "/usr/games/stockfish",
+            "stockfish/stockfish",
+            "stockfish/stockfish.exe",
+        ]
+        unique = []
+        for p in candidates:
+            if p not in unique:
+                unique.append(p)
+        idx = unique.index(self.settings.uci_path) if self.settings.uci_path in unique else 0
+        self.settings.uci_path = unique[(idx + 1) % len(unique)]
+        self._sync_engine_settings()
 
     def square_to_screen(self, square: int) -> Tuple[int, int]:
         file = chess.square_file(square)
@@ -90,11 +124,11 @@ class AetherChessApp:
         self.ui_state.last_move = move
 
     def start_engine_reply(self) -> None:
-        if self.game_state.board.is_game_over() or (self.engine_thread and self.engine_thread.is_alive()):
+        if not self._is_ai_turn() or (self.engine_thread and self.engine_thread.is_alive()):
             return
 
         def worker() -> None:
-            self.pending_engine_move = self.mentor_engine.search(self.game_state.board.copy(stack=False))
+            self.pending_engine_move = self.engine_controller.choose_move(self.game_state.board.copy(stack=False))
 
         self.engine_thread = threading.Thread(target=worker, daemon=True)
         self.engine_thread.start()
@@ -103,8 +137,12 @@ class AetherChessApp:
         if self.pending_engine_move and self.pending_engine_move in self.game_state.board.legal_moves:
             self._push_with_animation(self.pending_engine_move)
         self.pending_engine_move = None
+        if self.settings.game_mode == GameMode.AI_VS_AI:
+            self.start_engine_reply()
 
     def handle_click(self, x: int, y: int) -> None:
+        if not self.settings.is_human_turn(self.game_state.board):
+            return
         sq = self.screen_to_square(x, y)
         if sq is None:
             return
@@ -173,8 +211,20 @@ class AetherChessApp:
 
         status = "Game Over" if self.game_state.board.is_game_over() else ("White to move" if self.game_state.board.turn else "Black to move")
         self.screen.blit(self.text_font.render(status, True, accent), (self.hud_x + 16, 72))
+        self.screen.blit(self.text_font.render(f"Mode: {self.settings.game_mode.value}", True, fg), (self.hud_x + 16, 96))
+        self.screen.blit(self.text_font.render(f"Engine: {self.settings.engine_type.value}", True, fg), (self.hud_x + 16, 120))
+        self.screen.blit(self.text_font.render(f"Strength: {self.settings.ai_strength}/10", True, fg), (self.hud_x + 16, 144))
+        self.screen.blit(self.text_font.render(f"Opening: {self.settings.opening_strategy.value}", True, fg), (self.hud_x + 16, 168))
+        self.screen.blit(
+            self.text_font.render(
+                f"Books: {'auto' if self.settings.auto_rotate_books else f'fixed#{self.settings.active_book_index + 1}'}",
+                True,
+                fg,
+            ),
+            (self.hud_x + 16, 192),
+        )
 
-        y = 120
+        y = 228
         moves = self.game_state.board.move_stack
         for i in range(0, len(moves), 2):
             w = moves[i].uci()
@@ -183,7 +233,16 @@ class AetherChessApp:
             y += 24
             if y > 620:
                 break
-        self.screen.blit(self.text_font.render("R: rotate | U: undo", True, fg), (self.hud_x + 16, 628))
+        status_line = self.engine_controller.last_error or self.engine_controller.status
+        status_display = (
+            status_line
+            if len(status_line) <= STATUS_MAX_LENGTH
+            else f"{status_line[:STATUS_TRUNCATE_LENGTH]}..."
+        )
+        self.screen.blit(self.text_font.render(status_display, True, accent), (self.hud_x + 16, 560))
+        self.screen.blit(self.text_font.render("R rotate | U undo | M mode", True, fg), (self.hud_x + 16, 584))
+        self.screen.blit(self.text_font.render("E eng | S/A str | O open | C side", True, fg), (self.hud_x + 16, 608))
+        self.screen.blit(self.text_font.render("B auto/fix | N book | P path", True, fg), (self.hud_x + 16, 632))
 
     def render(self, dt_ms: int = 16) -> None:
         self.screen.fill((12, 12, 12))
@@ -199,6 +258,7 @@ class AetherChessApp:
         return out
 
     def run(self) -> None:
+        self.start_engine_reply()
         while self.running:
             dt = self.clock.tick(60)
             self.apply_engine_reply_if_ready()
@@ -211,7 +271,50 @@ class AetherChessApp:
                     if event.key == pygame.K_r:
                         self.ui_state.rotate = not self.ui_state.rotate
                     elif event.key == pygame.K_u:
-                        self.game_state.pop()
-                        self.game_state.pop()
+                        if self.settings.game_mode == GameMode.HUMAN_VS_AI:
+                            self.game_state.pop()
+                            self.game_state.pop()
+                        else:
+                            self.game_state.pop()
+                    elif event.key == pygame.K_m:
+                        self.settings.cycle_mode()
+                        self._sync_engine_settings()
+                    elif event.key == pygame.K_e:
+                        self.settings.cycle_engine_type()
+                        self._sync_engine_settings()
+                    elif event.key == pygame.K_s:
+                        self.settings.bump_strength(1)
+                        self._sync_engine_settings()
+                    elif event.key == pygame.K_a:
+                        self.settings.bump_strength(-1)
+                        self._sync_engine_settings()
+                    elif event.key == pygame.K_o:
+                        self.settings.cycle_opening_strategy()
+                        self._sync_engine_settings()
+                    elif event.key == pygame.K_c:
+                        self.settings.cycle_human_color()
+                        self._sync_engine_settings()
+                    elif event.key == pygame.K_b:
+                        self.settings.cycle_book_mode()
+                        self._sync_engine_settings()
+                    elif event.key == pygame.K_n:
+                        self.settings.cycle_active_book()
+                        self._sync_engine_settings()
+                    elif event.key == pygame.K_t:
+                        self.settings.bump_threads(1)
+                        self._sync_engine_settings()
+                    elif event.key == pygame.K_g:
+                        self.settings.bump_threads(-1)
+                        self._sync_engine_settings()
+                    elif event.key == pygame.K_y:
+                        self.settings.bump_movetime(100)
+                        self._sync_engine_settings()
+                    elif event.key == pygame.K_h:
+                        self.settings.bump_movetime(-100)
+                        self._sync_engine_settings()
+                    elif event.key == pygame.K_p:
+                        self._cycle_uci_path()
+                    self.start_engine_reply()
             self.render(dt)
+        self.engine_controller.stop_uci()
         pygame.quit()

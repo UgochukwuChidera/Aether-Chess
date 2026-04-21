@@ -55,6 +55,7 @@ class SearchConfig:
     max_nodes: int = 200_000
     time_limit_sec: float = 1.0
     difficulty: float = 1.0
+    tt_max_entries: int = 120_000
 
 
 @dataclass
@@ -71,6 +72,15 @@ class MentorEngine:
         self.tt: Dict[int, TTEntry] = {}
         self.nodes = 0
         self.start_time = 0.0
+        self.killers: Dict[int, Tuple[Optional[chess.Move], Optional[chess.Move]]] = {}
+        self.history: Dict[Tuple[bool, int, int], int] = {}
+
+    def _prune_tt(self) -> None:
+        if len(self.tt) < self.config.tt_max_entries:
+            return
+        keep = max(1, int(self.config.tt_max_entries * 0.75))
+        top = sorted(self.tt.items(), key=lambda item: item[1].depth, reverse=True)[:keep]
+        self.tt = dict(top)
 
     def evaluate(self, board: chess.Board) -> int:
         if board.is_checkmate():
@@ -85,12 +95,13 @@ class MentorEngine:
             for sq in board.pieces(piece_type, chess.BLACK):
                 score -= value + PST.get(piece_type, [0] * 64)[chess.square_mirror(sq)]
 
-        mobility = len(list(board.legal_moves))
+        mobility = board.legal_moves.count()
         score += 2 * mobility if board.turn == chess.WHITE else -2 * mobility
         return score
 
-    def _ordered_moves(self, board: chess.Board, tt_move: Optional[chess.Move]) -> List[chess.Move]:
+    def _ordered_moves(self, board: chess.Board, tt_move: Optional[chess.Move], ply: int = 0) -> List[chess.Move]:
         moves = list(board.legal_moves)
+        killer_a, killer_b = self.killers.get(ply, (None, None))
 
         def move_score(m: chess.Move) -> int:
             score = 0
@@ -105,6 +116,11 @@ class MentorEngine:
                 score += 800
             if board.gives_check(m):
                 score += 120
+            if killer_a and m == killer_a:
+                score += 250
+            elif killer_b and m == killer_b:
+                score += 180
+            score += self.history.get((board.turn, m.from_square, m.to_square), 0)
             return score
 
         moves.sort(key=move_score, reverse=True)
@@ -119,7 +135,7 @@ class MentorEngine:
         if stand_pat >= beta:
             return beta
         alpha = max(alpha, stand_pat)
-        for move in self._ordered_moves(board, None):
+        for move in self._ordered_moves(board, None, board.ply()):
             if not board.is_capture(move):
                 continue
             board.push(move)
@@ -134,6 +150,8 @@ class MentorEngine:
         self.nodes += 1
         if self._out_of_resources():
             return self.evaluate(board)
+        if board.can_claim_draw():
+            return 0
 
         key = chess.polyglot.zobrist_hash(board)
         entry = self.tt.get(key)
@@ -162,8 +180,9 @@ class MentorEngine:
         original_alpha = alpha
         best_move = None
         best_score = -INF
+        ply = board.ply()
         tt_move = entry.best_move if entry else None
-        moves = self._ordered_moves(board, tt_move)
+        moves = self._ordered_moves(board, tt_move, ply)
 
         if depth == 1 and not board.is_check():
             static_eval = self.evaluate(board)
@@ -189,6 +208,13 @@ class MentorEngine:
                 best_move = move
             alpha = max(alpha, score)
             if alpha >= beta:
+                if not board.is_capture(move):
+                    k1, k2 = self.killers.get(ply, (None, None))
+                    if k1 != move:
+                        self.killers[ply] = (move, k1)
+                    self.history[(board.turn, move.from_square, move.to_square)] = (
+                        self.history.get((board.turn, move.from_square, move.to_square), 0) + depth * depth
+                    )
                 break
 
         flag = "EXACT"
@@ -196,32 +222,53 @@ class MentorEngine:
             flag = "UPPER"
         elif best_score >= beta:
             flag = "LOWER"
+        self._prune_tt()
         self.tt[key] = TTEntry(depth=depth, value=best_score, flag=flag, best_move=best_move)
         return best_score
 
     def search(self, board: chess.Board) -> chess.Move:
         self.nodes = 0
         self.start_time = time.time()
+        self.killers.clear()
+        self.history.clear()
         best_move = None
         candidates: List[Tuple[chess.Move, int]] = []
+        prev_score = 0
 
         for depth in range(1, self.config.max_depth + 1):
             if self._out_of_resources():
                 break
-            alpha, beta = -INF, INF
             local_best = None
             local_best_score = -INF
-            for move in self._ordered_moves(board, None):
-                board.push(move)
-                score = -self._search(board, depth - 1, -beta, -alpha)
-                board.pop()
-                if score > local_best_score:
-                    local_best_score = score
-                    local_best = move
-                alpha = max(alpha, score)
+            window = 90
+            alpha, beta = (-INF, INF) if depth == 1 else (prev_score - window, prev_score + window)
+            while True:
+                failed = False
+                root_alpha = alpha
+                local_best = None
+                local_best_score = -INF
+                for move in self._ordered_moves(board, None, board.ply()):
+                    board.push(move)
+                    score = -self._search(board, depth - 1, -beta, -root_alpha)
+                    board.pop()
+                    if score > local_best_score:
+                        local_best_score = score
+                        local_best = move
+                    root_alpha = max(root_alpha, score)
+                if local_best_score <= alpha and depth > 1:
+                    alpha = max(-INF, alpha - window)
+                    window *= 2
+                    failed = True
+                elif local_best_score >= beta and depth > 1:
+                    beta = min(INF, beta + window)
+                    window *= 2
+                    failed = True
+                if not failed:
+                    break
             if local_best is not None:
                 best_move = local_best
                 candidates.append((local_best, local_best_score))
+                prev_score = local_best_score
 
         if best_move is None:
             legal = list(board.legal_moves)
