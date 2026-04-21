@@ -29,6 +29,7 @@ class UIState:
     selected_square: Optional[int] = None
     last_move: Optional[chess.Move] = None
     rotate: bool = False
+    scroll_offset: int = 0
 
 
 class AetherChessApp:
@@ -206,43 +207,76 @@ class AetherChessApp:
         bg = pygame.Color(self.theme.get("hud", "background", default="#1E1E1E"))
         fg = pygame.Color(self.theme.get("hud", "text", default="#F5F5F5"))
         accent = pygame.Color(self.theme.get("hud", "accent", default="#00BCD4"))
-        pygame.draw.rect(self.screen, bg, (self.hud_x, 20, 260, 640), border_radius=8)
-        self.screen.blit(self.text_font.render("Aether Chess", True, fg), (self.hud_x + 16, 36))
+        muted = pygame.Color("#888888")
+        
+        hud_rect = pygame.Rect(self.hud_x, 20, 260, 640)
+        pygame.draw.rect(self.screen, bg, hud_rect, border_radius=12)
+        pygame.draw.rect(self.screen, accent, hud_rect, width=2, border_radius=12)
 
+        # Title and basic info
+        self.screen.blit(self.text_font.render("Aether Chess", True, accent), (self.hud_x + 16, 36))
+        
         status = "Game Over" if self.game_state.board.is_game_over() else ("White to move" if self.game_state.board.turn else "Black to move")
-        self.screen.blit(self.text_font.render(status, True, accent), (self.hud_x + 16, 72))
-        self.screen.blit(self.text_font.render(f"Mode: {self.settings.game_mode.value}", True, fg), (self.hud_x + 16, 96))
-        self.screen.blit(self.text_font.render(f"Engine: {self.settings.engine_type.value}", True, fg), (self.hud_x + 16, 120))
-        self.screen.blit(self.text_font.render(f"Strength: {self.settings.ai_strength}/10", True, fg), (self.hud_x + 16, 144))
-        self.screen.blit(self.text_font.render(f"Opening: {self.settings.opening_strategy.value}", True, fg), (self.hud_x + 16, 168))
-        self.screen.blit(
-            self.text_font.render(
-                f"Books: {'auto' if self.settings.auto_rotate_books else f'fixed#{self.settings.active_book_index + 1}'}",
-                True,
-                fg,
-            ),
-            (self.hud_x + 16, 192),
-        )
+        self.screen.blit(self.text_font.render(status, True, fg), (self.hud_x + 16, 68))
+        
+        y = 100
+        info_font = pygame.font.SysFont("Arial", 14)
+        info_items = [
+            f"Mode: {self.settings.game_mode.value.replace('_', ' ')}",
+            f"Engine: {self.settings.engine_type.value}",
+            f"Strength: {self.settings.ai_strength}/10",
+            f"Opening: {self.settings.opening_strategy.value}",
+            f"Books: {'auto' if self.settings.auto_rotate_books else f'fixed#{self.settings.active_book_index + 1}'}"
+        ]
+        for item in info_items:
+            self.screen.blit(info_font.render(item, True, muted), (self.hud_x + 16, y))
+            y += 20
 
-        y = 228
+        # Move list container
+        moves_rect = pygame.Rect(self.hud_x + 10, 220, 240, 300)
+        pygame.draw.rect(self.screen, pygame.Color("#121212"), moves_rect, border_radius=8)
+        
+        # Create a surface for the moves
         moves = self.game_state.board.move_stack
+        move_line_height = 24
+        total_move_height = (len(moves) + 1) // 2 * move_line_height
+        
+        move_surface = pygame.Surface((220, max(300, total_move_height)))
+        move_surface.fill(pygame.Color("#121212"))
+        
+        my = 0
         for i in range(0, len(moves), 2):
             w = moves[i].uci()
             b = moves[i + 1].uci() if i + 1 < len(moves) else ""
-            self.screen.blit(self.text_font.render(f"{i // 2 + 1:>2}. {w:<6} {b:<6}", True, fg), (self.hud_x + 16, y))
-            y += 24
-            if y > 620:
-                break
+            move_text = f"{i // 2 + 1:>2}. {w:<6} {b:<6}"
+            move_surface.blit(self.text_font.render(move_text, True, fg), (0, my))
+            my += move_line_height
+            
+        # Blit the move surface with clipping
+        clip_rect = pygame.Rect(0, self.ui_state.scroll_offset, 220, 300)
+        self.screen.blit(move_surface, (self.hud_x + 20, 225), area=clip_rect)
+
+        # Status and Instructions at bottom
+        y_bottom = 540
         status_line = self.engine_controller.last_error or self.engine_controller.status
         status_display = (
             status_line
             if len(status_line) <= STATUS_MAX_LENGTH
             else f"{status_line[:STATUS_TRUNCATE_LENGTH]}..."
         )
-        self.screen.blit(self.text_font.render(status_display, True, accent), (self.hud_x + 16, 560))
-        self.screen.blit(self.text_font.render("R rotate | U undo | M mode", True, fg), (self.hud_x + 16, 584))
-        self.screen.blit(self.text_font.render("E eng | S/A str | O open | C side", True, fg), (self.hud_x + 16, 608))
-        self.screen.blit(self.text_font.render("B auto/fix | N book | P path", True, fg), (self.hud_x + 16, 632))
+        self.screen.blit(self.text_font.render(status_display, True, accent), (self.hud_x + 16, y_bottom))
+        
+        inst_font = pygame.font.SysFont("Arial", 12)
+        instructions = [
+            "R rotate | U undo | M mode",
+            "E eng | S/A +/- str | O open",
+            "C side | B auto/fix | N book",
+            "P path | T/G threads | Y/H move"
+        ]
+        y_bottom += 30
+        for inst in instructions:
+            self.screen.blit(inst_font.render(inst, True, muted), (self.hud_x + 16, y_bottom))
+            y_bottom += 18
 
     def render(self, dt_ms: int = 16) -> None:
         self.screen.fill((12, 12, 12))
@@ -265,8 +299,13 @@ class AetherChessApp:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self.running = False
-                elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                    self.handle_click(*event.pos)
+                elif event.type == pygame.MOUSEBUTTONDOWN:
+                    if event.button == 1:
+                        self.handle_click(*event.pos)
+                    elif event.button == 4: # Scroll Up
+                        self.ui_state.scroll_offset = max(0, self.ui_state.scroll_offset - 24)
+                    elif event.button == 5: # Scroll Down
+                        self.ui_state.scroll_offset += 24
                 elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_r:
                         self.ui_state.rotate = not self.ui_state.rotate
