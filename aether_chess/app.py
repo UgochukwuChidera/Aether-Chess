@@ -20,6 +20,8 @@ PIECE_GLYPHS = {
     "P": "♙", "N": "♘", "B": "♗", "R": "♖", "Q": "♕", "K": "♔",
     "p": "♟", "n": "♞", "b": "♝", "r": "♜", "q": "♛", "k": "♚",
 }
+STATUS_MAX_LENGTH = 30
+STATUS_TRUNCATE_LENGTH = 27
 
 
 @dataclass
@@ -232,7 +234,11 @@ class AetherChessApp:
             if y > 620:
                 break
         status_line = self.engine_controller.last_error or self.engine_controller.status
-        status_display = status_line if len(status_line) <= 30 else f"{status_line[:27]}..."
+        status_display = (
+            status_line
+            if len(status_line) <= STATUS_MAX_LENGTH
+            else f"{status_line[:STATUS_TRUNCATE_LENGTH]}..."
+        )
         self.screen.blit(self.text_font.render(status_display, True, accent), (self.hud_x + 16, 560))
         self.screen.blit(self.text_font.render("R rotate | U undo | M mode", True, fg), (self.hud_x + 16, 584))
         self.screen.blit(self.text_font.render("E eng | S/A str | O open | C side", True, fg), (self.hud_x + 16, 608))
