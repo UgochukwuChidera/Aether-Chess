@@ -1,0 +1,21 @@
+{
+  "theme": "dark",
+  "boardStyle": "classic",
+  "pieceSet": "material",
+  "animationSpeed": "normal",
+  "playEngine": "mentor",
+  "stockfishPath": "stockfish",
+  "threads": 1,
+  "hashMb": 128,
+  "multipv": 3,
+  "botStrength": 7,
+  "timeControl": {
+    "seconds": 0,
+    "increment": 0,
+    "label": "Unlimited"
+  },
+  "autoQueen": false,
+  "soundEnabled": true,
+  "soundVolume": 0.7,
+  "clearHistoryOnNewGame": false
+}

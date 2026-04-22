@@ -64,6 +64,10 @@ class ChessEngineManager:
         human_color: str = "white",
         strength: int = 7,
         time_control: Optional[Dict[str, int]] = None,
+        stockfish_path: Optional[str] = None,
+        threads: Optional[int] = None,
+        hash_mb: Optional[int] = None,
+        multipv: Optional[int] = None,
     ) -> None:
         self.game_state.reset()
         self.board = self.game_state.board
@@ -77,6 +81,14 @@ class ChessEngineManager:
         )
         if time_control:
             self.settings["time_control"] = time_control
+        if stockfish_path:
+            self.settings["stockfish_path"] = stockfish_path
+        if threads is not None:
+            self.settings["threads"] = max(1, int(threads))
+        if hash_mb is not None:
+            self.settings["hash_mb"] = max(16, int(hash_mb))
+        if multipv is not None:
+            self.settings["multipv"] = max(1, int(multipv))
 
     # ── Move operations ───────────────────────────────────────────────────────
 
@@ -178,16 +190,36 @@ class ChessEngineManager:
                 pass
             self._uci_engine = None
 
+    @staticmethod
+    def _configure_uci(engine: chess.engine.SimpleEngine, threads: Optional[int], hash_mb: Optional[int]) -> None:
+        options: Dict[str, int] = {}
+        if threads is not None:
+            options["Threads"] = max(1, int(threads))
+        if hash_mb is not None:
+            options["Hash"] = max(16, int(hash_mb))
+        if options:
+            try:
+                engine.configure(options)
+            except Exception:
+                pass
+
     def get_engine_move(
         self,
         fen: str,
         time_limit: float = 0.5,
         depth: Optional[int] = None,
         stockfish_path: Optional[str] = None,
+        threads: Optional[int] = None,
+        hash_mb: Optional[int] = None,
     ) -> Dict[str, Any]:
         sp = stockfish_path or self.settings.get("stockfish_path", "stockfish")
         board = chess.Board(fen)
         engine = self._ensure_uci(sp)
+        self._configure_uci(
+            engine,
+            threads if threads is not None else self.settings.get("threads"),
+            hash_mb if hash_mb is not None else self.settings.get("hash_mb"),
+        )
         limit = chess.engine.Limit(
             time=time_limit,
             depth=depth,
@@ -207,6 +239,8 @@ class ChessEngineManager:
         multipv: int,
         callback_id: str,
         stockfish_path: str,
+        threads: Optional[int],
+        hash_mb: Optional[int],
         push_fn: Callable[[Dict[str, Any]], None],
     ) -> None:
         self.stop_analysis()
@@ -215,6 +249,7 @@ class ChessEngineManager:
         def _run() -> None:
             try:
                 engine = chess.engine.SimpleEngine.popen_uci(stockfish_path)
+                self._configure_uci(engine, threads, hash_mb)
                 board = chess.Board(fen)
                 with engine.analysis(board, chess.engine.Limit(time=60.0), multipv=multipv) as analysis:
                     for info in analysis:
@@ -259,6 +294,17 @@ class ChessEngineManager:
         if self._analysis_thread is not None:
             self._analysis_thread.join(timeout=3.0)
             self._analysis_thread = None
+
+    def history_fens_and_moves(self) -> tuple[List[str], List[str]]:
+        board = chess.Board()
+        fen_list: List[str] = []
+        moves: List[str] = []
+        for move in self._full_history:
+            if move in board.legal_moves:
+                fen_list.append(board.fen())
+                moves.append(move.uci())
+                board.push(move)
+        return fen_list, moves
 
     # ── Opening book ──────────────────────────────────────────────────────────
 

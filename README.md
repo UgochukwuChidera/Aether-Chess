@@ -71,6 +71,7 @@ Full instructions: [docs/BUILD.md](docs/BUILD.md)
 | Analysis tab (Stockfish PV lines, depth, score) | ✅ |
 | Settings tab (appearance, engine, gameplay, data) | ✅ |
 | Persistent settings (userData/settings.json) | ✅ |
+| Centralized defaults (`resources/config/settings.defaults.json`) | ✅ |
 | PGN export/import | ✅ |
 | Opening book (Polyglot .bin, no database) | ✅ |
 | Custom mentor bot (PVS + TT + QSearch) | ✅ |

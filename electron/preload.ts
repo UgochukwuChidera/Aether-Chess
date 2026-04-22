@@ -14,7 +14,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getLegalMoves: (params: { fen: string }) => ipcRenderer.invoke('get_legal_moves', params),
   undoMove: () => ipcRenderer.invoke('undo_move'),
   navigateToMove: (params: { index: number }) => ipcRenderer.invoke('navigate_to_move', params),
-  getEngineMove: (params: { fen: string; time_limit?: number; depth?: number }) =>
+  getEngineMove: (params: {
+    fen: string;
+    time_limit?: number;
+    depth?: number;
+    stockfish_path?: string;
+    threads?: number;
+    hash_mb?: number;
+  }) =>
     ipcRenderer.invoke('get_engine_move', params),
   getBotMove: (params: { fen: string; strength?: number }) =>
     ipcRenderer.invoke('get_bot_move', params),
@@ -23,12 +30,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
   exportFen: () => ipcRenderer.invoke('export_fen'),
   calculateAccuracy: (params: { fen_list: string[]; moves: string[] }) =>
     ipcRenderer.invoke('calculate_accuracy', params),
+  calculateAccuracyFromHistory: (params: { stockfish_path?: string }) =>
+    ipcRenderer.invoke('calculate_accuracy_from_history', params),
   estimateElo: (params: { accuracy: number; blunder_rate: number }) =>
     ipcRenderer.invoke('estimate_elo', params),
   getBookMoves: (params: { fen: string }) => ipcRenderer.invoke('get_book_moves', params),
 
   // ── Analysis streaming ───────────────────────────────────────────────────
-  startAnalysis: (params: { fen: string; multipv: number; callback_id: string }) =>
+  startAnalysis: (params: {
+    fen: string;
+    multipv: number;
+    callback_id: string;
+    stockfish_path?: string;
+    threads?: number;
+    hash_mb?: number;
+  }) =>
     ipcRenderer.invoke('start_analysis', params),
   stopAnalysis: () => ipcRenderer.invoke('stop_analysis'),
   onAnalysisUpdate: (callback: (data: unknown) => void) => {
@@ -52,6 +68,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // ── File system helpers ──────────────────────────────────────────────────
   pickStockfishPath: () => ipcRenderer.invoke('pick-stockfish-path'),
+  getStockfishInfo: () => ipcRenderer.invoke('stockfish-info'),
+  openExternalUrl: (url: string) => ipcRenderer.invoke('open-external-url', url),
   getBooksDir: () => ipcRenderer.invoke('get-books-dir'),
   revealInFolder: (filePath: string) => ipcRenderer.invoke('reveal-in-folder', filePath),
   getCpuCount: () => ipcRenderer.invoke('get-cpu-count'),

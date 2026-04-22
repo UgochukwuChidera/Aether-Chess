@@ -23,6 +23,18 @@ const PIECE_ICONS: Record<string, string> = {
   k: 'chess_king',
 };
 
+const PIECE_GLYPHS: Record<string, string> = {
+  K: '♔', Q: '♕', R: '♖', B: '♗', N: '♘', P: '♙',
+  k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟',
+};
+
+const BOARD_STYLES: Record<string, { light: string; dark: string }> = {
+  classic: { light: '#EDE8D5', dark: '#B58863' },
+  wood: { light: '#F0D9B5', dark: '#B58863' },
+  marble: { light: '#D8D8D8', dark: '#8B8B8B' },
+  neon: { light: '#1D2A1F', dark: '#111A12' },
+};
+
 // Parse FEN board part into a 64-element array (index 0 = a8)
 function parseFen(fen: string): (string | null)[] {
   const board: (string | null)[] = new Array(64).fill(null);
@@ -65,7 +77,7 @@ export const Board: React.FC<Props> = ({ onSquareClick }) => {
     turn,
   } = useGameStore();
 
-  const { boardStyle } = useSettingsStore();
+  const { boardStyle, pieceSet } = useSettingsStore();
 
   const pieces = parseFen(fen);
 
@@ -84,9 +96,8 @@ export const Board: React.FC<Props> = ({ onSquareClick }) => {
       const isLight = (file + rank) % 2 !== 0;
 
       // Determine square background class
-      let squareClass = isLight
-        ? 'bg-surface3'
-        : 'bg-surface2';
+      const style = BOARD_STYLES[boardStyle] ?? BOARD_STYLES.classic;
+      const squareBackground = isLight ? style.light : style.dark;
 
       // Overlays (last-move < highlight < selected < check)
       const isLastMove = sq === lastMoveFrom || sq === lastMoveTo;
@@ -106,13 +117,12 @@ export const Board: React.FC<Props> = ({ onSquareClick }) => {
           data-sq={sq}
           onClick={() => onSquareClick(sq)}
           className={`relative cursor-pointer select-none overflow-hidden
-                      ${squareClass}
                       ${isLastMove ? 'sq-last-move' : ''}
                       ${isHighlighted ? 'sq-highlight' : ''}
                       ${isSelected ? 'sq-selected' : ''}
                       ${isKingInCheck ? '!bg-[#93000A]' : ''}
                       transition-colors`}
-          style={{ aspectRatio: '1 / 1' }}
+          style={{ aspectRatio: '1 / 1', background: squareBackground }}
         >
           {/* Coordinate labels */}
           {showRank && (
@@ -147,7 +157,7 @@ export const Board: React.FC<Props> = ({ onSquareClick }) => {
           )}
 
           {/* Chess piece */}
-          {piece && (
+          {piece && pieceSet === 'material' && (
             <div className="absolute inset-0 flex items-center justify-center piece-enter">
               <span
                 className={`chess-piece material-symbols-outlined
@@ -163,11 +173,27 @@ export const Board: React.FC<Props> = ({ onSquareClick }) => {
               </span>
             </div>
           )}
+          {piece && pieceSet === 'alpha' && (
+            <div className="absolute inset-0 flex items-center justify-center piece-enter">
+              <span
+                className={`${piece === piece.toUpperCase() ? 'text-white' : 'text-black'} pointer-events-none`}
+                style={{
+                  fontSize: 'clamp(20px, 5.5vmin, 52px)',
+                  lineHeight: 1,
+                  textShadow: piece === piece.toUpperCase()
+                    ? '0 1px 2px rgba(0,0,0,0.8)'
+                    : '0 1px 1px rgba(255,255,255,0.25)',
+                }}
+              >
+                {PIECE_GLYPHS[piece]}
+              </span>
+            </div>
+          )}
         </div>
       );
     },
     [pieces, selectedSquare, highlightedSquares, lastMoveFrom, lastMoveTo,
-     flipped, inCheck, kingSquare, onSquareClick],
+     flipped, inCheck, kingSquare, boardStyle, pieceSet, onSquareClick],
   );
 
   return (

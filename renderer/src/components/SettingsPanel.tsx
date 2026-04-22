@@ -7,6 +7,7 @@ import {
   TIME_CONTROLS,
   type Theme,
   type BoardStyle,
+  type PlayEngine,
   type AnimationSpeed,
 } from '../stores/settingsStore';
 
@@ -53,14 +54,30 @@ const selectClass =
 export const SettingsPanel: React.FC = () => {
   const settings = useSettingsStore();
   const [cpuCount, setCpuCount] = useState(4);
+  const [stockfishInfo, setStockfishInfo] = useState<{
+    configuredPath: string | null;
+    configuredExists: boolean;
+    bundledPath: string | null;
+    bundledExists: boolean;
+    settingsPath: string;
+  } | null>(null);
 
   useEffect(() => {
     window.electronAPI.getCpuCount().then(setCpuCount);
+    window.electronAPI.getStockfishInfo().then(setStockfishInfo).catch(() => {});
   }, []);
 
   const handleStockfishPick = async () => {
     const p = await window.electronAPI.pickStockfishPath();
     if (p) settings.update({ stockfishPath: p });
+    window.electronAPI.getStockfishInfo().then(setStockfishInfo).catch(() => {});
+  };
+
+  const handleUseBundledStockfish = () => {
+    const path = stockfishInfo?.bundledPath;
+    if (!path) return;
+    settings.update({ stockfishPath: path });
+    window.electronAPI.getStockfishInfo().then(setStockfishInfo).catch(() => {});
   };
 
   const handleExportSettings = () => {
@@ -147,6 +164,16 @@ export const SettingsPanel: React.FC = () => {
 
       {/* ── Engine ──────────────────────────────────────────────────────── */}
       <Section title="Engine" icon="memory">
+        <Row label="Play engine">
+          <select
+            className={selectClass}
+            value={settings.playEngine}
+            onChange={(e) => settings.update({ playEngine: e.target.value as PlayEngine })}
+          >
+            <option value="mentor">Mentor</option>
+            <option value="stockfish">Stockfish</option>
+          </select>
+        </Row>
         <Row label="Stockfish path">
           <div className="flex items-center gap-1">
             <span className="text-xs font-mono text-muted truncate max-w-[120px]" title={settings.stockfishPath}>
@@ -161,6 +188,33 @@ export const SettingsPanel: React.FC = () => {
             </button>
           </div>
         </Row>
+        <Row label="Stockfish status">
+          <span className={`text-xs ${stockfishInfo?.configuredExists ? 'text-accent' : 'text-error'}`}>
+            {stockfishInfo?.configuredExists ? 'Configured path is valid' : 'Configured path not found'}
+          </span>
+        </Row>
+        {stockfishInfo?.bundledExists && (
+          <Row label="Bundled Stockfish">
+            <button
+              onClick={handleUseBundledStockfish}
+              className="px-2 py-1 border border-surface2 rounded text-xs text-muted
+                         hover:border-accent hover:text-accent transition-colors"
+            >
+              Use bundled binary
+            </button>
+          </Row>
+        )}
+        {!stockfishInfo?.bundledExists && (
+          <Row label="Download Stockfish">
+            <button
+              onClick={() => window.electronAPI.openExternalUrl('https://stockfishchess.org/download/')}
+              className="px-2 py-1 border border-surface2 rounded text-xs text-muted
+                         hover:border-accent hover:text-accent transition-colors"
+            >
+              Open official download page
+            </button>
+          </Row>
+        )}
         <Row label={`Threads (1–${cpuCount})`}>
           <input
             type="range" min={1} max={cpuCount} step={1}
@@ -249,6 +303,7 @@ export const SettingsPanel: React.FC = () => {
 
       {/* ── Data & Privacy ──────────────────────────────────────────────── */}
       <Section title="Data & Privacy" icon="folder">
+        <p className="text-[11px] text-muted break-all">Settings file: {stockfishInfo?.settingsPath ?? 'loading...'}</p>
         <div className="flex gap-2">
           <button
             onClick={handleExportSettings}

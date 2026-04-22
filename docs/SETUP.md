@@ -40,14 +40,13 @@ pip install -r requirements.txt
 
 ## 4. Add a Stockfish binary (optional but recommended for full engine play)
 
-Download Stockfish from https://stockfishchess.org/download/ and place the executable anywhere on your `PATH`, **or** set the `STOCKFISH_PATH` environment variable:
+Download Stockfish from https://stockfishchess.org/download/ and place the executable anywhere on your `PATH`:
 
 ```bash
-export STOCKFISH_PATH=/path/to/stockfish  # Linux/macOS
-set STOCKFISH_PATH=C:\path\to\stockfish.exe  # Windows
+export PATH=/path/to/stockfish-directory:$PATH  # Linux/macOS
 ```
 
-You can also configure the path in-app via **Settings → Engine → Stockfish path**.
+You can also configure and validate the path in-app via **Settings → Engine → Stockfish path**.
 
 ---
 
@@ -91,7 +90,6 @@ python -m unittest discover -s tests -v
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `STOCKFISH_PATH` | `stockfish` | Path to Stockfish binary |
 | `NODE_ENV` | `development` | Set to `production` for packaged builds |
 
 ---

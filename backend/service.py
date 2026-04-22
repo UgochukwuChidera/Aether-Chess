@@ -60,6 +60,10 @@ def handle_new_game(params: Dict[str, Any]) -> Any:
     human_color = params.get("human_color", "white")
     strength = int(params.get("strength", 7))
     time_control = params.get("time_control", None)  # {"seconds": int, "increment": int}
+    stockfish_path = params.get("stockfish_path")
+    threads = params.get("threads")
+    hash_mb = params.get("hash_mb")
+    multipv = params.get("multipv")
 
     engine_mgr.new_game(
         mode=mode,
@@ -67,6 +71,10 @@ def handle_new_game(params: Dict[str, Any]) -> Any:
         human_color=human_color,
         strength=strength,
         time_control=time_control,
+        stockfish_path=stockfish_path,
+        threads=threads,
+        hash_mb=hash_mb,
+        multipv=multipv,
     )
     return engine_mgr._state_snapshot()
 
@@ -110,7 +118,17 @@ def handle_get_engine_move(params: Dict[str, Any]) -> Any:
     fen = params.get("fen") or engine_mgr.fen()
     time_limit = float(params.get("time_limit", 0.5))
     depth = params.get("depth")
-    return engine_mgr.get_engine_move(fen, time_limit=time_limit, depth=depth)
+    stockfish_path = params.get("stockfish_path")
+    threads = params.get("threads")
+    hash_mb = params.get("hash_mb")
+    return engine_mgr.get_engine_move(
+        fen,
+        time_limit=time_limit,
+        depth=depth,
+        stockfish_path=stockfish_path,
+        threads=threads,
+        hash_mb=hash_mb,
+    )
 
 
 def handle_get_bot_move(params: Dict[str, Any]) -> Any:
@@ -143,6 +161,11 @@ def handle_calculate_accuracy(params: Dict[str, Any]) -> Any:
     stockfish_path: str = params.get("stockfish_path", engine_mgr.settings.get("stockfish_path", "stockfish"))
     return accuracy_analyser.calculate(fen_list, moves, stockfish_path=stockfish_path)
 
+def handle_calculate_accuracy_from_history(params: Dict[str, Any]) -> Any:
+    stockfish_path: str = params.get("stockfish_path", engine_mgr.settings.get("stockfish_path", "stockfish"))
+    fen_list, moves = engine_mgr.history_fens_and_moves()
+    return accuracy_analyser.calculate(fen_list, moves, stockfish_path=stockfish_path)
+
 
 def handle_estimate_elo(params: Dict[str, Any]) -> Any:
     accuracy = float(params["accuracy"])
@@ -161,12 +184,16 @@ def handle_start_analysis(params: Dict[str, Any]) -> Any:
     multipv = int(params.get("multipv", 3))
     callback_id = str(params["callback_id"])
     stockfish_path = params.get("stockfish_path", engine_mgr.settings.get("stockfish_path", "stockfish"))
+    threads = params.get("threads")
+    hash_mb = params.get("hash_mb")
     # Start analysis in a background thread so we can return immediately
     engine_mgr.start_analysis(
         fen=fen,
         multipv=multipv,
         callback_id=callback_id,
         stockfish_path=stockfish_path,
+        threads=threads,
+        hash_mb=hash_mb,
         push_fn=_send,
     )
     return {"started": True}
@@ -191,6 +218,7 @@ HANDLERS = {
     "import_pgn":         handle_import_pgn,
     "export_fen":         handle_export_fen,
     "calculate_accuracy": handle_calculate_accuracy,
+    "calculate_accuracy_from_history": handle_calculate_accuracy_from_history,
     "estimate_elo":       handle_estimate_elo,
     "get_book_moves":     handle_get_book_moves,
     "start_analysis":     handle_start_analysis,
