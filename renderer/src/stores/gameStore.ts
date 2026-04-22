@@ -87,6 +87,7 @@ export interface GameState {
   pushToast: (message: string, type?: Toast['type']) => void;
   dismissToast: (id: string) => void;
   setEngineBusy: (busy: boolean) => void;
+  applyAccuracyResults: (rows: AccuracyMoveResult[]) => void;
   resetGame: () => void;
 }
 
@@ -103,6 +104,12 @@ export interface BackendMoveResult {
   result: string | null;
   termination: string | null;
   in_check: boolean;
+}
+
+export interface AccuracyMoveResult {
+  uci: string;
+  cp_loss: number;
+  classification: string;
 }
 
 function parseResult(r: string | null): GameResult {
@@ -194,6 +201,20 @@ export const useGameStore = create<GameState>((set, get) => ({
     set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
 
   setEngineBusy: (busy) => set({ engineBusy: busy }),
+
+  applyAccuracyResults: (rows) =>
+    set((s) => {
+      const byUci = new Map(rows.map((r, i) => [`${r.uci}:${i}`, r]));
+      const occurrence = new Map<string, number>();
+      const moveHistory = s.moveHistory.map((m) => {
+        const seen = occurrence.get(m.uci) ?? 0;
+        occurrence.set(m.uci, seen + 1);
+        const row = byUci.get(`${m.uci}:${seen}`);
+        if (!row) return m;
+        return { ...m, cp_loss: row.cp_loss, classification: row.classification };
+      });
+      return { moveHistory };
+    }),
 
   resetGame: () =>
     set({

@@ -2,7 +2,7 @@
  * AnalysisPanel.tsx — Engine evaluation panel for the Analysis tab.
  * Shows real-time PV lines, evaluation score, and move classifications.
  */
-import React, { useEffect, useRef } from 'react';
+import React from 'react';
 import { useGameStore, type PVLine } from '../stores/gameStore';
 
 const CLASSIFICATION_COLORS: Record<string, string> = {
@@ -24,9 +24,10 @@ function formatScore(cp: number, mate: number | null): string {
 interface Props {
   onStartAnalysis: () => void;
   onStopAnalysis: () => void;
+  onComputeAccuracy: () => void;
 }
 
-export const AnalysisPanel: React.FC<Props> = ({ onStartAnalysis, onStopAnalysis }) => {
+export const AnalysisPanel: React.FC<Props> = ({ onStartAnalysis, onStopAnalysis, onComputeAccuracy }) => {
   const { analysis, moveHistory } = useGameStore();
   const { pvs, running } = analysis;
 
@@ -35,6 +36,13 @@ export const AnalysisPanel: React.FC<Props> = ({ onStartAnalysis, onStopAnalysis
       {/* Control row */}
       <div className="flex items-center gap-2">
         <span className="text-xs font-sans text-muted flex-1">Stockfish Analysis</span>
+        <button
+          onClick={onComputeAccuracy}
+          className="px-3 py-1 rounded text-xs font-sans border border-surface2 text-muted
+                     hover:border-accent hover:text-accent transition-all active:scale-95"
+        >
+          CAPS/ACPL
+        </button>
         <button
           onClick={running ? onStopAnalysis : onStartAnalysis}
           className={`px-3 py-1 rounded text-xs font-sans border transition-all active:scale-95

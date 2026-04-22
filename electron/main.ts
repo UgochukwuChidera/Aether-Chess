@@ -48,6 +48,48 @@ function getBackendScript(): string {
   return path.join(__dirname, '..', '..', 'backend', 'service.py');
 }
 
+function getDefaultsPath(): string {
+  return app.isPackaged
+    ? path.join(process.resourcesPath, 'config', 'settings.defaults.json')
+    : path.join(__dirname, '..', '..', 'resources', 'config', 'settings.defaults.json');
+}
+
+function readDefaults(): Record<string, unknown> {
+  try {
+    const p = getDefaultsPath();
+    if (!fs.existsSync(p)) return {};
+    return JSON.parse(fs.readFileSync(p, 'utf-8')) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
+function normalizeSettings(raw: unknown): Record<string, unknown> {
+  const defaults = readDefaults();
+  if (app.isPackaged && (defaults.stockfishPath === 'stockfish' || !defaults.stockfishPath)) {
+    const bundled = getPackagedStockfishPath();
+    if (bundled) defaults.stockfishPath = bundled;
+  }
+  const data = (raw && typeof raw === 'object') ? raw as Record<string, unknown> : {};
+  const merged: Record<string, unknown> = { ...defaults, ...data };
+  const defaultTc = (defaults.timeControl as Record<string, unknown> | undefined) ?? {};
+  const savedTc = (data.timeControl as Record<string, unknown> | undefined) ?? {};
+  merged.timeControl = { ...defaultTc, ...savedTc };
+  return merged;
+}
+
+function getPackagedStockfishPath(): string | null {
+  const ext = process.platform === 'win32' ? '.exe' : '';
+  const candidates = [
+    path.join(process.resourcesPath, 'backend', `stockfish${ext}`),
+    path.join(process.resourcesPath, `stockfish${ext}`),
+  ];
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
 function startPython(mainWindow: BrowserWindow): void {
   const pythonPath = getPythonPath();
   const scriptPath = getBackendScript();
@@ -236,6 +278,7 @@ const CHESS_COMMANDS = [
   'import_pgn',
   'export_fen',
   'calculate_accuracy',
+  'calculate_accuracy_from_history',
   'estimate_elo',
   'get_book_moves',
   'stop_analysis',
@@ -261,17 +304,19 @@ const settingsPath = path.join(app.getPath('userData'), 'settings.json');
 ipcMain.handle('settings-load', () => {
   try {
     if (fs.existsSync(settingsPath)) {
-      return JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+      const raw = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+      return normalizeSettings(raw);
     }
   } catch {
     /* ignore */
   }
-  return null;
+  return normalizeSettings(null);
 });
 
 ipcMain.handle('settings-save', (_event, data: unknown) => {
+  const normalized = normalizeSettings(data);
   fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
-  fs.writeFileSync(settingsPath, JSON.stringify(data, null, 2), 'utf-8');
+  fs.writeFileSync(settingsPath, JSON.stringify(normalized, null, 2), 'utf-8');
   return true;
 });
 
@@ -287,6 +332,32 @@ ipcMain.handle('pick-stockfish-path', async (event) => {
     ],
   });
   return result.canceled ? null : result.filePaths[0];
+});
+
+ipcMain.handle('stockfish-info', () => {
+  const bundledPath = app.isPackaged ? getPackagedStockfishPath() : null;
+  const configuredPath = (() => {
+    try {
+      if (!fs.existsSync(settingsPath)) return null;
+      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8')) as Record<string, unknown>;
+      const p = settings.stockfishPath;
+      return typeof p === 'string' && p.trim() ? p : null;
+    } catch {
+      return null;
+    }
+  })();
+  return {
+    configuredPath,
+    configuredExists: configuredPath ? fs.existsSync(configuredPath) : false,
+    bundledPath,
+    bundledExists: bundledPath ? fs.existsSync(bundledPath) : false,
+    settingsPath,
+  };
+});
+
+ipcMain.handle('open-external-url', async (_event, url: string) => {
+  await shell.openExternal(url);
+  return true;
 });
 
 // Books directory for opening explorer

@@ -13,6 +13,10 @@ files:
   - package.json
 
 extraResources:
+  - from: resources/config
+    to: config
+    filter:
+      - "**/*.json"
   - from: resources/books
     to: books
     filter:
@@ -52,6 +56,8 @@ win:
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
+  perMachine: true
+  allowElevation: true
   installerIcon: resources/icons/icon.ico
   uninstallerIcon: resources/icons/icon.ico
   installerHeaderIcon: resources/icons/icon.ico

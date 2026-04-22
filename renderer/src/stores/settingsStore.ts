@@ -6,6 +6,7 @@ import { create } from 'zustand';
 export type Theme = 'dark' | 'light' | 'high-contrast';
 export type BoardStyle = 'classic' | 'wood' | 'marble' | 'neon';
 export type PieceSet = 'material' | 'alpha';
+export type PlayEngine = 'mentor' | 'stockfish';
 export type AnimationSpeed = 'slow' | 'normal' | 'fast' | 'off';
 export type TimeControl = {
   seconds: number;
@@ -27,6 +28,7 @@ export interface AppSettings {
   pieceSet: PieceSet;
   animationSpeed: AnimationSpeed;
   // Engine
+  playEngine: PlayEngine;
   stockfishPath: string;
   threads: number;
   hashMb: number;
@@ -53,6 +55,7 @@ const DEFAULTS: AppSettings = {
   boardStyle: 'classic',
   pieceSet: 'material',
   animationSpeed: 'normal',
+  playEngine: 'mentor',
   stockfishPath: 'stockfish',
   threads: 1,
   hashMb: 128,

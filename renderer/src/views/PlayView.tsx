@@ -39,6 +39,11 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
   const [blackTime, setBlackTime] = useState<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const stockfishDepthForStrength = (strength: number): number => {
+    const s = Math.max(1, Math.min(10, strength));
+    return 5 + s;
+  };
+
   useEffect(() => {
     handleNewGame();
   }, []);
@@ -64,9 +69,13 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
     try {
       const result = await window.electronAPI.newGame({
         mode: store.mode,
-        engine_type: 'mentor',
+        engine_type: settings.playEngine,
         human_color: store.humanColor,
         strength: settings.botStrength,
+        stockfish_path: settings.stockfishPath,
+        threads: settings.threads,
+        hash_mb: settings.hashMb,
+        multipv: settings.multipv,
       }) as BackendMoveResult;
       store.applyMoveResult(result);
       store.resetGame();
@@ -88,10 +97,19 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
       store.applyMoveResult(result);
 
       if (!result.game_over && store.mode === 'human_vs_ai') {
-        const reply = await window.electronAPI.getBotMove({
-          fen: result.fen,
-          strength: settings.botStrength,
-        }) as { move: string | null };
+        const reply = settings.playEngine === 'stockfish'
+          ? await window.electronAPI.getEngineMove({
+            fen: result.fen,
+            time_limit: 0.35,
+            depth: stockfishDepthForStrength(settings.botStrength),
+            stockfish_path: settings.stockfishPath,
+            threads: settings.threads,
+            hash_mb: settings.hashMb,
+          }) as { move: string | null }
+          : await window.electronAPI.getBotMove({
+            fen: result.fen,
+            strength: settings.botStrength,
+          }) as { move: string | null };
         if (reply.move) {
           const engineResult = await window.electronAPI.makeMove({ move: reply.move }) as BackendMoveResult;
           store.applyMoveResult(engineResult);
