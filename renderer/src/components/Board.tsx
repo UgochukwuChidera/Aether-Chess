@@ -1,8 +1,8 @@
 /**
  * Board.tsx — 8×8 CSS Grid chess board with piece rendering,
- * square highlights, and click/promotion handling.
+ * square highlights, click/promotion handling, and drag-and-drop moves.
  */
-import React, { useCallback } from 'react';
+import React, { useCallback, useRef } from 'react';
 import { useGameStore } from '../stores/gameStore';
 import { useSettingsStore } from '../stores/settingsStore';
 
@@ -63,9 +63,10 @@ function indexToAlgebraic(index: number): string {
 
 interface Props {
   onSquareClick: (sq: string) => void;
+  onDropMove?: (from: string, to: string) => void;
 }
 
-export const Board: React.FC<Props> = ({ onSquareClick }) => {
+export const Board: React.FC<Props> = ({ onSquareClick, onDropMove }) => {
   const {
     fen,
     selectedSquare,
@@ -75,9 +76,13 @@ export const Board: React.FC<Props> = ({ onSquareClick }) => {
     flipped,
     inCheck,
     turn,
+    selectSquare,
   } = useGameStore();
 
   const { boardStyle, pieceSet } = useSettingsStore();
+
+  // Tracks the square where a drag originated
+  const dragFromRef = useRef<string | null>(null);
 
   const pieces = parseFen(fen);
 
@@ -105,6 +110,12 @@ export const Board: React.FC<Props> = ({ onSquareClick }) => {
       const isSelected = sq === selectedSquare;
       const isKingInCheck = inCheck && sq === kingSquare;
 
+      // Only own pieces (matching the side to move) are draggable
+      const isOwnPiece = piece && (
+        (turn === 'white' && piece === piece.toUpperCase()) ||
+        (turn === 'black' && piece === piece.toLowerCase())
+      );
+
       // Coordinate labels
       const showFile = flipped ? rank === 0 : rank === 7;
       const showRank = flipped ? file === 7 : file === 0;
@@ -115,7 +126,33 @@ export const Board: React.FC<Props> = ({ onSquareClick }) => {
         <div
           key={sq}
           data-sq={sq}
+          draggable={!!isOwnPiece}
           onClick={() => onSquareClick(sq)}
+          onDragStart={(e) => {
+            dragFromRef.current = sq;
+            e.dataTransfer.effectAllowed = 'move';
+            // Show legal-move highlights during drag
+            selectSquare(sq);
+          }}
+          onDragEnd={() => {
+            // Clear selection if drag was cancelled (no drop fired)
+            if (dragFromRef.current !== null) {
+              dragFromRef.current = null;
+              selectSquare(null);
+            }
+          }}
+          onDragOver={(e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            const from = dragFromRef.current;
+            dragFromRef.current = null;
+            if (from && from !== sq && onDropMove) {
+              onDropMove(from, sq);
+            }
+          }}
           className={`relative cursor-pointer select-none overflow-hidden
                       ${isLastMove ? 'sq-last-move' : ''}
                       ${isHighlighted ? 'sq-highlight' : ''}
@@ -193,7 +230,8 @@ export const Board: React.FC<Props> = ({ onSquareClick }) => {
       );
     },
     [pieces, selectedSquare, highlightedSquares, lastMoveFrom, lastMoveTo,
-     flipped, inCheck, kingSquare, boardStyle, pieceSet, onSquareClick],
+     flipped, inCheck, kingSquare, boardStyle, pieceSet, onSquareClick,
+     onDropMove, turn, selectSquare],
   );
 
   return (

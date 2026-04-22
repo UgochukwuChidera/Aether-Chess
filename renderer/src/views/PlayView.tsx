@@ -170,6 +170,20 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
     await commitMove(`${pendingPromotion.from}${pendingPromotion.to}${piece}`);
   };
 
+  /** Drop-move: fired by Board when a drag-and-drop completes. */
+  const handleDropMove = async (from: string, to: string) => {
+    if (store.gameResult || store.engineBusy) return;
+    store.selectSquare(null);
+    const { legalMoves, fen } = store;
+    const moveUCI = legalMoves.find((m) => m.startsWith(from) && m.slice(2, 4) === to);
+    if (!moveUCI) return;
+    if (!settings.autoQueen && isPawnPromotion(fen, from, to)) {
+      store.setPendingPromotion({ from, to });
+      return;
+    }
+    await commitMove(from + to);
+  };
+
   const handleUndo = async () => {
     try {
       const result = await window.electronAPI.undoMove() as BackendMoveResult;
@@ -179,12 +193,87 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
     }
   };
 
-  const handleNavigate = async (index: number) => {
+  const handleNavigate = useCallback(async (index: number) => {
     try {
       const result = await window.electronAPI.navigateToMove({ index }) as BackendMoveResult;
       store.applyMoveResult(result);
     } catch {/* ignore */}
-  };
+  }, []);
+
+  // ── Navigation helpers (used by both buttons and keyboard) ────────────────
+  const handleNavFirst = useCallback(() => {
+    if (store.fullMoveHistoryUCI.length === 0) return;
+    handleNavigate(-1);
+  }, [store.fullMoveHistoryUCI.length]);
+
+  const handleNavPrev = useCallback(() => {
+    const { navIndex, fullMoveHistoryUCI } = store;
+    const len = fullMoveHistoryUCI.length;
+    if (len === 0) return;
+    if (navIndex < 0) {
+      // live end → step back one
+      if (len >= 2) handleNavigate(len - 2);
+      else handleNavigate(-1); // single-move game → go to start
+    } else if (navIndex === 0) {
+      handleNavigate(-1); // before first move
+    } else {
+      handleNavigate(navIndex - 1);
+    }
+  }, [store.navIndex, store.fullMoveHistoryUCI.length]);
+
+  const handleNavNext = useCallback(() => {
+    const { navIndex, fullMoveHistoryUCI } = store;
+    const len = fullMoveHistoryUCI.length;
+    if (navIndex < 0 || len === 0) return; // already at end
+    if (navIndex < len - 1) handleNavigate(navIndex + 1);
+    // navIndex === len-1 means we're already at the last navigated position
+  }, [store.navIndex, store.fullMoveHistoryUCI.length]);
+
+  const handleNavLast = useCallback(() => {
+    const { navIndex, fullMoveHistoryUCI } = store;
+    const len = fullMoveHistoryUCI.length;
+    if (navIndex < 0 || len === 0) return;
+    handleNavigate(len - 1);
+  }, [store.navIndex, store.fullMoveHistoryUCI.length]);
+
+  // ── Keyboard hotkeys ──────────────────────────────────────────────────────
+  // ←/→ navigate, Home/Ctrl+← first, End/Ctrl+→ last, Ctrl+Z undo, F flip
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      // Skip when typing in a form field
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      switch (e.key) {
+        case 'ArrowLeft':
+          e.preventDefault();
+          if (e.ctrlKey || e.metaKey) handleNavFirst();
+          else handleNavPrev();
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          if (e.ctrlKey || e.metaKey) handleNavLast();
+          else handleNavNext();
+          break;
+        case 'Home':
+          e.preventDefault();
+          handleNavFirst();
+          break;
+        case 'End':
+          e.preventDefault();
+          handleNavLast();
+          break;
+        case 'z':
+        case 'Z':
+          if (e.ctrlKey || e.metaKey) { e.preventDefault(); handleUndo(); }
+          break;
+        case 'f':
+        case 'F':
+          store.flipBoard();
+          break;
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [handleNavFirst, handleNavPrev, handleNavNext, handleNavLast]);
 
   const handleResign = () => {
     store.pushToast('You resigned.', 'info');
@@ -217,7 +306,7 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
         isActive={opponentTurn}
       />
       <EvalBar />
-      <Board onSquareClick={handleSquareClick} />
+      <Board onSquareClick={handleSquareClick} onDropMove={handleDropMove} />
       <PlayerCard
         name="You"
         online={true}
@@ -231,7 +320,13 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
         onDraw={handleDraw}
         onResign={handleResign}
       />
-      <MoveHistory onMoveClick={handleNavigate} />
+      <MoveHistory
+        onMoveClick={handleNavigate}
+        onNavFirst={handleNavFirst}
+        onNavPrev={handleNavPrev}
+        onNavNext={handleNavNext}
+        onNavLast={handleNavLast}
+      />
       <div className="flex gap-2">
         <button
           onClick={handleExportPgn}
