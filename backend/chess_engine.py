@@ -157,6 +157,18 @@ class ChessEngineManager:
         board = self.board
         is_over = board.is_game_over()
         outcome = board.outcome()
+
+        # Determine the move that led to the current view position.
+        # nav_index >= 0 → browsing a specific historical move.
+        # nav_index < 0 with moves on the board stack → at live/current end.
+        # nav_index < 0 with an empty board stack → navigated to start (before move 0).
+        if 0 <= self._nav_index < len(self._full_history):
+            last_uci: Optional[str] = self._full_history[self._nav_index].uci()
+        elif self._nav_index < 0 and self._full_history and len(self.board.move_stack) > 0:
+            last_uci = self._full_history[-1].uci()
+        else:
+            last_uci = None
+
         return {
             "fen": board.fen(),
             "turn": "white" if board.turn == chess.WHITE else "black",
@@ -164,7 +176,7 @@ class ChessEngineManager:
             "move_history": self.move_history_san(),
             "full_move_history": [m.uci() for m in self._full_history],
             "last_move_san": last_san,
-            "last_move_uci": self._full_history[-1].uci() if self._full_history else None,
+            "last_move_uci": last_uci,
             "nav_index": self._nav_index,
             "game_over": is_over,
             "result": outcome.result() if outcome else None,
