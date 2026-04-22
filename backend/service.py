@@ -68,12 +68,7 @@ def handle_new_game(params: Dict[str, Any]) -> Any:
         strength=strength,
         time_control=time_control,
     )
-    return {
-        "fen": engine_mgr.fen(),
-        "turn": "white" if engine_mgr.board.turn == chess.WHITE else "black",
-        "legal_moves": engine_mgr.legal_moves_uci(),
-        "game_over": False,
-    }
+    return engine_mgr._state_snapshot()
 
 
 def handle_make_move(params: Dict[str, Any]) -> Any:

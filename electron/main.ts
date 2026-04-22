@@ -100,13 +100,17 @@ function startPython(mainWindow: BrowserWindow): void {
 
   pyShell.on('error', (err: Error) => {
     console.error('[Python error]', err);
-    mainWindow.webContents.send('backend-error', err.message);
+    if (!mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('backend-error', err.message);
+    }
   });
 
   pyShell.on('close', () => {
     console.warn('[Python] backend process closed');
     pyShell = null;
-    mainWindow.webContents.send('backend-closed');
+    if (!mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('backend-closed');
+    }
   });
 }
 
