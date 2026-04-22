@@ -32,21 +32,21 @@ SCROLL_INCREMENT      = 22
 DISPLAY_FLAGS         = pygame.RESIZABLE
 
 # ── Palette (dark theme) ────────────────────────────────────────────────────
-C_BG          = (13,  13,  13)   # outer background
-C_PANEL       = (20,  20,  20)   # sidebar bg
+C_BG          = (10,  10,  10)   # background #0A0A0A
+C_PANEL       = (26,  26,  26)   # surface layer #1A1A1A
 C_SURFACE     = (26,  26,  26)   # card / button base
-C_SURFACE2    = (32,  32,  32)   # hover tint
-C_BORDER      = (36,  36,  36)   # hairline borders
-C_ACCENT      = (0,   188, 212)  # teal accent
-C_ACCENT_DIM  = (0,   80,  90)   # dark teal fill for active buttons
-C_TEXT        = (220, 220, 215)  # primary text
-C_MUTED       = (120, 120, 115)  # secondary text
-C_DIM         = (55,  55,  52)   # very muted / coord labels
-C_HIGHLIGHT   = (246, 246, 105)  # selected square
-C_LASTMOVE    = (240, 192, 64)   # last-move ring
-C_HINT        = (186, 202, 68)   # legal-move dot
-C_BOARD_L     = (238, 238, 210)  # light square
-C_BOARD_D     = (118, 150, 86)   # dark square
+C_SURFACE2    = (42,  42,  42)   # elevated/hover surface
+C_BORDER      = (38,  38,  38)   # separator #262626
+C_ACCENT      = (163, 230, 53)   # primary-container #A3E635
+C_ACCENT_DIM  = (51,  79,  0)    # dim accent for active controls
+C_TEXT        = (229, 226, 225)  # on-surface #E5E2E1
+C_MUTED       = (194, 202, 176)  # on-surface-variant #C2CAB0
+C_DIM         = (140, 148, 124)  # outline #8C947C
+C_HIGHLIGHT   = (152, 218, 39)   # primary-fixed-dim #98DA27
+C_LASTMOVE    = (163, 230, 53)   # primary-container
+C_HINT        = (178, 247, 70)   # primary-fixed
+C_BOARD_L     = (58,  58,  58)   # light square #3A3A3A
+C_BOARD_D     = (38,  38,  38)   # dark square #262626
 
 
 ButtonDef = Tuple[str, Callable[[], None], bool, bool, str]  # label, action, needs_sync, start_engine, group
