@@ -100,8 +100,8 @@ function isExecutablePath(filePath: string): boolean {
       return ['.exe', '.bat', '.cmd'].includes(ext);
     }
     return (stats.mode & EXECUTABLE_PERMISSION_MASK) !== 0;
-  } catch {
-    console.warn('[settings] Failed to validate executable path:', filePath);
+  } catch (error) {
+    console.warn('[settings] Failed to validate executable path:', filePath, error);
     return false;
   }
 }
@@ -345,7 +345,7 @@ ipcMain.handle('pick-stockfish-path', async (event) => {
     properties: ['openFile'],
     filters: process.platform === 'win32'
       ? [{ name: 'Executables', extensions: ['exe', 'bat', 'cmd'] }]
-      : [{ name: 'All Files', extensions: ['*'] }],
+      : [{ name: 'All Files', extensions: [] }],
   });
   if (result.canceled) return null;
   const selected = result.filePaths[0];
