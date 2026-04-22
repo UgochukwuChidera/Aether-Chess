@@ -327,9 +327,6 @@ ipcMain.handle('pick-stockfish-path', async (event) => {
   const result = await dialog.showOpenDialog(win, {
     title: 'Select Stockfish executable',
     properties: ['openFile'],
-    filters: [
-      { name: 'Executables', extensions: ['exe', 'app', ''] },
-    ],
   });
   return result.canceled ? null : result.filePaths[0];
 });
