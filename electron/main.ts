@@ -14,6 +14,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+const EXECUTABLE_PERMISSION_MASK = 0o111;
 
 // ── Python backend process ───────────────────────────────────────────────────
 
@@ -98,7 +99,7 @@ function isExecutablePath(filePath: string): boolean {
       const ext = path.extname(filePath).toLowerCase();
       return ['.exe', '.bat', '.cmd'].includes(ext);
     }
-    return (stats.mode & 0o111) !== 0;
+    return (stats.mode & EXECUTABLE_PERMISSION_MASK) !== 0;
   } catch {
     return false;
   }
