@@ -17,6 +17,20 @@ interface Props {
   onTabChange: (tab: Tab) => void;
 }
 
+/** Return the color of the piece on a given square, or null if empty. */
+function pieceColorAt(fen: string, sq: string): 'white' | 'black' | null {
+  const rows = fen.split(' ')[0].split('/');
+  const file = sq.charCodeAt(0) - 97;
+  const rank = parseInt(sq[1]) - 1;
+  const fenRankIdx = 7 - rank;
+  let col = 0;
+  for (const ch of rows[fenRankIdx]) {
+    if (/\d/.test(ch)) { col += parseInt(ch); }
+    else { if (col === file) return ch === ch.toUpperCase() ? 'white' : 'black'; col++; }
+  }
+  return null;
+}
+
 function isPawnPromotion(fen: string, from: string, to: string): boolean {
   const rows = fen.split(' ')[0].split('/');
   const fromFile = from.charCodeAt(0) - 97;
@@ -77,7 +91,6 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
         hash_mb: settings.hashMb,
         multipv: settings.multipv,
       }) as BackendMoveResult;
-      store.applyMoveResult(result);
       store.resetGame();
       store.applyMoveResult(result);
       if (settings.timeControl.seconds > 0) {
@@ -124,13 +137,24 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
 
   const handleSquareClick = async (sq: string) => {
     if (store.gameResult || store.engineBusy) return;
-    const { selectedSquare, legalMoves, fen } = store;
+    const { selectedSquare, legalMoves, fen, turn } = store;
 
-    if (!selectedSquare) { store.selectSquare(sq); return; }
+    // Only own pieces (same color as the side to move) can be selected
+    const isOwnPiece = pieceColorAt(fen, sq) === turn;
+
+    if (!selectedSquare) {
+      if (isOwnPiece) store.selectSquare(sq);
+      return;
+    }
     if (sq === selectedSquare) { store.selectSquare(null); return; }
 
     const moveUCI = legalMoves.find((m) => m.startsWith(selectedSquare) && m.slice(2, 4) === sq);
-    if (!moveUCI) { store.selectSquare(sq); return; }
+    if (!moveUCI) {
+      // Switch to another own piece, or deselect if clicking empty/opponent square
+      if (isOwnPiece) store.selectSquare(sq);
+      else store.selectSquare(null);
+      return;
+    }
 
     if (!settings.autoQueen && isPawnPromotion(fen, selectedSquare, sq)) {
       store.setPendingPromotion({ from: selectedSquare, to: sq });
