@@ -4,6 +4,39 @@
 
 /* ── Base reset ─────────────────────────────────────────────────────────── */
 @layer base {
+  :root {
+    --color-bg: #0A0A0A;
+    --color-surface: #1A1A1A;
+    --color-surface2: #262626;
+    --color-surface3: #3A3A3A;
+    --color-on-surface: #E5E2E1;
+    --color-muted: #C2CAB0;
+    --color-inactive: #404040;
+    --color-error: #FFB4AB;
+  }
+
+  :root[data-theme='light'] {
+    --color-bg: #F4F5F6;
+    --color-surface: #FFFFFF;
+    --color-surface2: #DFE3E8;
+    --color-surface3: #C5CCD3;
+    --color-on-surface: #171A1D;
+    --color-muted: #4A5563;
+    --color-inactive: #6B7280;
+    --color-error: #B00020;
+  }
+
+  :root[data-theme='high-contrast'] {
+    --color-bg: #000000;
+    --color-surface: #0A0A0A;
+    --color-surface2: #2F2F2F;
+    --color-surface3: #4A4A4A;
+    --color-on-surface: #FFFFFF;
+    --color-muted: #D6D6D6;
+    --color-inactive: #BDBDBD;
+    --color-error: #FF6B6B;
+  }
+
   *, *::before, *::after { box-sizing: border-box; }
 
   html, body, #root {
@@ -11,8 +44,8 @@
     margin: 0;
     padding: 0;
     overflow: hidden;
-    background: #0A0A0A;
-    color: #E5E2E1;
+    background: var(--color-bg);
+    color: var(--color-on-surface);
     font-family: 'Inter', sans-serif;
   }
 
@@ -25,6 +58,19 @@
   /* Firefox */
   * { scrollbar-width: thin; scrollbar-color: #3A3A3A #1A1A1A; }
 }
+
+:root[data-theme] .bg-bg { background-color: var(--color-bg) !important; }
+:root[data-theme] .bg-surface { background-color: var(--color-surface) !important; }
+:root[data-theme] .bg-surface2 { background-color: var(--color-surface2) !important; }
+:root[data-theme] .bg-surface3 { background-color: var(--color-surface3) !important; }
+
+:root[data-theme] .border-surface2 { border-color: var(--color-surface2) !important; }
+:root[data-theme] .border-surface3 { border-color: var(--color-surface3) !important; }
+
+:root[data-theme] .text-on-surface { color: var(--color-on-surface) !important; }
+:root[data-theme] .text-muted { color: var(--color-muted) !important; }
+:root[data-theme] .text-inactive { color: var(--color-inactive) !important; }
+:root[data-theme] .text-error { color: var(--color-error) !important; }
 
 /* ── Material Symbols helper ────────────────────────────────────────────── */
 .material-symbols-outlined {

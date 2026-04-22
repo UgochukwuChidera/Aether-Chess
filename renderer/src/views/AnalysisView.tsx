@@ -1,7 +1,7 @@
 /**
  * AnalysisView.tsx — Board + live analysis panel.
  */
-import React, { useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { Board } from '../components/Board';
 import { EvalBar } from '../components/EvalBar';
 import { MoveHistory } from '../components/MoveHistory';
@@ -54,13 +54,13 @@ export const AnalysisView: React.FC = () => {
     await window.electronAPI.stopAnalysis().catch(() => {});
   };
 
-  const handleNavigate = async (index: number) => {
+  const handleNavigate = useCallback(async (index: number) => {
     try {
       const result = await window.electronAPI.navigateToMove({ index }) as BackendMoveResult;
       store.applyMoveResult(result);
       if (runningRef.current) await handleStartAnalysis();
     } catch {/* ignore */}
-  };
+  }, []);
 
   const handleComputeAccuracy = async () => {
     try {
@@ -86,11 +86,80 @@ export const AnalysisView: React.FC = () => {
     }
   };
 
+  // ── Navigation helpers ────────────────────────────────────────────────────
+  const handleNavFirst = useCallback(() => {
+    if (store.fullMoveHistoryUCI.length === 0) return;
+    handleNavigate(-1);
+  }, [store.fullMoveHistoryUCI.length]);
+
+  const handleNavPrev = useCallback(() => {
+    const { navIndex, fullMoveHistoryUCI } = store;
+    const len = fullMoveHistoryUCI.length;
+    if (len === 0) return;
+    if (navIndex < 0) {
+      if (len >= 2) handleNavigate(len - 2);
+      else handleNavigate(-1);
+    } else if (navIndex === 0) {
+      handleNavigate(-1);
+    } else {
+      handleNavigate(navIndex - 1);
+    }
+  }, [store.navIndex, store.fullMoveHistoryUCI.length]);
+
+  const handleNavNext = useCallback(() => {
+    const { navIndex, fullMoveHistoryUCI } = store;
+    const len = fullMoveHistoryUCI.length;
+    if (navIndex < 0 || len === 0) return;
+    if (navIndex < len - 1) handleNavigate(navIndex + 1);
+  }, [store.navIndex, store.fullMoveHistoryUCI.length]);
+
+  const handleNavLast = useCallback(() => {
+    const { navIndex, fullMoveHistoryUCI } = store;
+    const len = fullMoveHistoryUCI.length;
+    if (navIndex < 0 || len === 0) return;
+    handleNavigate(len - 1);
+  }, [store.navIndex, store.fullMoveHistoryUCI.length]);
+
+  // ── Keyboard hotkeys ──────────────────────────────────────────────────────
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      switch (e.key) {
+        case 'ArrowLeft':
+          e.preventDefault();
+          if (e.ctrlKey || e.metaKey) handleNavFirst();
+          else handleNavPrev();
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          if (e.ctrlKey || e.metaKey) handleNavLast();
+          else handleNavNext();
+          break;
+        case 'Home':
+          e.preventDefault();
+          handleNavFirst();
+          break;
+        case 'End':
+          e.preventDefault();
+          handleNavLast();
+          break;
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [handleNavFirst, handleNavPrev, handleNavNext, handleNavLast]);
+
   return (
     <div className="flex flex-col gap-2 w-full">
       <EvalBar />
       <Board onSquareClick={() => {}} />
-      <MoveHistory onMoveClick={handleNavigate} />
+      <MoveHistory
+        onMoveClick={handleNavigate}
+        onNavFirst={handleNavFirst}
+        onNavPrev={handleNavPrev}
+        onNavNext={handleNavNext}
+        onNavLast={handleNavLast}
+      />
       <AnalysisPanel
         onStartAnalysis={handleStartAnalysis}
         onStopAnalysis={handleStopAnalysis}

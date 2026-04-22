@@ -14,6 +14,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+const EXECUTABLE_PERMISSION_MASK = 0o111;
 
 // ── Python backend process ───────────────────────────────────────────────────
 
@@ -88,6 +89,21 @@ function getPackagedStockfishPath(): string | null {
     if (fs.existsSync(candidate)) return candidate;
   }
   return null;
+}
+
+function isExecutablePath(filePath: string): boolean {
+  try {
+    const stats = fs.statSync(filePath);
+    if (!stats.isFile()) return false;
+    if (process.platform === 'win32') {
+      const ext = path.extname(filePath).toLowerCase();
+      return ['.exe', '.bat', '.cmd'].includes(ext);
+    }
+    return (stats.mode & EXECUTABLE_PERMISSION_MASK) !== 0;
+  } catch (error) {
+    console.warn('[settings] Failed to validate executable path:', filePath, error);
+    return false;
+  }
 }
 
 function startPython(mainWindow: BrowserWindow): void {
@@ -322,16 +338,31 @@ ipcMain.handle('settings-save', (_event, data: unknown) => {
 
 // File picker for Stockfish path
 ipcMain.handle('pick-stockfish-path', async (event) => {
-  const win = BrowserWindow.fromWebContents(event.sender);
+  const win = BrowserWindow.fromWebContents(event.sender)
+    ?? BrowserWindow.getAllWindows()[0];
   if (!win) return null;
   const result = await dialog.showOpenDialog(win, {
     title: 'Select Stockfish executable',
     properties: ['openFile'],
-    filters: [
-      { name: 'Executables', extensions: ['exe', 'app', ''] },
-    ],
+    filters: process.platform === 'win32'
+      ? [{ name: 'Executables', extensions: ['exe', 'bat', 'cmd'] }]
+      : [{ name: 'All Files', extensions: [] }],
   });
-  return result.canceled ? null : result.filePaths[0];
+  if (result.canceled) return null;
+  const selected = result.filePaths[0];
+  // On Unix, automatically grant execute permission so the binary is usable
+  // even when downloaded directly (browsers do not preserve execute bits).
+  if (process.platform !== 'win32') {
+    try {
+      const stats = fs.statSync(selected);
+      if (stats.isFile() && (stats.mode & 0o100) === 0) {
+        fs.chmodSync(selected, stats.mode | 0o111);
+      }
+    } catch (err) {
+      console.warn('[stockfish] Could not chmod executable:', err);
+    }
+  }
+  return isExecutablePath(selected) ? selected : null;
 });
 
 ipcMain.handle('stockfish-info', () => {

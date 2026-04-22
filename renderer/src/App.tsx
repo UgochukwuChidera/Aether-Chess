@@ -26,6 +26,10 @@ export default function App() {
     settings.loadFromBackend();
   }, []);
 
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', settings.theme);
+  }, [settings.theme]);
+
   // Wire backend lifecycle toasts (guard for non-Electron environments)
   useEffect(() => {
     if (!window.electronAPI) return;
