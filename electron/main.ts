@@ -90,6 +90,20 @@ function getPackagedStockfishPath(): string | null {
   return null;
 }
 
+function isExecutablePath(filePath: string): boolean {
+  try {
+    const stats = fs.statSync(filePath);
+    if (!stats.isFile()) return false;
+    if (process.platform === 'win32') {
+      const ext = path.extname(filePath).toLowerCase();
+      return ['.exe', '.bat', '.cmd'].includes(ext);
+    }
+    return (stats.mode & 0o111) !== 0;
+  } catch {
+    return false;
+  }
+}
+
 function startPython(mainWindow: BrowserWindow): void {
   const pythonPath = getPythonPath();
   const scriptPath = getBackendScript();
@@ -327,8 +341,13 @@ ipcMain.handle('pick-stockfish-path', async (event) => {
   const result = await dialog.showOpenDialog(win, {
     title: 'Select Stockfish executable',
     properties: ['openFile'],
+    filters: process.platform === 'win32'
+      ? [{ name: 'Executables', extensions: ['exe', 'bat', 'cmd'] }]
+      : [],
   });
-  return result.canceled ? null : result.filePaths[0];
+  if (result.canceled) return null;
+  const selected = result.filePaths[0];
+  return isExecutablePath(selected) ? selected : null;
 });
 
 ipcMain.handle('stockfish-info', () => {
