@@ -76,7 +76,9 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
 
   loadFromBackend: async () => {
     try {
-      const saved = await window.electronAPI.loadSettings();
+      const saved = window.electronAPI
+        ? await window.electronAPI.loadSettings()
+        : null;
       if (saved) {
         set({ ...(saved as Partial<AppSettings>), loaded: true });
       } else {
@@ -90,7 +92,9 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   saveToBackend: async () => {
     const { loaded, update, loadFromBackend, saveToBackend, ...data } = get();
     try {
-      await window.electronAPI.saveSettings(data);
+      if (window.electronAPI) {
+        await window.electronAPI.saveSettings(data);
+      }
     } catch {
       /* silent */
     }

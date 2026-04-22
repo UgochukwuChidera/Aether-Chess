@@ -26,8 +26,9 @@ export default function App() {
     settings.loadFromBackend();
   }, []);
 
-  // Wire backend lifecycle toasts
+  // Wire backend lifecycle toasts (guard for non-Electron environments)
   useEffect(() => {
+    if (!window.electronAPI) return;
     window.electronAPI.onBackendError((msg) => {
       store.pushToast(`Backend error: ${msg}`, 'error');
     });

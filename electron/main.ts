@@ -33,6 +33,11 @@ function getPythonPath(): string {
     const ext = process.platform === 'win32' ? '.exe' : '';
     return path.join(process.resourcesPath, 'backend', `aether_backend${ext}`);
   }
+  // In dev mode, prefer the venv Python so project packages are available
+  const venvPython = process.platform === 'win32'
+    ? path.join(__dirname, '..', '..', 'venv', 'Scripts', 'python.exe')
+    : path.join(__dirname, '..', '..', 'venv', 'bin', 'python3');
+  if (fs.existsSync(venvPython)) return venvPython;
   return process.platform === 'win32' ? 'python' : 'python3';
 }
 

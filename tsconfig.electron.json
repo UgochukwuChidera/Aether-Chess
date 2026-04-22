@@ -6,9 +6,9 @@
     "strict": true,
     "skipLibCheck": true,
     "outDir": "dist/electron",
-    "rootDir": ".",
+    "rootDir": "electron",
     "resolveJsonModule": true
   },
   "include": ["electron/**/*"],
-  "exclude": ["node_modules", "renderer", "backend"]
+  "exclude": ["node_modules", "renderer", "backend", "dist"]
 }
