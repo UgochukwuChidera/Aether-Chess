@@ -1,0 +1,48 @@
+{
+  "name": "aether-chess",
+  "version": "1.0.0",
+  "description": "Professional desktop chess application — Electron + Python hybrid",
+  "main": "dist/electron/main.js",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm run dev:renderer\" \"npm run dev:electron\"",
+    "dev:renderer": "vite renderer",
+    "dev:electron": "wait-on http://localhost:5173 && tsc -p tsconfig.electron.json && electron .",
+    "build": "npm run build:renderer && npm run build:electron",
+    "build:renderer": "vite build renderer",
+    "build:electron": "tsc -p tsconfig.electron.json",
+    "dist": "npm run build && electron-builder",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:linux": "npm run build && electron-builder --linux",
+    "lint": "eslint . --ext ts,tsx",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.9",
+    "framer-motion": "^11.3.0",
+    "python-shell": "^5.0.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zustand": "^4.5.4"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.45.3",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.19",
+    "concurrently": "^8.2.2",
+    "electron": "^31.3.1",
+    "electron-builder": "^24.13.3",
+    "eslint": "^9.8.0",
+    "postcss": "^8.4.41",
+    "tailwindcss": "^3.4.9",
+    "typescript": "^5.5.4",
+    "vite": "^5.4.0",
+    "wait-on": "^7.2.0"
+  },
+  "build": {
+    "extends": "./build/electron-builder.yml"
+  }
+}
