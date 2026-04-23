@@ -15,6 +15,7 @@ export const AnalysisView: React.FC = () => {
   const store = useGameStore();
   const settings = useSettingsStore();
   const runningRef = useRef(false);
+  const [accuracyLoading, setAccuracyLoading] = React.useState(false);
 
   useEffect(() => {
     window.electronAPI.onAnalysisUpdate((raw: unknown) => {
@@ -79,6 +80,7 @@ export const AnalysisView: React.FC = () => {
   }, []);
 
   const handleComputeAccuracy = async () => {
+    setAccuracyLoading(true);
     try {
       const res = await window.electronAPI.calculateAccuracyFromHistory({
         stockfish_path: settings.stockfishPath,
@@ -99,6 +101,8 @@ export const AnalysisView: React.FC = () => {
       );
     } catch (err) {
       store.pushToast(`CAPS/ACPL failed: ${err}`, 'error');
+    } finally {
+      setAccuracyLoading(false);
     }
   };
 
@@ -180,6 +184,7 @@ export const AnalysisView: React.FC = () => {
         onStartAnalysis={handleStartAnalysis}
         onStopAnalysis={handleStopAnalysis}
         onComputeAccuracy={handleComputeAccuracy}
+        accuracyLoading={accuracyLoading}
       />
     </div>
   );

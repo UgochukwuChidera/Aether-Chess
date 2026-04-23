@@ -10,6 +10,28 @@ All responses have the shape:
 
 Analysis streaming uses a push-style message (no id):
   {"type": "analysis_update", "callback_id": "<id>", ...}
+
+Threading model
+───────────────
+Every incoming request is dispatched to a daemon thread immediately, so the
+stdin reader loop is *never* blocked — the UI stays responsive even when
+Stockfish is thinking or a full-game accuracy analysis is running.
+
+  • Board-mutation commands (make_move, undo_move, new_game, …) serialise
+    under _board_lock.  They are fast (< 1 ms), so holding that lock is fine.
+
+  • Board read-only commands (get_legal_moves, export_pgn, …) also hold
+    _board_lock briefly for safety.
+
+  • Engine commands (get_engine_move, get_bot_move) use a FEN supplied in
+    params — they never touch the shared board object and therefore require
+    NO lock.  They may block for several hundred ms; that is now fine.
+
+  • calculate_accuracy_from_history briefly acquires _board_lock to snapshot
+    history, then releases it BEFORE the long Stockfish computation.
+
+  • All stdout writes are serialised under _stdout_lock to prevent
+    interleaved JSON across concurrent threads.
 """
 from __future__ import annotations
 
@@ -33,15 +55,20 @@ engine_mgr = ChessEngineManager()
 accuracy_analyser = AccuracyAnalyser()
 mentor_bot = MentorBotAdapter()
 
-# Serialisation lock — one request at a time to protect board state
-_lock = threading.Lock()
+# Protects all reads/writes to engine_mgr.board / game_state
+_board_lock = threading.Lock()
+
+# Serialises stdout writes so JSON lines never interleave across threads
+_stdout_lock = threading.Lock()
 
 # ── IO helpers ────────────────────────────────────────────────────────────────
 
 def _send(obj: Dict[str, Any]) -> None:
-    """Write a JSON object to stdout (one line) and flush."""
-    sys.stdout.write(json.dumps(obj) + "\n")
-    sys.stdout.flush()
+    """Write a JSON object to stdout (one line) and flush — thread-safe."""
+    line = json.dumps(obj) + "\n"
+    with _stdout_lock:
+        sys.stdout.write(line)
+        sys.stdout.flush()
 
 
 def _ok(request_id: str, result: Any) -> None:
@@ -115,6 +142,7 @@ def handle_navigate_to_move(params: Dict[str, Any]) -> Any:
 
 
 def handle_get_engine_move(params: Dict[str, Any]) -> Any:
+    # FEN comes from params — no board lock needed.
     fen = params.get("fen") or engine_mgr.fen()
     time_limit = float(params.get("time_limit", 0.5))
     depth = params.get("depth")
@@ -132,6 +160,7 @@ def handle_get_engine_move(params: Dict[str, Any]) -> Any:
 
 
 def handle_get_bot_move(params: Dict[str, Any]) -> Any:
+    # FEN comes from params — no board lock needed.
     fen = params.get("fen") or engine_mgr.fen()
     strength = int(params.get("strength", engine_mgr.settings.get("strength", 7)))
     stockfish_path = params.get("stockfish_path", engine_mgr.settings.get("stockfish_path", "stockfish"))
@@ -165,14 +194,18 @@ def handle_export_fen(_params: Dict[str, Any]) -> Any:
 
 
 def handle_calculate_accuracy(params: Dict[str, Any]) -> Any:
+    # All data from params — no board lock needed.
     fen_list: list[str] = params["fen_list"]
     moves: list[str] = params["moves"]
     stockfish_path: str = params.get("stockfish_path", engine_mgr.settings.get("stockfish_path", "stockfish"))
     return accuracy_analyser.calculate(fen_list, moves, stockfish_path=stockfish_path)
 
+
 def handle_calculate_accuracy_from_history(params: Dict[str, Any]) -> Any:
     stockfish_path: str = params.get("stockfish_path", engine_mgr.settings.get("stockfish_path", "stockfish"))
-    fen_list, moves = engine_mgr.history_fens_and_moves()
+    # Snapshot history under the board lock (fast), then release before heavy computation.
+    with _board_lock:
+        fen_list, moves = engine_mgr.history_fens_and_moves()
     return accuracy_analyser.calculate(fen_list, moves, stockfish_path=stockfish_path)
 
 
@@ -195,7 +228,6 @@ def handle_start_analysis(params: Dict[str, Any]) -> Any:
     stockfish_path = params.get("stockfish_path", engine_mgr.settings.get("stockfish_path", "stockfish"))
     threads = params.get("threads")
     hash_mb = params.get("hash_mb")
-    # Start analysis in a background thread so we can return immediately
     engine_mgr.start_analysis(
         fen=fen,
         multipv=multipv,
@@ -215,7 +247,7 @@ def handle_stop_analysis(_params: Dict[str, Any]) -> Any:
 
 # ── Dispatch table ────────────────────────────────────────────────────────────
 
-HANDLERS = {
+HANDLERS: Dict[str, Any] = {
     "new_game":           handle_new_game,
     "make_move":          handle_make_move,
     "get_legal_moves":    handle_get_legal_moves,
@@ -233,6 +265,48 @@ HANDLERS = {
     "start_analysis":     handle_start_analysis,
     "stop_analysis":      handle_stop_analysis,
 }
+
+# Commands that mutate board state — must hold _board_lock
+_BOARD_MUTATION_CMDS = frozenset({
+    "new_game", "make_move", "undo_move", "navigate_to_move", "import_pgn",
+})
+
+# Commands that read board state — also hold _board_lock (fast, safe)
+_BOARD_READ_CMDS = frozenset({
+    "get_legal_moves", "export_pgn", "export_fen", "get_book_moves",
+})
+
+# Commands that operate on a FEN from params + need no board lock:
+#   get_engine_move, get_bot_move, calculate_accuracy,
+#   estimate_elo, start_analysis, stop_analysis
+# calculate_accuracy_from_history acquires the lock internally (snapshot only).
+
+
+# ── Per-request dispatcher (runs in its own daemon thread) ───────────────────
+
+def _process_request(request_id: str, command: str, params: Dict[str, Any]) -> None:
+    """Execute one JSON-RPC request and send the response.
+
+    Board-mutating and board-reading commands run under *_board_lock*.
+    Engine / analysis commands run without any lock so they never block
+    the rest of the system while Stockfish is thinking.
+    """
+    handler = HANDLERS.get(command)
+    if handler is None:
+        _err(request_id, f"Unknown command: {command}")
+        return
+
+    try:
+        if command in _BOARD_MUTATION_CMDS or command in _BOARD_READ_CMDS:
+            with _board_lock:
+                result = handler(params)
+        else:
+            # Engine / accuracy / analysis — no board lock; may block for a while
+            result = handler(params)
+        _ok(request_id, result)
+    except Exception as exc:
+        traceback.print_exc(file=sys.stderr)
+        _err(request_id, str(exc))
 
 
 # ── Main loop ─────────────────────────────────────────────────────────────────
@@ -263,28 +337,16 @@ def main() -> None:
         command: str = msg.get("command", "")
         params: Dict[str, Any] = msg.get("params", {})
 
-        handler = HANDLERS.get(command)
-        if handler is None:
-            _err(request_id, f"Unknown command: {command}")
-            continue
-
-        # analysis start/stop are handled in a background thread;
-        # all other commands are serialised under the lock.
-        if command in ("start_analysis", "stop_analysis"):
-            try:
-                result = handler(params)
-                _ok(request_id, result)
-            except Exception as exc:
-                _err(request_id, str(exc))
-        else:
-            with _lock:
-                try:
-                    result = handler(params)
-                    _ok(request_id, result)
-                except Exception as exc:
-                    traceback.print_exc(file=sys.stderr)
-                    _err(request_id, str(exc))
+        # Dispatch every request to a daemon thread so stdin reading is
+        # *never* blocked — the UI stays fully responsive at all times.
+        t = threading.Thread(
+            target=_process_request,
+            args=(request_id, command, params),
+            daemon=True,
+        )
+        t.start()
 
 
 if __name__ == "__main__":
     main()
+

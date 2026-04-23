@@ -81,7 +81,7 @@ export const SettingsPanel: React.FC = () => {
   };
 
   const handleExportSettings = () => {
-    const { loaded, update, loadFromBackend, saveToBackend, ...data } = settings;
+    const { loaded: _l, update: _u, loadFromBackend: _lf, saveToBackend: _sb, ...data } = settings;
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -235,6 +235,11 @@ export const SettingsPanel: React.FC = () => {
             ))}
           </select>
         </Row>
+        <p className="text-[10px] text-muted -mt-2 px-0.5">
+          Hash = Stockfish transposition table — a RAM cache of analysed positions.
+          Larger cache = deeper searches &amp; faster re-analysis, at the cost of memory.
+          128 MB is plenty for most games; increase for long analysis sessions.
+        </p>
         <Row label="Multi-PV lines">
           <select
             className={selectClass}

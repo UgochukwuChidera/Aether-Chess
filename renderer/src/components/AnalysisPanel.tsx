@@ -26,9 +26,10 @@ interface Props {
   onStartAnalysis: () => void;
   onStopAnalysis: () => void;
   onComputeAccuracy: () => void;
+  accuracyLoading?: boolean;
 }
 
-export const AnalysisPanel: React.FC<Props> = ({ onStartAnalysis, onStopAnalysis, onComputeAccuracy }) => {
+export const AnalysisPanel: React.FC<Props> = ({ onStartAnalysis, onStopAnalysis, onComputeAccuracy, accuracyLoading = false }) => {
   const { analysis, moveHistory } = useGameStore();
   const {
     showAnalysisThreats,
@@ -47,10 +48,12 @@ export const AnalysisPanel: React.FC<Props> = ({ onStartAnalysis, onStopAnalysis
         <span className="text-xs font-sans text-muted flex-1">Stockfish Analysis</span>
         <button
           onClick={onComputeAccuracy}
+          disabled={accuracyLoading}
           className="px-3 py-1 rounded text-xs font-sans border border-surface2 text-muted
-                     hover:border-accent hover:text-accent transition-all active:scale-95"
+                     hover:border-accent hover:text-accent transition-all active:scale-95
+                     disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          CAPS/ACPL
+          {accuracyLoading ? 'Analysing…' : 'CAPS/ACPL'}
         </button>
         <button
           onClick={running ? onStopAnalysis : onStartAnalysis}

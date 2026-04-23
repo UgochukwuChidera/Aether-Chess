@@ -357,6 +357,7 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
         isUser={false}
         timeSeconds={opponentIsBlack ? blackTime : whiteTime}
         isActive={opponentTurn}
+        thinking={store.engineBusy}
       />
       {settings.showEvalBar && <EvalBar />}
       <Board onSquareClick={handleSquareClick} onDropMove={handleDropMove} />

@@ -102,7 +102,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   },
 
   saveToBackend: async () => {
-    const { loaded, update, loadFromBackend, saveToBackend, ...data } = get();
+    const { loaded: _l, update: _u, loadFromBackend: _lf, saveToBackend: _sb, ...data } = get();
     try {
       if (window.electronAPI) {
         await window.electronAPI.saveSettings(data);
