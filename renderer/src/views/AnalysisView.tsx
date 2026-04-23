@@ -184,7 +184,13 @@ export const AnalysisView: React.FC = () => {
   return (
       <div className="flex flex-col gap-2 w-full">
       {settings.showEvalBar && <EvalBar />}
-      <Board onSquareClick={() => {}} />
+      <Board
+        onSquareClick={() => {}}
+        showAnalysisArrows={true}
+        analysisPV={store.analysis.pvs[0]?.pv ?? []}
+        analysisAltPVs={store.analysis.pvs.slice(1).map((p) => p.pv)}
+        threatPV={store.analysis.pvs[0]?.pv?.slice(1, 5) ?? []}
+      />
       <MoveHistory
         onMoveClick={handleNavigate}
         onNavFirst={handleNavFirst}

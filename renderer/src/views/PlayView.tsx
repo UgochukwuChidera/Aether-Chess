@@ -162,6 +162,10 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
   // ── AI move helper — reads fresh state so it's safe in async loops ──────────
   const makeAiMove = useCallback(async (fen: string): Promise<BackendMoveResult | null> => {
     const cfg = useSettingsStore.getState();
+    const gs = useGameStore.getState();
+    const isWhiteTurn = gs.turn === 'white';
+    const timeRemaining = isWhiteTurn ? whiteTime : blackTime;
+    const totalMoves = gs.fullMoveHistoryUCI.length;
     try {
       const reply = cfg.playEngine === 'stockfish'
         ? await window.electronAPI.getEngineMove({
@@ -178,6 +182,9 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
             stockfish_path: cfg.stockfishPath,
             threads: cfg.threads,
             hash_mb: cfg.hashMb,
+            time_remaining: timeRemaining ?? undefined,
+            time_increment: cfg.timeControl.increment ?? undefined,
+            total_moves: totalMoves,
           }) as { move: string | null };
       if (!reply.move) return null;
       const result = await window.electronAPI.makeMove({ move: reply.move }) as BackendMoveResult;
@@ -186,7 +193,7 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
     } catch {
       return null;
     }
-  }, []);
+  }, [whiteTime, blackTime]);
 
   // ── AI vs AI autonomous loop ──────────────────────────────────────────────
   const runAiVsAiLoop = useCallback(async () => {
@@ -466,6 +473,36 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
     }
   };
 
+  const handleExportFen = async () => {
+    try {
+      const res = await window.electronAPI.exportFen() as { fen: string };
+      await navigator.clipboard.writeText(res.fen);
+      store.pushToast('FEN copied to clipboard', 'success');
+    } catch (err) {
+      store.pushToast(`FEN export failed: ${err}`, 'error');
+    }
+  };
+
+  const handleExportFenCollection = async () => {
+    try {
+      const fenRes = await window.electronAPI.exportFen() as { fen: string };
+      const pgnRes = await window.electronAPI.exportPgn() as { pgn: string };
+      const lines: string[] = ['# FEN Collection - Aether Chess'];
+      lines.push(`# Current FEN: ${fenRes.fen}`);
+      lines.push(`# PGN: ${pgnRes.pgn.replace(/\n/g, ' | ')}`);
+      lines.push('');
+      lines.push(`0. ${fenRes.fen}`);
+      if (store.fullMoveHistoryUCI.length > 0) {
+        lines.push('');
+        lines.push('# Move FENs (use PGN for full game):');
+      }
+      await navigator.clipboard.writeText(lines.join('\n'));
+      store.pushToast('FEN collection copied to clipboard', 'success');
+    } catch (err) {
+      store.pushToast(`FEN collection export failed: ${err}`, 'error');
+    }
+  };
+
   // ── Player card labels — adapt to current game mode ───────────────────────
   const engineName = settings.playEngine === 'stockfish' ? 'Stockfish' : 'Mentor';
   const engineElo = botEloForStrength(settings.botStrength, settings.playEngine);
@@ -523,7 +560,14 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
         thinking={topThinking}
       />
       {settings.showEvalBar && <EvalBar />}
-      <Board onSquareClick={handleSquareClick} onDropMove={handleDropMove} />
+      <Board
+        onSquareClick={handleSquareClick}
+        onDropMove={handleDropMove}
+        showAnalysisArrows={settings.showAnalysisTopMoves}
+        analysisPV={store.analysis.pvs[0]?.pv ?? []}
+        analysisAltPVs={store.analysis.pvs.slice(1).map((p) => p.pv)}
+        threatPV={store.analysis.pvs[0]?.pv?.slice(1, 5) ?? []}
+      />
       <PlayerCard
         name={bottomName}
         online={true}
@@ -585,9 +629,26 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
             Copy PGN
           </button>
           <button
+            onClick={handleExportFen}
+            className="flex-1 py-1.5 border border-surface2 rounded text-xs text-muted font-sans
+                       hover:border-accent hover:text-accent active:scale-95 transition-all tooltip"
+            data-tip="Copy current position FEN"
+          >
+            Copy FEN
+          </button>
+          <button
+            onClick={handleExportFenCollection}
+            className="flex-1 py-1.5 border border-surface2 rounded text-xs text-muted font-sans
+                       hover:border-accent hover:text-accent active:scale-95 transition-all tooltip"
+            data-tip="Copy FEN collection from game"
+          >
+            FEN Collect
+          </button>
+          <button
             onClick={handleNewGame}
             className="flex-1 py-1.5 bg-accent text-bg rounded text-xs font-sans font-semibold
-                       hover:opacity-90 active:scale-95 transition-all"
+                       hover:opacity-90 active:scale-95 transition-all tooltip"
+            data-tip="Start a new game"
           >
             New Game
           </button>

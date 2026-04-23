@@ -38,6 +38,7 @@ Stockfish is thinking or a full-game accuracy analysis is running.
 """
 from __future__ import annotations
 
+import atexit
 import json
 import sys
 import threading
@@ -63,6 +64,14 @@ _board_lock = threading.Lock()
 
 # Serialises stdout writes so JSON lines never interleave across threads
 _stdout_lock = threading.Lock()
+
+
+def _cleanup() -> None:
+    mentor_bot.close()
+    engine_mgr._close_uci()
+
+
+atexit.register(_cleanup)
 
 # ── IO helpers ────────────────────────────────────────────────────────────────
 
@@ -163,18 +172,23 @@ def handle_get_engine_move(params: Dict[str, Any]) -> Any:
 
 
 def handle_get_bot_move(params: Dict[str, Any]) -> Any:
-    # FEN comes from params — no board lock needed.
     fen = params.get("fen") or engine_mgr.fen()
     strength = int(params.get("strength", engine_mgr.settings.get("strength", 7)))
     stockfish_path = params.get("stockfish_path", engine_mgr.settings.get("stockfish_path", "stockfish"))
     threads = params.get("threads", engine_mgr.settings.get("threads"))
     hash_mb = params.get("hash_mb", engine_mgr.settings.get("hash_mb"))
+    time_remaining = params.get("time_remaining")
+    time_increment = params.get("time_increment")
+    total_moves = params.get("total_moves")
     return mentor_bot.get_move(
         fen,
         strength=strength,
         stockfish_path=stockfish_path,
         threads=threads,
         hash_mb=hash_mb,
+        time_remaining=time_remaining,
+        time_increment=time_increment,
+        total_moves=total_moves,
     )
 
 
@@ -215,7 +229,8 @@ def handle_calculate_accuracy_from_history(params: Dict[str, Any]) -> Any:
 def handle_estimate_elo(params: Dict[str, Any]) -> Any:
     accuracy = float(params["accuracy"])
     blunder_rate = float(params.get("blunder_rate", 0.0))
-    return accuracy_analyser.estimate_elo(accuracy, blunder_rate)
+    avg_cp_loss = float(params.get("avg_cp_loss", 0.0))
+    return accuracy_analyser.estimate_elo(accuracy, blunder_rate, avg_cp_loss)
 
 
 def handle_get_book_moves(params: Dict[str, Any]) -> Any:

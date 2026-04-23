@@ -1,9 +1,10 @@
 /**
  * AnalysisPanel.tsx — Engine evaluation panel for the Analysis tab.
- * Shows real-time PV lines, evaluation score, and move classifications.
+ * Shows real-time PV lines, evaluation score, move classifications,
+ * accuracy progression chart, and Glicko-based Elo estimate.
  */
-import React from 'react';
-import { useGameStore, type PVLine } from '../stores/gameStore';
+import React, { useEffect, useRef } from 'react';
+import { useGameStore, type PVLine, type AccuracyMoveResult } from '../stores/gameStore';
 import { useSettingsStore } from '../stores/settingsStore';
 
 const CLASSIFICATION_COLORS: Record<string, string> = {
@@ -29,7 +30,19 @@ interface Props {
   accuracyLoading?: boolean;
 }
 
-export const AnalysisPanel: React.FC<Props> = ({ onStartAnalysis, onStopAnalysis, onComputeAccuracy, accuracyLoading = false }) => {
+interface EloEstimate {
+  estimated_elo: number;
+  confidence_interval: [number, number];
+  rd: number;
+  games_simulated?: number;
+}
+
+export const AnalysisPanel: React.FC<Props> = ({
+  onStartAnalysis,
+  onStopAnalysis,
+  onComputeAccuracy,
+  accuracyLoading = false,
+}) => {
   const { analysis, moveHistory } = useGameStore();
   const {
     showAnalysisThreats,
@@ -40,6 +53,36 @@ export const AnalysisPanel: React.FC<Props> = ({ onStartAnalysis, onStopAnalysis
   const top = pvs[0];
   const topAlternatives = pvs.slice(1);
   const threatLine = top?.pv_san?.slice(1, 5) ?? [];
+
+  const classified = moveHistory.filter((m) => m.classification);
+  const hasAccuracy = classified.length > 0;
+  const [eloEstimate, setEloEstimate] = React.useState<EloEstimate | null>(null);
+
+  useEffect(() => {
+    if (!hasAccuracy) { setEloEstimate(null); return; }
+    const whites = classified.filter((m) => m.color === 'white');
+    const blacks = classified.filter((m) => m.color === 'black');
+    const whiteAcc = whites.length > 0
+      ? (whites.filter((m) => ['Best', 'Brilliant', 'Great'].includes(m.classification ?? '')).length / whites.length) * 100
+      : 0;
+    const blackAcc = blacks.length > 0
+      ? (blacks.filter((m) => ['Best', 'Brilliant', 'Great'].includes(m.classification ?? '')).length / blacks.length) * 100
+      : 0;
+    const avgAcc = (whiteAcc + blackAcc) / 2;
+    const allLosses = classified.filter((m) => m.cp_loss !== undefined).map((m) => m.cp_loss as number);
+    const avgCpLoss = allLosses.length > 0
+      ? allLosses.reduce((a, b) => a + b, 0) / allLosses.length
+      : 0;
+    const blunderCount = classified.filter((m) => m.classification === 'Blunder').length;
+    const blunderRate = classified.length > 0 ? blunderCount / classified.length : 0;
+    window.electronAPI.estimateElo({
+      accuracy: avgAcc,
+      blunder_rate: blunderRate,
+      avg_cp_loss: avgCpLoss,
+    }).then((res: unknown) => {
+      setEloEstimate(res as EloEstimate);
+    }).catch(() => {});
+  }, [hasAccuracy, classified]);
 
   return (
     <div className="flex flex-col gap-3 w-full">
@@ -118,10 +161,115 @@ export const AnalysisPanel: React.FC<Props> = ({ onStartAnalysis, onStopAnalysis
         </div>
       )}
 
+      {/* Accuracy progression chart */}
+      {hasAccuracy && (
+        <AccuracyProgressionChart classified={classified} />
+      )}
+
+      {/* Estimated Elo */}
+      {eloEstimate && (
+        <EloDisplay estimate={eloEstimate} />
+      )}
+
       {/* Move classification table */}
       {moveHistory.length > 0 && (
         <MoveClassificationTable />
       )}
+    </div>
+  );
+};
+
+const AccuracyProgressionChart: React.FC<{ classified: { san: string; color: string; cp_loss?: number; classification?: string }[] }> = ({ classified }) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const W = canvas.width;
+    const H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+    if (classified.length < 2) return;
+    const maxLoss = Math.max(...classified.map((m) => m.cp_loss ?? 0), 50);
+    const stepX = (W - 20) / (classified.length - 1);
+    ctx.strokeStyle = 'rgba(163,230,53,0.3)';
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= 4; i++) {
+      const y = 10 + (H - 20) * (i / 4);
+      ctx.beginPath();
+      ctx.moveTo(10, y);
+      ctx.lineTo(W - 10, y);
+      ctx.stroke();
+    }
+    ctx.beginPath();
+    ctx.strokeStyle = '#A3E635';
+    ctx.lineWidth = 2;
+    classified.forEach((m, i) => {
+      const x = 10 + i * stepX;
+      const loss = m.cp_loss ?? 0;
+      const y = 10 + ((maxLoss - loss) / maxLoss) * (H - 20);
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    ctx.fillStyle = '#A3E635';
+    classified.forEach((m, i) => {
+      const x = 10 + i * stepX;
+      const loss = m.cp_loss ?? 0;
+      const y = 10 + ((maxLoss - loss) / maxLoss) * (H - 20);
+      ctx.beginPath();
+      ctx.arc(x, y, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+      const colorClass = m.classification ?? '';
+      if (colorClass === 'Blunder' || colorClass === 'Mistake') {
+        ctx.fillStyle = '#F87171';
+        ctx.beginPath();
+        ctx.arc(x, y, 4, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.fillStyle = '#A3E635';
+      }
+    });
+    ctx.fillStyle = '#C2CAB0';
+    ctx.font = '9px Inter, sans-serif';
+    ctx.fillText('Best', 12, 8);
+    ctx.fillText(`${maxLoss.toFixed(0)}cp loss`, 12, H);
+  }, [classified]);
+  return (
+    <div className="rounded-lg border border-surface2 bg-surface p-2">
+      <div className="text-xs text-muted mb-1">Accuracy Progression (centipawn loss per move)</div>
+      <canvas ref={canvasRef} width={280} height={70} className="w-full" style={{ imageRendering: 'crisp-edges' }} />
+    </div>
+  );
+};
+
+const EloDisplay: React.FC<{ estimate: EloEstimate }> = ({ estimate }) => {
+  const { moveHistory } = useGameStore();
+  const classified = moveHistory.filter((m) => m.classification);
+  const whites = classified.filter((m) => m.color === 'white');
+  const blacks = classified.filter((m) => m.color === 'black');
+  const wAcc = whites.length > 0
+    ? (whites.filter((m) => ['Best', 'Brilliant', 'Great'].includes(m.classification ?? '')).length / whites.length) * 100
+    : 0;
+  const bAcc = blacks.length > 0
+    ? (blacks.filter((m) => ['Best', 'Brilliant', 'Great'].includes(m.classification ?? '')).length / blacks.length) * 100
+    : 0;
+  return (
+    <div className="rounded-lg border border-surface2 bg-surface p-2">
+      <div className="text-xs text-muted mb-1">Estimated Rating (Glicko-2)</div>
+      <div className="flex items-center gap-4">
+        <div className="text-lg font-mono font-bold text-accent">
+          ~{estimate.estimated_elo}
+        </div>
+        <div className="flex flex-col gap-0.5">
+          <div className="text-[10px] text-muted">
+            CI: {estimate.confidence_interval[0]}–{estimate.confidence_interval[1]}
+          </div>
+          <div className="flex gap-3 text-[10px] text-muted">
+            <span>W: {wAcc.toFixed(0)}%</span>
+            <span>B: {bAcc.toFixed(0)}%</span>
+            <span>RD: {estimate.rd}</span>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

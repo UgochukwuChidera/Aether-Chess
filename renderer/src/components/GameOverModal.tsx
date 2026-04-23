@@ -27,13 +27,19 @@ interface Props {
 }
 
 export const GameOverModal: React.FC<Props> = ({ onRematch, onAnalyze, onMenu }) => {
-  const { gameResult, termination } = useGameStore();
+  const { gameResult, termination, setGameResult } = useGameStore();
 
   if (!gameResult) return null;
 
   const terminationLabel = termination
     ? TERMINATION_LABELS[termination] ?? termination.toLowerCase()
     : '';
+
+  const handleDismiss = () => {
+    setGameResult(null);
+    setGameResult(null);
+    useGameStore.setState({ gameResult: null, termination: null });
+  };
 
   return (
     <div className="fixed inset-0 z-50 modal-backdrop flex items-center justify-center p-6">
@@ -75,10 +81,17 @@ export const GameOverModal: React.FC<Props> = ({ onRematch, onAnalyze, onMenu })
             Analyze game
           </button>
           <button
+            onClick={handleDismiss}
+            className="w-full py-2 border border-surface2 text-on-surface rounded-lg font-sans text-sm
+                       hover:border-accent hover:text-accent active:scale-95 transition-all"
+          >
+            Review game
+          </button>
+          <button
             onClick={onMenu}
             className="w-full py-2 text-muted font-sans text-sm hover:text-accent transition-colors"
           >
-            Return to menu
+            New game
           </button>
         </div>
       </div>

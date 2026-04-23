@@ -4,6 +4,7 @@ aether_chess analysis modules.
 """
 from __future__ import annotations
 
+import math
 import os
 import sys
 from typing import Any, Dict, List
@@ -32,6 +33,95 @@ def _score_position(engine: chess.engine.SimpleEngine, board: chess.Board) -> fl
     score = info["score"].white()
     cp = score.score(mate_score=10_000)
     return float(cp) if cp is not None else 0.0
+
+
+class GlickoRating:
+    """
+    Glicko-2 inspired rating system.
+    https://www.glicko.net/glicko/glicko.pdf
+    """
+
+    TAU = 0.5
+    RD_MIN = 30.0
+    RD_MAX = 350.0
+    DEFAULT_RD = 200.0
+
+    def __init__(
+        self,
+        rating: float = 1500.0,
+        rd: float = DEFAULT_RD,
+        vol: float = 0.06,
+    ) -> None:
+        self.rating = rating
+        self.rd = rd
+        self.vol = vol
+
+    def _g(self, phi: float) -> float:
+        return 1.0 / math.sqrt(1.0 + 3.0 * (phi ** 2) / (math.pi ** 2))
+
+    def _E(self, mu: float, mu_j: float, phi: float) -> float:
+        g = self._g(phi)
+        return 1.0 / (1.0 + math.exp(-g * (mu - mu_j)))
+
+    def update_single(
+        self,
+        opponent_rating: float,
+        opponent_rd: float,
+        result: float,
+    ) -> None:
+        """
+        Update rating after a single game.
+        result: 1.0 = win, 0.5 = draw, 0.0 = loss
+        """
+        q = math.log(10.0) / 400.0
+        phi = self.rd / 173.7178
+        phi_j = opponent_rd / 173.7178
+        mu = (self.rating - 1500.0) / 173.7178
+        mu_j = (opponent_rating - 1500.0) / 173.7178
+        g_j = self._g(phi_j)
+        E_j = self._E(mu, mu_j, phi_j)
+        s_j = result
+        tmp = (q ** 2) * (g_j ** 2) * E_j * (1.0 - E_j)
+        Phi = math.sqrt(1.0 / ((1.0 / (phi ** 2)) + tmp))
+        tmp2 = (q ** 2) * (g_j ** 2) * (s_j - E_j)
+        delta = (Phi ** 2) * tmp2
+        a = math.log(self.vol ** 2)
+        def f(x: float) -> float:
+            ex = math.exp(x)
+            num = ex * (delta ** 2 - phi ** 2 - tmp * ex)
+            denom = 2.0 * ((phi ** 2) + tmp * ex) ** 2
+            return num / denom - (x - a)
+        A = a
+        if delta ** 2 > phi ** 2 + tmp * math.exp(a):
+            B = math.log(delta ** 2 - phi ** 2)
+        else:
+            k = 1
+            while f(a + k * self.TAU) < 0:
+                k += 1
+            B = a + k * self.TAU
+        fA = f(A)
+        fB = f(B)
+        while abs(B - A) > 0.00001:
+            C = A + (A - B) * fA / (fB - fA)
+            fC = f(C)
+            if fC * fB < 0:
+                A, fA = B, fB
+            else:
+                fA = fA / 2.0
+            B, fB = C, fC
+        new_vol = math.exp(A / 2.0)
+        new_phi = math.sqrt(1.0 / ((1.0 / (phi ** 2)) + tmp))
+        new_mu = mu + (q ** 2) * (g_j ** 2) * (s_j - E_j) / (1.0 / (phi ** 2) + tmp)
+        self.rating = 173.7178 * new_mu + 1500.0
+        self.rd = max(self.RD_MIN, min(self.RD_MAX, 173.7178 * new_phi))
+        self.vol = max(0.001, min(0.1, new_vol))
+
+    def ci95(self) -> tuple[float, float]:
+        """Return 95% confidence interval."""
+        return (
+            max(100, self.rating - 1.96 * self.rd),
+            min(3500, self.rating + 1.96 * self.rd),
+        )
 
 
 class AccuracyAnalyser:
@@ -77,12 +167,10 @@ class AccuracyAnalyser:
 
                 score_after = _score_position(engine, board)
 
-                # Loss is always from the side that just moved
                 if is_white:
                     loss = max(0.0, score_before - score_after)
                     white_losses.append(loss)
                 else:
-                    # From black's perspective: invert scores
                     loss = max(0.0, -score_before - (-score_after))
                     black_losses.append(loss)
 
@@ -99,34 +187,50 @@ class AccuracyAnalyser:
 
         white_acc = accuracy_from_losses(white_losses)
         black_acc = accuracy_from_losses(black_losses)
+        white_avg_cp = round(sum(white_losses) / len(white_losses), 1) if white_losses else 0.0
+        black_avg_cp = round(sum(black_losses) / len(black_losses), 1) if black_losses else 0.0
 
         return {
             "moves": results,
             "white_accuracy": round(white_acc, 1),
             "black_accuracy": round(black_acc, 1),
+            "white_avg_cp_loss": white_avg_cp,
+            "black_avg_cp_loss": black_avg_cp,
         }
 
-    def estimate_elo(self, accuracy: float, blunder_rate: float = 0.0) -> Dict[str, Any]:
+    def estimate_elo(
+        self,
+        accuracy: float,
+        blunder_rate: float = 0.0,
+        avg_cp_loss: float = 0.0,
+    ) -> Dict[str, Any]:
         """
-        Simple heuristic Elo estimate from accuracy and blunder rate.
-        Uses Bayesian performance rating calibrated to human data.
+        Estimate Elo using Glicko-2 model calibrated to:
+          - accuracy (0-100)
+          - blunder_rate (0.0-1.0)
+          - avg_cp_loss (average centipawn loss per move)
+
+        Accuracy and avg_cp_loss are treated as performance indicators.
+        Calibrated against human data.
         """
-        # Map accuracy (0-100) to a win-probability score against a 2000-rated engine
-        # Calibrated using: acc ~= 100% → Elo ~2600; acc ~= 50% → Elo ~1200
-        base_score = max(0.01, min(0.99, accuracy / 100.0))
-        blunder_penalty = blunder_rate * 150  # each 1% blunder rate ≈ 150 Elo penalty
-
-        elo_result = estimate_bayesian_elo(
-            performance_scores=[base_score],
-            opponent_rating=2000.0,
-        )
-        adjusted_rating = max(400, elo_result.rating - blunder_penalty)
-
+        base_acc = max(0.01, min(99.99, accuracy / 100.0))
+        blunder_penalty = blunder_rate * 200
+        cp_penalty = min(0.15, (avg_cp_loss / 500.0) * 0.15)
+        adjusted_score = max(0.01, min(0.99, base_acc - cp_penalty - blunder_penalty))
+        opponent_rating = 2000.0
+        rating = GlickoRating(rating=1500.0, rd=200.0)
+        estimated_games = max(3, int((1.0 - adjusted_score) * 20 + 3))
+        for _ in range(estimated_games):
+            rating.update_single(opponent_rating, 200.0, adjusted_score)
+        final_rating = max(400, rating.rating - blunder_penalty)
+        ci = rating.ci95()
         return {
-            "estimated_elo": round(adjusted_rating),
+            "estimated_elo": round(final_rating),
             "confidence_interval": [
-                round(max(400, elo_result.ci95[0] - blunder_penalty)),
-                round(elo_result.ci95[1]),
+                round(max(400, ci[0] - blunder_penalty)),
+                round(min(3500, ci[1])),
             ],
-            "rd": round(elo_result.rd, 1),
+            "rd": round(rating.rd, 1),
+            "rating_deviation": round(rating.rd, 1),
+            "games_simulated": estimated_games,
         }

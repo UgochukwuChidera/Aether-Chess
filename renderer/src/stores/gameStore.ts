@@ -90,6 +90,7 @@ export interface GameState {
   applyAccuracyResults: (rows: AccuracyMoveResult[]) => void;
   setMode: (mode: GameMode) => void;
   setHumanColor: (color: Color) => void;
+  setGameResult: (result: GameResult, termination?: string | null) => void;
   resetGame: () => void;
 }
 
@@ -220,6 +221,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       });
       return { moveHistory };
     }),
+
+  setGameResult: (result, termination = null) =>
+    set({ gameResult: result, termination }),
 
   resetGame: () =>
     set({

@@ -311,8 +311,13 @@ class ChessEngineManager:
     def stop_analysis(self) -> None:
         self._analysis_stop.set()
         if self._analysis_thread is not None:
-            self._analysis_thread.join(timeout=3.0)
+            thread = self._analysis_thread
             self._analysis_thread = None
+            try:
+                if thread.is_alive():
+                    thread.join(timeout=3.0)
+            except RuntimeError:
+                pass
 
     def history_fens_and_moves(self) -> tuple[List[str], List[str]]:
         board = chess.Board()

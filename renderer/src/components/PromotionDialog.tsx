@@ -54,7 +54,7 @@ const PromotionContent: React.FC<Props> = ({ color, onSelect, onCancel }) => {
               {pieceSet === 'material' ? (
                 <span
                   className={`material-symbols-outlined chess-piece group-hover:text-accent
-                              ${color === 'white' ? 'text-on-surface' : 'text-black opacity-90'}`}
+                              ${color === 'white' ? 'text-white-piece' : 'text-black-piece'}`}
                   style={{ fontSize: 40 }}
                 >
                   {symbol}
@@ -75,7 +75,7 @@ const PromotionContent: React.FC<Props> = ({ color, onSelect, onCancel }) => {
                 </span>
               ) : (
                 <span
-                  className={`group-hover:text-accent ${color === 'white' ? 'text-on-surface' : 'text-black opacity-90'}`}
+                  className={`group-hover:text-accent ${color === 'white' ? 'text-white-piece' : 'text-black-piece'}`}
                   style={{ fontSize: 40, lineHeight: 1 }}
                 >
                   {PROMO_GLYPHS[code]}

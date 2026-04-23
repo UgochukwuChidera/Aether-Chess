@@ -6,6 +6,11 @@ import React, { useCallback, useRef } from 'react';
 import { useGameStore } from '../stores/gameStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { BOARD_STYLES, PIECE_ICONS, PIECE_GLYPHS } from '../config/pieceConfig';
+import {
+  BoardDrawingLayer,
+  type Arrow,
+  type SquareMark,
+} from './BoardDrawingLayer';
 
 // Parse FEN board part into a 64-element array (index 0 = a8)
 function parseFen(fen: string): (string | null)[] {
@@ -36,9 +41,26 @@ function indexToAlgebraic(index: number): string {
 interface Props {
   onSquareClick: (sq: string) => void;
   onDropMove?: (from: string, to: string) => void;
+  arrows?: Arrow[];
+  showAnalysisArrows?: boolean;
+  analysisPV?: string[];
+  analysisAltPVs?: string[][];
+  threatPV?: string[];
+  onArrowsChange?: (arrows: Arrow[]) => void;
+  onMarksChange?: (marks: SquareMark[]) => void;
 }
 
-export const Board: React.FC<Props> = ({ onSquareClick, onDropMove }) => {
+export const Board: React.FC<Props> = ({
+    onSquareClick,
+    onDropMove,
+    arrows = [],
+    showAnalysisArrows = false,
+    analysisPV = [],
+    analysisAltPVs = [],
+    threatPV = [],
+    onArrowsChange,
+    onMarksChange,
+  }) => {
   const {
     fen,
     selectedSquare,
@@ -173,8 +195,9 @@ export const Board: React.FC<Props> = ({ onSquareClick, onDropMove }) => {
               }}
             >
               <span
-                className={`chess-piece material-symbols-outlined
-                            ${piece === piece.toUpperCase() ? 'text-on-surface' : 'text-black opacity-90'}`}
+                className={`chess-piece material-symbols-outlined ${
+                  piece === piece.toUpperCase() ? 'text-white-piece' : 'text-black-piece'
+                }`}
                 style={{
                   fontSize: 'clamp(20px, 6vmin, 56px)',
                   filter: piece === piece.toUpperCase()
@@ -207,7 +230,7 @@ export const Board: React.FC<Props> = ({ onSquareClick, onDropMove }) => {
               }}
             >
               <span
-                className={`${piece === piece.toUpperCase() ? 'text-white' : 'text-black'} pointer-events-none`}
+                className={`${piece === piece.toUpperCase() ? 'text-white-piece' : 'text-black-piece'} pointer-events-none`}
                 style={{
                   fontSize: 'clamp(20px, 5.5vmin, 52px)',
                   lineHeight: 1,
@@ -274,6 +297,16 @@ export const Board: React.FC<Props> = ({ onSquareClick, onDropMove }) => {
       }}
     >
       {Array.from({ length: 64 }, (_, i) => renderSquare(i))}
+      <BoardDrawingLayer
+        flipped={flipped}
+        arrows={arrows}
+        showArrowsFromAnalysis={showAnalysisArrows}
+        analysisPV={analysisPV}
+        analysisAltPVs={analysisAltPVs}
+        showThreatPV={threatPV}
+        onArrowsChange={onArrowsChange}
+        onMarksChange={onMarksChange}
+      />
     </div>
   );
 };
