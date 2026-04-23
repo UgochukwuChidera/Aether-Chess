@@ -94,14 +94,21 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
       window.electronAPI.stopAnalysis().catch(() => {});
       return;
     }
-    window.electronAPI.startAnalysis({
-      fen: store.fen,
-      multipv: 1,
-      callback_id: PLAY_ANALYSIS_CB_ID,
-      stockfish_path: settings.stockfishPath,
-      threads: settings.threads,
-      hash_mb: settings.hashMb,
-    }).catch(() => {});
+    // Stop any previous analysis before starting a new one to avoid
+    // stacking concurrent Stockfish processes.
+    window.electronAPI.stopAnalysis().catch(() => {}).then(() => {
+      window.electronAPI.startAnalysis({
+        fen: store.fen,
+        multipv: 1,
+        callback_id: PLAY_ANALYSIS_CB_ID,
+        stockfish_path: settings.stockfishPath,
+        threads: settings.threads,
+        hash_mb: settings.hashMb,
+      }).catch(() => {});
+    });
+    return () => {
+      window.electronAPI.stopAnalysis().catch(() => {});
+    };
   }, [
     store.fen,
     settings.showEvalBar,

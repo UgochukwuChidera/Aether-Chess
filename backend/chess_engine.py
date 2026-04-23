@@ -50,6 +50,7 @@ class ChessEngineManager:
         # Stockfish singleton for engine moves
         self._uci_engine: Optional[chess.engine.SimpleEngine] = None
         self._uci_path: str = "stockfish"
+        self._uci_lock = threading.Lock()  # protects _uci_engine access
 
         # Analysis thread control
         self._analysis_stop = threading.Event()
@@ -226,17 +227,18 @@ class ChessEngineManager:
     ) -> Dict[str, Any]:
         sp = stockfish_path or self.settings.get("stockfish_path", "stockfish")
         board = chess.Board(fen)
-        engine = self._ensure_uci(sp)
-        self._configure_uci(
-            engine,
-            threads if threads is not None else self.settings.get("threads"),
-            hash_mb if hash_mb is not None else self.settings.get("hash_mb"),
-        )
-        limit = chess.engine.Limit(
-            time=time_limit,
-            depth=depth,
-        )
-        result = engine.play(board, limit)
+        with self._uci_lock:
+            engine = self._ensure_uci(sp)
+            self._configure_uci(
+                engine,
+                threads if threads is not None else self.settings.get("threads"),
+                hash_mb if hash_mb is not None else self.settings.get("hash_mb"),
+            )
+            limit = chess.engine.Limit(
+                time=time_limit,
+                depth=depth,
+            )
+            result = engine.play(board, limit)
         move = result.move
         if move is None:
             return {"move": None, "san": None}

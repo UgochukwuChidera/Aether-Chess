@@ -3,6 +3,7 @@ backend/custom_bot.py — Mentor bot adapter implemented on top of Stockfish.
 """
 from __future__ import annotations
 
+import threading
 from typing import Any, Dict, Optional
 
 import chess
@@ -15,6 +16,7 @@ class MentorBotAdapter:
     def __init__(self) -> None:
         self._uci_engine: Optional[chess.engine.SimpleEngine] = None
         self._uci_path: str = "stockfish"
+        self._uci_lock = threading.Lock()  # protects _uci_engine access
 
     def _ensure_uci(self, stockfish_path: str) -> chess.engine.SimpleEngine:
         if self._uci_engine is not None and stockfish_path == self._uci_path:
@@ -66,24 +68,24 @@ class MentorBotAdapter:
         threads: Optional[int] = None,
         hash_mb: Optional[int] = None,
     ) -> Dict[str, Any]:
-        """Return a mentor move using Stockfish at scaled strength (1–10)."""
+        """Return a mentor move using Stockfish at scaled strength (1-10)."""
         profile = self._strength_profile(strength)
-        engine = self._ensure_uci(stockfish_path)
-        self._configure_engine(
-            engine,
-            skill_level=int(profile["skill_level"]),
-            threads=threads,
-            hash_mb=hash_mb,
-        )
-
         board = chess.Board(fen)
-        result = engine.play(
-            board,
-            chess.engine.Limit(
-                time=float(profile["time_limit"]),
-                depth=int(profile["depth"]),
-            ),
-        )
+        with self._uci_lock:
+            engine = self._ensure_uci(stockfish_path)
+            self._configure_engine(
+                engine,
+                skill_level=int(profile["skill_level"]),
+                threads=threads,
+                hash_mb=hash_mb,
+            )
+            result = engine.play(
+                board,
+                chess.engine.Limit(
+                    time=float(profile["time_limit"]),
+                    depth=int(profile["depth"]),
+                ),
+            )
         move: Optional[chess.Move] = result.move
         if move is None:
             return {"move": None, "san": None}
