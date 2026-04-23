@@ -27,10 +27,26 @@ export const AnalysisView: React.FC = () => {
       }
       store.setAnalysis({ pvs: (data.pvs as any[]) ?? [], fen: data.fen ?? store.fen, running: true });
     });
-    return () => { window.electronAPI.removeAnalysisListeners(); };
+    return () => {
+      window.electronAPI.stopAnalysis().catch(() => {});
+      window.electronAPI.removeAnalysisListeners();
+    };
   }, []);
 
-  const handleStartAnalysis = async () => {
+  useEffect(() => {
+    if (!settings.showEvalBar) {
+      runningRef.current = false;
+      store.setAnalysis({ running: false });
+      window.electronAPI.stopAnalysis().catch(() => {});
+      return;
+    }
+    handleStartAnalysis();
+    return () => {
+      window.electronAPI.stopAnalysis().catch(() => {});
+    };
+  }, [store.fen, settings.showEvalBar, settings.multipv, settings.stockfishPath, settings.threads, settings.hashMb]);
+
+  async function handleStartAnalysis() {
     runningRef.current = true;
     store.setAnalysis({ running: true });
     try {
@@ -46,13 +62,13 @@ export const AnalysisView: React.FC = () => {
       store.pushToast(`Analysis failed: ${err}`, 'error');
       store.setAnalysis({ running: false });
     }
-  };
+  }
 
-  const handleStopAnalysis = async () => {
+  async function handleStopAnalysis() {
     runningRef.current = false;
     store.setAnalysis({ running: false });
     await window.electronAPI.stopAnalysis().catch(() => {});
-  };
+  }
 
   const handleNavigate = useCallback(async (index: number) => {
     try {
@@ -150,8 +166,8 @@ export const AnalysisView: React.FC = () => {
   }, [handleNavFirst, handleNavPrev, handleNavNext, handleNavLast]);
 
   return (
-    <div className="flex flex-col gap-2 w-full">
-      <EvalBar />
+      <div className="flex flex-col gap-2 w-full">
+      {settings.showEvalBar && <EvalBar />}
       <Board onSquareClick={() => {}} />
       <MoveHistory
         onMoveClick={handleNavigate}

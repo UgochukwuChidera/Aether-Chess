@@ -37,7 +37,7 @@ class ChessEngineManager:
         self._nav_index: int = -1  # -1 means "current position"
         self.settings: Dict[str, Any] = {
             "mode": "human_vs_ai",
-            "engine_type": "mentor",
+            "engine_type": "stockfish",
             "human_color": "white",
             "strength": 7,
             "stockfish_path": "stockfish",
@@ -60,7 +60,7 @@ class ChessEngineManager:
     def new_game(
         self,
         mode: str = "human_vs_ai",
-        engine_type: str = "mentor",
+        engine_type: str = "stockfish",
         human_color: str = "white",
         strength: int = 7,
         time_control: Optional[Dict[str, int]] = None,

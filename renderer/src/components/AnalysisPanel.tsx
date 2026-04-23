@@ -4,6 +4,7 @@
  */
 import React from 'react';
 import { useGameStore, type PVLine } from '../stores/gameStore';
+import { useSettingsStore } from '../stores/settingsStore';
 
 const CLASSIFICATION_COLORS: Record<string, string> = {
   Brilliant:  'text-[#00b0ff] border-[#00b0ff]',
@@ -29,7 +30,15 @@ interface Props {
 
 export const AnalysisPanel: React.FC<Props> = ({ onStartAnalysis, onStopAnalysis, onComputeAccuracy }) => {
   const { analysis, moveHistory } = useGameStore();
+  const {
+    showAnalysisThreats,
+    showAnalysisTopMoves,
+    showAnalysisTopAlternatives,
+  } = useSettingsStore();
   const { pvs, running } = analysis;
+  const top = pvs[0];
+  const topAlternatives = pvs.slice(1);
+  const threatLine = top?.pv_san?.slice(1, 5) ?? [];
 
   return (
     <div className="flex flex-col gap-3 w-full">
@@ -63,6 +72,48 @@ export const AnalysisPanel: React.FC<Props> = ({ onStartAnalysis, onStopAnalysis
       {pvs.map((pv, i) => (
         <PVLineRow key={i} pv={pv} rank={i} />
       ))}
+
+      {showAnalysisTopMoves && (
+        <div className="rounded-lg border border-surface2 bg-surface p-2">
+          <div className="text-xs text-muted mb-1">Top Move</div>
+          {top?.pv_san?.[0] ? (
+            <div className="text-sm font-mono text-on-surface">
+              {top.pv_san[0]} <span className="text-xs text-muted ml-2">({formatScore(top.score_cp, top.mate)})</span>
+            </div>
+          ) : (
+            <div className="text-xs text-muted">No top move available yet.</div>
+          )}
+        </div>
+      )}
+
+      {showAnalysisTopAlternatives && (
+        <div className="rounded-lg border border-surface2 bg-surface p-2">
+          <div className="text-xs text-muted mb-1">Top Alternatives</div>
+          {topAlternatives.length > 0 ? (
+            <div className="flex flex-col gap-1">
+              {topAlternatives.map((pv, idx) => (
+                <div key={idx} className="text-xs font-mono text-muted">
+                  {pv.pv_san?.[0] ?? '—'}{' '}
+                  <span className="text-[10px]">({formatScore(pv.score_cp, pv.mate)})</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-xs text-muted">No alternatives available yet.</div>
+          )}
+        </div>
+      )}
+
+      {showAnalysisThreats && (
+        <div className="rounded-lg border border-surface2 bg-surface p-2">
+          <div className="text-xs text-muted mb-1">Threats</div>
+          {threatLine.length > 0 ? (
+            <div className="text-xs font-mono text-muted break-all">{threatLine.join(' ')}</div>
+          ) : (
+            <div className="text-xs text-muted">No concrete threat line available yet.</div>
+          )}
+        </div>
+      )}
 
       {/* Move classification table */}
       {moveHistory.length > 0 && (

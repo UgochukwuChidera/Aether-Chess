@@ -56,7 +56,7 @@ def _err(request_id: str, message: str) -> None:
 
 def handle_new_game(params: Dict[str, Any]) -> Any:
     mode = params.get("mode", "human_vs_ai")
-    engine_type = params.get("engine_type", "mentor")
+    engine_type = params.get("engine_type", "stockfish")
     human_color = params.get("human_color", "white")
     strength = int(params.get("strength", 7))
     time_control = params.get("time_control", None)  # {"seconds": int, "increment": int}
@@ -134,7 +134,16 @@ def handle_get_engine_move(params: Dict[str, Any]) -> Any:
 def handle_get_bot_move(params: Dict[str, Any]) -> Any:
     fen = params.get("fen") or engine_mgr.fen()
     strength = int(params.get("strength", engine_mgr.settings.get("strength", 7)))
-    return mentor_bot.get_move(fen, strength=strength)
+    stockfish_path = params.get("stockfish_path", engine_mgr.settings.get("stockfish_path", "stockfish"))
+    threads = params.get("threads", engine_mgr.settings.get("threads"))
+    hash_mb = params.get("hash_mb", engine_mgr.settings.get("hash_mb"))
+    return mentor_bot.get_move(
+        fen,
+        strength=strength,
+        stockfish_path=stockfish_path,
+        threads=threads,
+        hash_mb=hash_mb,
+    )
 
 
 def handle_export_pgn(_params: Dict[str, Any]) -> Any:

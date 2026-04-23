@@ -281,6 +281,14 @@ export const SettingsPanel: React.FC = () => {
             className="accent-[#A3E635] w-4 h-4"
           />
         </Row>
+        <Row label="Show eval bar">
+          <input
+            type="checkbox"
+            checked={settings.showEvalBar}
+            onChange={(e) => settings.update({ showEvalBar: e.target.checked })}
+            className="accent-[#A3E635] w-4 h-4"
+          />
+        </Row>
         <Row label="Sound">
           <input
             type="checkbox"
@@ -299,6 +307,34 @@ export const SettingsPanel: React.FC = () => {
             />
           </Row>
         )}
+      </Section>
+
+      {/* ── Analysis ────────────────────────────────────────────────────── */}
+      <Section title="Analysis" icon="analytics">
+        <Row label="Show threats">
+          <input
+            type="checkbox"
+            checked={settings.showAnalysisThreats}
+            onChange={(e) => settings.update({ showAnalysisThreats: e.target.checked })}
+            className="accent-[#A3E635] w-4 h-4"
+          />
+        </Row>
+        <Row label="Show top move">
+          <input
+            type="checkbox"
+            checked={settings.showAnalysisTopMoves}
+            onChange={(e) => settings.update({ showAnalysisTopMoves: e.target.checked })}
+            className="accent-[#A3E635] w-4 h-4"
+          />
+        </Row>
+        <Row label="Show alternatives">
+          <input
+            type="checkbox"
+            checked={settings.showAnalysisTopAlternatives}
+            onChange={(e) => settings.update({ showAnalysisTopAlternatives: e.target.checked })}
+            className="accent-[#A3E635] w-4 h-4"
+          />
+        </Row>
       </Section>
 
       {/* ── Data & Privacy ──────────────────────────────────────────────── */}
