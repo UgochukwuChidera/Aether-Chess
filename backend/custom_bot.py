@@ -36,7 +36,7 @@ class MentorBotAdapter:
     def _strength_profile(strength: int) -> Dict[str, float]:
         level = max(1, min(10, int(strength)))
         return {
-            "time_limit": 0.12 + level * 0.12,
+            "time_limit": min(0.95, 0.08 + level * 0.085),
             "depth": 8 + level * 2,
             "skill_level": min(20, 2 + level * 2),
         }
