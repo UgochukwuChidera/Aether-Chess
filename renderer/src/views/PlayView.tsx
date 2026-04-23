@@ -16,6 +16,7 @@ import type { Tab } from '../components/BottomNav';
 interface Props {
   onTabChange: (tab: Tab) => void;
 }
+const PLAY_ANALYSIS_CB_ID = 'analysis-play';
 
 /** Return the color of the piece on a given square, or null if empty. */
 function pieceColorAt(fen: string, sq: string): 'white' | 'black' | null {
@@ -57,10 +58,57 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
     const s = Math.max(1, Math.min(10, strength));
     return 5 + s;
   };
+  const botEloForStrength = (strength: number, engine: 'stockfish' | 'mentor'): number => {
+    const s = Math.max(1, Math.min(10, strength));
+    if (engine === 'stockfish') return Math.round(900 + s * 180);
+    return Math.round(850 + s * 170);
+  };
 
   useEffect(() => {
     handleNewGame();
   }, []);
+
+  useEffect(() => {
+    window.electronAPI.onAnalysisUpdate((raw: unknown) => {
+      const data = raw as { callback_id: string; pvs?: unknown[]; fen?: string; error?: string };
+      if (data.callback_id !== PLAY_ANALYSIS_CB_ID) return;
+      if (data.error) {
+        store.setAnalysis({ running: false });
+        return;
+      }
+      store.setAnalysis({
+        pvs: (data.pvs as any[]) ?? [],
+        fen: data.fen ?? store.fen,
+        running: true,
+      });
+    });
+    return () => {
+      window.electronAPI.stopAnalysis().catch(() => {});
+      window.electronAPI.removeAnalysisListeners();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!settings.showEvalBar) {
+      store.setAnalysis({ running: false, pvs: [] });
+      window.electronAPI.stopAnalysis().catch(() => {});
+      return;
+    }
+    window.electronAPI.startAnalysis({
+      fen: store.fen,
+      multipv: 1,
+      callback_id: PLAY_ANALYSIS_CB_ID,
+      stockfish_path: settings.stockfishPath,
+      threads: settings.threads,
+      hash_mb: settings.hashMb,
+    }).catch(() => {});
+  }, [
+    store.fen,
+    settings.showEvalBar,
+    settings.stockfishPath,
+    settings.threads,
+    settings.hashMb,
+  ]);
 
   useEffect(() => {
     if (!store.gameResult) return;
@@ -122,6 +170,9 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
           : await window.electronAPI.getBotMove({
             fen: result.fen,
             strength: settings.botStrength,
+            stockfish_path: settings.stockfishPath,
+            threads: settings.threads,
+            hash_mb: settings.hashMb,
           }) as { move: string | null };
         if (reply.move) {
           const engineResult = await window.electronAPI.makeMove({ move: reply.move }) as BackendMoveResult;
@@ -294,18 +345,21 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
 
   const opponentIsBlack = store.humanColor === 'white';
   const opponentTurn = store.turn !== store.humanColor;
+  const opponentName = settings.playEngine === 'stockfish' ? 'Stockfish' : 'Mentor';
+  const opponentElo = botEloForStrength(settings.botStrength, settings.playEngine);
 
   return (
     <div className="flex flex-col gap-2 w-full">
       <PlayerCard
-        name="Aether Bot"
-        elo={1800}
+        name={opponentName}
+        elo={opponentElo}
         online={true}
         isUser={false}
         timeSeconds={opponentIsBlack ? blackTime : whiteTime}
         isActive={opponentTurn}
+        thinking={store.engineBusy}
       />
-      <EvalBar />
+      {settings.showEvalBar && <EvalBar />}
       <Board onSquareClick={handleSquareClick} onDropMove={handleDropMove} />
       <PlayerCard
         name="You"

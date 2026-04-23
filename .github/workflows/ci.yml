@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master, 'copilot/**', 'feature/**', 'fix/**']
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  # ── Frontend: lint + build ──────────────────────────────────────────────────
+  frontend:
+    name: Lint & Build (Node)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Lint TypeScript/TSX
+        run: npm run lint
+
+      - name: Build renderer + Electron
+        run: npm run build
+
+  # ── Backend: Python unit tests ──────────────────────────────────────────────
+  backend:
+    name: Python Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run unit tests
+        run: python -m unittest discover -s tests -v

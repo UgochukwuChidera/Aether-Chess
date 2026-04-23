@@ -1,8 +1,10 @@
 import React from 'react';
 import { useGameStore } from '../stores/gameStore';
+import { useSettingsStore } from '../stores/settingsStore';
 
 export const ProfileView: React.FC = () => {
   const { moveHistory } = useGameStore();
+  const settings = useSettingsStore();
   const [accuracy, setAccuracy] = React.useState<number | null>(null);
   const [eloResult, setEloResult] = React.useState<{ estimated_elo: number; confidence_interval: [number, number] } | null>(null);
   const [loading, setLoading] = React.useState(false);
@@ -11,9 +13,28 @@ export const ProfileView: React.FC = () => {
     if (moveHistory.length < 2) return;
     setLoading(true);
     try {
-      const res = await window.electronAPI.estimateElo({ accuracy: 60, blunder_rate: 0 }) as any;
-      setAccuracy(60);
-      setEloResult(res);
+      const accuracyRes = await window.electronAPI.calculateAccuracyFromHistory({
+        stockfish_path: settings.stockfishPath,
+      }) as {
+        moves?: Array<{ classification?: string }>;
+        white_accuracy?: number;
+        black_accuracy?: number;
+        error?: string;
+      };
+      if (accuracyRes.error) throw new Error(accuracyRes.error);
+      const white = accuracyRes.white_accuracy ?? 0;
+      const black = accuracyRes.black_accuracy ?? 0;
+      const avgAccuracy = (white + black) / 2;
+      const rows = accuracyRes.moves ?? [];
+      const blunders = rows.filter((m) => m.classification === 'Blunder').length;
+      const blunderRate = rows.length > 0 ? blunders / rows.length : 0;
+
+      const elo = await window.electronAPI.estimateElo({ accuracy: avgAccuracy, blunder_rate: blunderRate }) as {
+        estimated_elo: number;
+        confidence_interval: [number, number];
+      };
+      setAccuracy(avgAccuracy);
+      setEloResult(elo);
     } catch {/* ignore */}
     setLoading(false);
   };

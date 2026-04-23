@@ -33,7 +33,6 @@ export const EvalBar: React.FC = () => {
   const depth = top?.depth ?? 0;
 
   const whitePct = evalToWhitePct(cp, mate);
-  const blackPct = 100 - whitePct;
   const GLOW_WIDTH = 2; // px
 
   const scoreLabel = top ? formatScore(cp, mate) : '0.0';

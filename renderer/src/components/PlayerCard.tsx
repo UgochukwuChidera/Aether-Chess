@@ -11,6 +11,7 @@ interface Props {
   isUser?: boolean;
   timeSeconds?: number | null;
   isActive?: boolean;
+  thinking?: boolean;
 }
 
 function formatTime(seconds: number | null | undefined): string {
@@ -28,6 +29,7 @@ export const PlayerCard: React.FC<Props> = ({
   isUser = false,
   timeSeconds,
   isActive = false,
+  thinking = false,
 }) => {
   return (
     <div
@@ -52,9 +54,20 @@ export const PlayerCard: React.FC<Props> = ({
 
       {/* Name + Elo */}
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1.5">
           {flag && <span className="text-sm">{flag}</span>}
           <span className="text-sm font-sans font-medium text-on-surface truncate">{name}</span>
+          {thinking && (
+            <span className="flex gap-0.5 items-center ml-1">
+              {[0, 150, 300].map((delay) => (
+                <span
+                  key={delay}
+                  className="w-1 h-1 rounded-full bg-accent opacity-80 animate-bounce"
+                  style={{ animationDelay: `${delay}ms` }}
+                />
+              ))}
+            </span>
+          )}
         </div>
         {elo != null && (
           <span className="text-xs font-body text-muted">{elo}</span>

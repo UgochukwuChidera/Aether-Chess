@@ -134,7 +134,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   navIndex: -1,
   fullMoveHistoryUCI: [],
   mode: 'human_vs_ai',
-  engineType: 'mentor',
+  engineType: 'stockfish',
   humanColor: 'white',
   strength: 7,
   gameResult: null,

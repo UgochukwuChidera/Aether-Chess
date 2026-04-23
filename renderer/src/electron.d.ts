@@ -26,7 +26,13 @@ declare global {
         threads?: number;
         hash_mb?: number;
       }) => Promise<unknown>;
-      getBotMove: (params: { fen: string; strength?: number }) => Promise<unknown>;
+      getBotMove: (params: {
+        fen: string;
+        strength?: number;
+        stockfish_path?: string;
+        threads?: number;
+        hash_mb?: number;
+      }) => Promise<unknown>;
       exportPgn: () => Promise<unknown>;
       importPgn: (params: { pgn: string }) => Promise<unknown>;
       exportFen: () => Promise<unknown>;

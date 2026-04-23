@@ -5,7 +5,6 @@ import {
   dialog,
   shell,
   Menu,
-  nativeTheme,
 } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import { PythonShell, Options } from 'python-shell';
@@ -172,6 +171,14 @@ function startPython(mainWindow: BrowserWindow): void {
   });
 }
 
+// Commands that can take a very long time (accuracy over a full game, etc.)
+const LONG_RUNNING_COMMANDS = new Set([
+  'calculate_accuracy',
+  'calculate_accuracy_from_history',
+  'get_engine_move',
+  'get_bot_move',
+]);
+
 function sendCommand(
   command: string,
   params: Record<string, unknown> = {},
@@ -190,10 +197,14 @@ function sendCommand(
       analysisCallbacks.set(callbackId, windowId);
     }
 
+    // Long-running commands (e.g. full-game accuracy analysis) get 5 minutes;
+    // everything else gets the standard 30 seconds.
+    const timeoutMs = LONG_RUNNING_COMMANDS.has(command) ? 300_000 : 30_000;
+
     const timer = setTimeout(() => {
       pendingRequests.delete(id);
       reject(new Error(`Request timed out: ${command}`));
-    }, 30_000);
+    }, timeoutMs);
 
     pendingRequests.set(id, { resolve, reject, timer });
     pyShell.send({ id, command, params });
@@ -245,7 +256,7 @@ function createWindow(): BrowserWindow {
 // ── App lifecycle ────────────────────────────────────────────────────────────
 
 app.whenReady().then(() => {
-  const mainWindow = createWindow();
+  createWindow();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -272,7 +283,7 @@ ipcMain.on('window-minimize', (event) => {
 });
 ipcMain.on('window-maximize', (event) => {
   const win = BrowserWindow.fromWebContents(event.sender);
-  win?.isMaximized() ? win.unmaximize() : win?.maximize();
+  if (win?.isMaximized()) { win.unmaximize(); } else { win?.maximize(); }
 });
 ipcMain.on('window-close', (event) => {
   BrowserWindow.fromWebContents(event.sender)?.close();

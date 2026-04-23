@@ -23,7 +23,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     hash_mb?: number;
   }) =>
     ipcRenderer.invoke('get_engine_move', params),
-  getBotMove: (params: { fen: string; strength?: number }) =>
+  getBotMove: (params: {
+    fen: string;
+    strength?: number;
+    stockfish_path?: string;
+    threads?: number;
+    hash_mb?: number;
+  }) =>
     ipcRenderer.invoke('get_bot_move', params),
   exportPgn: () => ipcRenderer.invoke('export_pgn'),
   importPgn: (params: { pgn: string }) => ipcRenderer.invoke('import_pgn', params),

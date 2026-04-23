@@ -37,8 +37,13 @@ export interface AppSettings {
   // Gameplay
   timeControl: TimeControl;
   autoQueen: boolean;
+  showEvalBar: boolean;
   soundEnabled: boolean;
   soundVolume: number;
+  // Analysis
+  showAnalysisThreats: boolean;
+  showAnalysisTopMoves: boolean;
+  showAnalysisTopAlternatives: boolean;
   // Data
   clearHistoryOnNewGame: boolean;
 }
@@ -55,7 +60,7 @@ const DEFAULTS: AppSettings = {
   boardStyle: 'classic',
   pieceSet: 'material',
   animationSpeed: 'normal',
-  playEngine: 'mentor',
+  playEngine: 'stockfish',
   stockfishPath: 'stockfish',
   threads: 1,
   hashMb: 128,
@@ -63,8 +68,12 @@ const DEFAULTS: AppSettings = {
   botStrength: 7,
   timeControl: TIME_CONTROLS[3], // Unlimited
   autoQueen: false,
+  showEvalBar: true,
   soundEnabled: true,
   soundVolume: 0.7,
+  showAnalysisThreats: true,
+  showAnalysisTopMoves: true,
+  showAnalysisTopAlternatives: true,
   clearHistoryOnNewGame: false,
 };
 
@@ -93,7 +102,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   },
 
   saveToBackend: async () => {
-    const { loaded, update, loadFromBackend, saveToBackend, ...data } = get();
+    const { loaded: _l, update: _u, loadFromBackend: _lf, saveToBackend: _sb, ...data } = get();
     try {
       if (window.electronAPI) {
         await window.electronAPI.saveSettings(data);

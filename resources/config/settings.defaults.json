@@ -3,7 +3,7 @@
   "boardStyle": "classic",
   "pieceSet": "material",
   "animationSpeed": "normal",
-  "playEngine": "mentor",
+  "playEngine": "stockfish",
   "stockfishPath": "stockfish",
   "threads": 1,
   "hashMb": 128,
@@ -15,7 +15,11 @@
     "label": "Unlimited"
   },
   "autoQueen": false,
+  "showEvalBar": true,
   "soundEnabled": true,
   "soundVolume": 0.7,
+  "showAnalysisThreats": true,
+  "showAnalysisTopMoves": true,
+  "showAnalysisTopAlternatives": true,
   "clearHistoryOnNewGame": false
 }

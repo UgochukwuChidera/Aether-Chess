@@ -126,21 +126,7 @@ export const Board: React.FC<Props> = ({ onSquareClick, onDropMove }) => {
         <div
           key={sq}
           data-sq={sq}
-          draggable={!!isOwnPiece}
           onClick={() => onSquareClick(sq)}
-          onDragStart={(e) => {
-            dragFromRef.current = sq;
-            e.dataTransfer.effectAllowed = 'move';
-            // Show legal-move highlights during drag
-            selectSquare(sq);
-          }}
-          onDragEnd={() => {
-            // Clear selection if drag was cancelled (no drop fired)
-            if (dragFromRef.current !== null) {
-              dragFromRef.current = null;
-              selectSquare(null);
-            }
-          }}
           onDragOver={(e) => {
             e.preventDefault();
             e.dataTransfer.dropEffect = 'move';
@@ -195,7 +181,25 @@ export const Board: React.FC<Props> = ({ onSquareClick, onDropMove }) => {
 
           {/* Chess piece */}
           {piece && pieceSet === 'material' && (
-            <div className="absolute inset-0 flex items-center justify-center piece-enter">
+            <div
+              className="absolute inset-0 flex items-center justify-center piece-enter"
+              draggable={!!isOwnPiece}
+              onDragStart={(e) => {
+                if (!isOwnPiece) {
+                  e.preventDefault();
+                  return;
+                }
+                dragFromRef.current = sq;
+                e.dataTransfer.effectAllowed = 'move';
+                selectSquare(sq);
+              }}
+              onDragEnd={() => {
+                if (dragFromRef.current !== null) {
+                  dragFromRef.current = null;
+                  selectSquare(null);
+                }
+              }}
+            >
               <span
                 className={`chess-piece material-symbols-outlined
                             ${piece === piece.toUpperCase() ? 'text-on-surface' : 'text-black opacity-90'}`}
@@ -211,7 +215,25 @@ export const Board: React.FC<Props> = ({ onSquareClick, onDropMove }) => {
             </div>
           )}
           {piece && pieceSet === 'alpha' && (
-            <div className="absolute inset-0 flex items-center justify-center piece-enter">
+            <div
+              className="absolute inset-0 flex items-center justify-center piece-enter"
+              draggable={!!isOwnPiece}
+              onDragStart={(e) => {
+                if (!isOwnPiece) {
+                  e.preventDefault();
+                  return;
+                }
+                dragFromRef.current = sq;
+                e.dataTransfer.effectAllowed = 'move';
+                selectSquare(sq);
+              }}
+              onDragEnd={() => {
+                if (dragFromRef.current !== null) {
+                  dragFromRef.current = null;
+                  selectSquare(null);
+                }
+              }}
+            >
               <span
                 className={`${piece === piece.toUpperCase() ? 'text-white' : 'text-black'} pointer-events-none`}
                 style={{
