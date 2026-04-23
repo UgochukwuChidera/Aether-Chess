@@ -85,10 +85,6 @@ def _err(request_id: str, message: str) -> None:
 # ── Command handlers ──────────────────────────────────────────────────────────
 
 def handle_new_game(params: Dict[str, Any]) -> Any:
-    # Stop any running analysis before resetting the board so we don't leave
-    # orphaned analysis threads streaming updates for a stale position.
-    engine_mgr.stop_analysis()
-
     mode = params.get("mode", "human_vs_ai")
     engine_type = params.get("engine_type", "stockfish")
     human_color = params.get("human_color", "white")
@@ -304,6 +300,11 @@ def _process_request(request_id: str, command: str, params: Dict[str, Any]) -> N
         return
 
     try:
+        if command == "new_game":
+            # Stop analysis before we acquire _board_lock for new_game so
+            # waiting on analysis thread teardown does not block board traffic.
+            engine_mgr.stop_analysis()
+
         if command in _BOARD_MUTATION_CMDS or command in _BOARD_READ_CMDS:
             with _board_lock:
                 result = handler(params)
@@ -356,4 +357,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

@@ -37,10 +37,12 @@ export const AnalysisView: React.FC = () => {
   useEffect(() => {
     // Stop any previous analysis before starting a new one to avoid
     // stacking concurrent Stockfish analysis streams on FEN/setting changes.
+    let cancelled = false;
     window.electronAPI.stopAnalysis().catch(() => {}).then(() => {
-      handleStartAnalysis();
+      if (!cancelled) void handleStartAnalysis();
     });
     return () => {
+      cancelled = true;
       window.electronAPI.stopAnalysis().catch(() => {});
     };
   }, [store.fen, settings.multipv, settings.stockfishPath, settings.threads, settings.hashMb]);
