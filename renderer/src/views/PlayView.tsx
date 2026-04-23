@@ -9,7 +9,7 @@ import { MoveHistory } from '../components/MoveHistory';
 import { GameControls } from '../components/GameControls';
 import { GameOverModal } from '../components/GameOverModal';
 import { PromotionDialog } from '../components/PromotionDialog';
-import { useGameStore, type BackendMoveResult } from '../stores/gameStore';
+import { useGameStore, type BackendMoveResult, type PVLine } from '../stores/gameStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import type { Tab } from '../components/BottomNav';
 
@@ -77,7 +77,7 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
         return;
       }
       store.setAnalysis({
-        pvs: (data.pvs as any[]) ?? [],
+        pvs: (data.pvs as PVLine[]) ?? [],
         fen: data.fen ?? store.fen,
         running: true,
       });

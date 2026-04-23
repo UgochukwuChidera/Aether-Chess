@@ -19,6 +19,10 @@ class MentorBotAdapter:
         self._uci_lock = threading.Lock()  # protects _uci_engine access
 
     def _ensure_uci(self, stockfish_path: str) -> chess.engine.SimpleEngine:
+        """Return the shared Stockfish SimpleEngine, (re)starting it if needed.
+
+        Must be called while holding ``_uci_lock``.
+        """
         if self._uci_engine is not None and stockfish_path == self._uci_path:
             return self._uci_engine
         self.close()
@@ -27,6 +31,10 @@ class MentorBotAdapter:
         return self._uci_engine
 
     def close(self) -> None:
+        """Shut down the shared Stockfish process if running.
+
+        Must be called while holding ``_uci_lock``.
+        """
         if self._uci_engine is not None:
             try:
                 self._uci_engine.quit()

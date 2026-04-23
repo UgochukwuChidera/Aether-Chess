@@ -8,8 +8,6 @@ import glob as globlib
 import os
 import sys
 import threading
-import time
-from io import StringIO
 from typing import Any, Callable, Dict, List, Optional
 
 import chess
@@ -24,7 +22,6 @@ if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
 from aether_chess.models.game_state import GameState
-from aether_chess.io.opening_book import OpeningBook
 
 
 class ChessEngineManager:
@@ -188,6 +185,10 @@ class ChessEngineManager:
     # ── Engine integration ────────────────────────────────────────────────────
 
     def _ensure_uci(self, stockfish_path: str) -> chess.engine.SimpleEngine:
+        """Return the shared Stockfish SimpleEngine, (re)starting it if needed.
+
+        Must be called while holding ``_uci_lock``.
+        """
         if self._uci_engine is not None and stockfish_path == self._uci_path:
             return self._uci_engine
         self._close_uci()
@@ -196,6 +197,10 @@ class ChessEngineManager:
         return self._uci_engine
 
     def _close_uci(self) -> None:
+        """Shut down the shared Stockfish process if running.
+
+        Must be called while holding ``_uci_lock``.
+        """
         if self._uci_engine is not None:
             try:
                 self._uci_engine.quit()

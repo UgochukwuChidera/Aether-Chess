@@ -6,7 +6,7 @@ import { Board } from '../components/Board';
 import { EvalBar } from '../components/EvalBar';
 import { MoveHistory } from '../components/MoveHistory';
 import { AnalysisPanel } from '../components/AnalysisPanel';
-import { useGameStore, type AccuracyMoveResult, type BackendMoveResult } from '../stores/gameStore';
+import { useGameStore, type AccuracyMoveResult, type BackendMoveResult, type PVLine } from '../stores/gameStore';
 import { useSettingsStore } from '../stores/settingsStore';
 
 const ANALYSIS_CB_ID = 'analysis-main';
@@ -26,7 +26,7 @@ export const AnalysisView: React.FC = () => {
         store.setAnalysis({ running: false });
         return;
       }
-      store.setAnalysis({ pvs: (data.pvs as any[]) ?? [], fen: data.fen ?? store.fen, running: true });
+      store.setAnalysis({ pvs: (data.pvs as PVLine[]) ?? [], fen: data.fen ?? store.fen, running: true });
     });
     return () => {
       window.electronAPI.stopAnalysis().catch(() => {});
@@ -35,7 +35,11 @@ export const AnalysisView: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    handleStartAnalysis();
+    // Stop any previous analysis before starting a new one to avoid
+    // stacking concurrent Stockfish analysis streams on FEN/setting changes.
+    window.electronAPI.stopAnalysis().catch(() => {}).then(() => {
+      handleStartAnalysis();
+    });
     return () => {
       window.electronAPI.stopAnalysis().catch(() => {});
     };
