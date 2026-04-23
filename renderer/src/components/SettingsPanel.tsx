@@ -5,11 +5,12 @@ import React, { useEffect, useState } from 'react';
 import {
   useSettingsStore,
   TIME_CONTROLS,
+  MAX_HASH_MB,
   type Theme,
-  type BoardStyle,
   type PlayEngine,
   type AnimationSpeed,
 } from '../stores/settingsStore';
+import { BOARD_STYLES, PIECE_SETS, type BoardStyle, type PieceSet } from '../config/pieceConfig';
 
 interface SectionProps {
   title: string;
@@ -132,20 +133,20 @@ export const SettingsPanel: React.FC = () => {
             value={settings.boardStyle}
             onChange={(e) => settings.update({ boardStyle: e.target.value as BoardStyle })}
           >
-            <option value="classic">Classic</option>
-            <option value="wood">Wood</option>
-            <option value="marble">Marble</option>
-            <option value="neon">Neon</option>
+            {(Object.entries(BOARD_STYLES) as [BoardStyle, { label: string }][]).map(([key, cfg]) => (
+              <option key={key} value={key}>{cfg.label}</option>
+            ))}
           </select>
         </Row>
         <Row label="Piece set">
           <select
             className={selectClass}
             value={settings.pieceSet}
-            onChange={(e) => settings.update({ pieceSet: e.target.value as any })}
+            onChange={(e) => settings.update({ pieceSet: e.target.value as PieceSet })}
           >
-            <option value="material">Material Symbols</option>
-            <option value="alpha">Alpha (SVG)</option>
+            {(Object.entries(PIECE_SETS) as [PieceSet, { label: string }][]).map(([key, cfg]) => (
+              <option key={key} value={key}>{cfg.label}</option>
+            ))}
           </select>
         </Row>
         <Row label="Animation speed">
@@ -238,7 +239,13 @@ export const SettingsPanel: React.FC = () => {
         <p className="text-[10px] text-muted -mt-2 px-0.5">
           Hash = Stockfish transposition table — a RAM cache of analysed positions.
           Larger cache = deeper searches &amp; faster re-analysis, at the cost of memory.
-          128 MB is plenty for most games; increase for long analysis sessions.
+          <br />
+          <span className="font-semibold">Presets:</span>{' '}
+          low-end 64 MB / 1 thread · mid-range 256 MB / 2 threads · high-end 512 MB / 4+ threads.
+          Max allowed: {MAX_HASH_MB} MB.
+          {settings.hashMb > 512 && (
+            <span className="text-yellow-400"> ⚠ Large cache — ensure you have enough free RAM.</span>
+          )}
         </p>
         <Row label="Multi-PV lines">
           <select

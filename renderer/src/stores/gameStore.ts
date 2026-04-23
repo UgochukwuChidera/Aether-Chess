@@ -88,6 +88,8 @@ export interface GameState {
   dismissToast: (id: string) => void;
   setEngineBusy: (busy: boolean) => void;
   applyAccuracyResults: (rows: AccuracyMoveResult[]) => void;
+  setMode: (mode: GameMode) => void;
+  setHumanColor: (color: Color) => void;
   resetGame: () => void;
 }
 
@@ -201,6 +203,9 @@ export const useGameStore = create<GameState>((set, get) => ({
     set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
 
   setEngineBusy: (busy) => set({ engineBusy: busy }),
+
+  setMode: (mode) => set({ mode }),
+  setHumanColor: (color) => set({ humanColor: color }),
 
   applyAccuracyResults: (rows) =>
     set((s) => {

@@ -2,11 +2,21 @@
  * settingsStore.ts — Persistent settings (synced to userData/settings.json).
  */
 import { create } from 'zustand';
+import type { BoardStyle, PieceSet } from '../config/pieceConfig';
+
+// Re-export so other files can keep a single import point.
+export type { BoardStyle, PieceSet } from '../config/pieceConfig';
 
 export type Theme = 'dark' | 'light' | 'high-contrast';
-export type BoardStyle = 'classic' | 'wood' | 'marble' | 'neon';
-export type PieceSet = 'material' | 'alpha';
 export type PlayEngine = 'mentor' | 'stockfish';
+
+// ── Memory/engine hard limits ────────────────────────────────────────────────
+/** Maximum transposition-table size that can be saved through the settings. */
+export const MAX_HASH_MB = 2048;
+/** Maximum CPU-thread count that can be saved through the settings. */
+export const MAX_THREADS = 64;
+/** Maximum number of principal-variation lines. */
+export const MAX_MULTIPV = 5;
 export type AnimationSpeed = 'slow' | 'normal' | 'fast' | 'off';
 export type TimeControl = {
   seconds: number;
@@ -82,7 +92,13 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   loaded: false,
 
   update: (patch) => {
-    set(patch);
+    // Clamp memory/engine settings to safe ranges before persisting.
+    const safe: Partial<AppSettings> = { ...patch };
+    if (safe.hashMb   !== undefined) safe.hashMb   = Math.max(16,  Math.min(MAX_HASH_MB, Math.round(safe.hashMb)));
+    if (safe.threads  !== undefined) safe.threads  = Math.max(1,   Math.min(MAX_THREADS, Math.round(safe.threads)));
+    if (safe.multipv  !== undefined) safe.multipv  = Math.max(1,   Math.min(MAX_MULTIPV, Math.round(safe.multipv)));
+    if (safe.soundVolume !== undefined) safe.soundVolume = Math.max(0, Math.min(1, safe.soundVolume));
+    set(safe);
     get().saveToBackend();
   },
 

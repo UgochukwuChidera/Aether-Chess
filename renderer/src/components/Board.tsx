@@ -5,35 +5,7 @@
 import React, { useCallback, useRef } from 'react';
 import { useGameStore } from '../stores/gameStore';
 import { useSettingsStore } from '../stores/settingsStore';
-
-// ── Piece icon mapping (Material Symbols names) ───────────────────────────
-
-const PIECE_ICONS: Record<string, string> = {
-  P: 'chess_pawn',
-  N: 'chess_knight',
-  B: 'chess_bishop',
-  R: 'chess_rook',
-  Q: 'chess_queen',
-  K: 'chess_king',
-  p: 'chess_pawn',
-  n: 'chess_knight',
-  b: 'chess_bishop',
-  r: 'chess_rook',
-  q: 'chess_queen',
-  k: 'chess_king',
-};
-
-const PIECE_GLYPHS: Record<string, string> = {
-  K: '♔', Q: '♕', R: '♖', B: '♗', N: '♘', P: '♙',
-  k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟',
-};
-
-const BOARD_STYLES: Record<string, { light: string; dark: string }> = {
-  classic: { light: '#EDE8D5', dark: '#B58863' },
-  wood: { light: '#F0D9B5', dark: '#B58863' },
-  marble: { light: '#D8D8D8', dark: '#8B8B8B' },
-  neon: { light: '#1D2A1F', dark: '#111A12' },
-};
+import { BOARD_STYLES, PIECE_ICONS, PIECE_GLYPHS } from '../config/pieceConfig';
 
 // Parse FEN board part into a 64-element array (index 0 = a8)
 function parseFen(fen: string): (string | null)[] {
@@ -242,6 +214,41 @@ export const Board: React.FC<Props> = ({ onSquareClick, onDropMove }) => {
                   textShadow: piece === piece.toUpperCase()
                     ? '0 1px 2px rgba(0,0,0,0.8)'
                     : '0 1px 1px rgba(255,255,255,0.25)',
+                }}
+              >
+                {PIECE_GLYPHS[piece]}
+              </span>
+            </div>
+          )}
+          {piece && pieceSet === 'neo' && (
+            <div
+              className="absolute inset-0 flex items-center justify-center piece-enter"
+              draggable={!!isOwnPiece}
+              onDragStart={(e) => {
+                if (!isOwnPiece) {
+                  e.preventDefault();
+                  return;
+                }
+                dragFromRef.current = sq;
+                e.dataTransfer.effectAllowed = 'move';
+                selectSquare(sq);
+              }}
+              onDragEnd={() => {
+                if (dragFromRef.current !== null) {
+                  dragFromRef.current = null;
+                  selectSquare(null);
+                }
+              }}
+            >
+              <span
+                className="pointer-events-none"
+                style={{
+                  fontSize: 'clamp(20px, 5.8vmin, 54px)',
+                  lineHeight: 1,
+                  color: piece === piece.toUpperCase() ? '#FCD34D' : '#1E293B',
+                  textShadow: piece === piece.toUpperCase()
+                    ? '0 0 6px rgba(252,211,77,0.6), 0 1px 3px rgba(0,0,0,0.9)'
+                    : '0 1px 2px rgba(255,255,255,0.3)',
                 }}
               >
                 {PIECE_GLYPHS[piece]}

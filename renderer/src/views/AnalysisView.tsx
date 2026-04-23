@@ -16,6 +16,7 @@ export const AnalysisView: React.FC = () => {
   const settings = useSettingsStore();
   const runningRef = useRef(false);
   const [accuracyLoading, setAccuracyLoading] = React.useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     window.electronAPI.onAnalysisUpdate((raw: unknown) => {
@@ -34,16 +35,27 @@ export const AnalysisView: React.FC = () => {
     };
   }, []);
 
+  // Stop analysis immediately on FEN / settings change; debounce the restart
+  // so rapid navigation through the move list doesn't spawn many Stockfish processes.
   useEffect(() => {
-    // Stop any previous analysis before starting a new one to avoid
-    // stacking concurrent Stockfish analysis streams on FEN/setting changes.
-    let cancelled = false;
-    window.electronAPI.stopAnalysis().catch(() => {}).then(() => {
-      if (!cancelled) void handleStartAnalysis();
-    });
+    void window.electronAPI.stopAnalysis().catch(() => {});
+    store.setAnalysis({ running: false });
+
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+
+    debounceRef.current = setTimeout(() => {
+      debounceRef.current = null;
+      void handleStartAnalysis();
+    }, 350);
+
     return () => {
-      cancelled = true;
-      window.electronAPI.stopAnalysis().catch(() => {});
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+        debounceRef.current = null;
+      }
     };
   }, [store.fen, settings.multipv, settings.stockfishPath, settings.threads, settings.hashMb]);
 
