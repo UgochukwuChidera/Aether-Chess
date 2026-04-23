@@ -3,6 +3,7 @@
  */
 import React from 'react';
 import { useSettingsStore } from '../stores/settingsStore';
+import { PIECE_GLYPHS } from '../config/pieceConfig';
 
 const PIECES = [
   { symbol: 'chess_queen',  label: 'Queen',  code: 'q' },
@@ -11,11 +12,12 @@ const PIECES = [
   { symbol: 'chess_knight', label: 'Knight', code: 'n' },
 ];
 
-const PIECE_GLYPHS: Record<string, string> = {
-  q: '♛',
-  r: '♜',
-  b: '♝',
-  n: '♞',
+// Uppercase keys for the promotion dialog (always shown from the promoting side)
+const PROMO_GLYPHS: Record<string, string> = {
+  q: PIECE_GLYPHS['Q'],
+  r: PIECE_GLYPHS['R'],
+  b: PIECE_GLYPHS['B'],
+  n: PIECE_GLYPHS['N'],
 };
 
 interface Props {
@@ -57,12 +59,26 @@ const PromotionContent: React.FC<Props> = ({ color, onSelect, onCancel }) => {
                 >
                   {symbol}
                 </span>
+              ) : pieceSet === 'neo' ? (
+                <span
+                  className="group-hover:text-accent"
+                  style={{
+                    fontSize: 40,
+                    lineHeight: 1,
+                    color: color === 'white' ? '#FCD34D' : '#1E293B',
+                    textShadow: color === 'white'
+                      ? '0 0 6px rgba(252,211,77,0.5), 0 1px 3px rgba(0,0,0,0.9)'
+                      : '0 1px 2px rgba(255,255,255,0.3)',
+                  }}
+                >
+                  {PROMO_GLYPHS[code]}
+                </span>
               ) : (
                 <span
                   className={`group-hover:text-accent ${color === 'white' ? 'text-on-surface' : 'text-black opacity-90'}`}
                   style={{ fontSize: 40, lineHeight: 1 }}
                 >
-                  {PIECE_GLYPHS[code]}
+                  {PROMO_GLYPHS[code]}
                 </span>
               )}
               <span className="text-[10px] text-muted group-hover:text-accent font-sans">{label}</span>

@@ -7,8 +7,8 @@ import { useGameStore } from '../stores/gameStore';
 interface Props {
   onFlip: () => void;
   onUndo: () => void;
-  onDraw: () => void;
-  onResign: () => void;
+  onDraw?: () => void;
+  onResign?: () => void;
 }
 
 interface ConfirmState {
@@ -22,15 +22,15 @@ export const GameControls: React.FC<Props> = ({ onFlip, onUndo, onDraw, onResign
   const gameOver = gameResult !== null;
 
   const buttons = [
-    { icon: 'flip',       label: 'Flip',   action: onFlip,  disabled: false },
-    { icon: 'undo',       label: 'Undo',   action: onUndo,  disabled: engineBusy || gameOver },
-    { icon: 'handshake',  label: 'Draw',   action: () => setConfirm({ type: 'draw' }),   disabled: gameOver },
-    { icon: 'flag',       label: 'Resign', action: () => setConfirm({ type: 'resign' }), disabled: gameOver },
-  ];
+    { icon: 'flip',       label: 'Flip',   action: onFlip,  disabled: false, hidden: false },
+    { icon: 'undo',       label: 'Undo',   action: onUndo,  disabled: engineBusy || gameOver, hidden: false },
+    { icon: 'handshake',  label: 'Draw',   action: () => setConfirm({ type: 'draw' }),   disabled: gameOver, hidden: !onDraw },
+    { icon: 'flag',       label: 'Resign', action: () => setConfirm({ type: 'resign' }), disabled: gameOver, hidden: !onResign },
+  ].filter((b) => !b.hidden);
 
   const handleConfirm = () => {
-    if (confirm.type === 'draw') onDraw();
-    if (confirm.type === 'resign') onResign();
+    if (confirm.type === 'draw' && onDraw) onDraw();
+    if (confirm.type === 'resign' && onResign) onResign();
     setConfirm({ type: null });
   };
 

@@ -82,11 +82,11 @@ class ChessEngineManager:
         if stockfish_path:
             self.settings["stockfish_path"] = stockfish_path
         if threads is not None:
-            self.settings["threads"] = max(1, int(threads))
+            self.settings["threads"] = max(1, min(64, int(threads)))
         if hash_mb is not None:
-            self.settings["hash_mb"] = max(16, int(hash_mb))
+            self.settings["hash_mb"] = max(16, min(2048, int(hash_mb)))
         if multipv is not None:
-            self.settings["multipv"] = max(1, int(multipv))
+            self.settings["multipv"] = max(1, min(5, int(multipv)))
 
     # ── Move operations ───────────────────────────────────────────────────────
 
@@ -212,9 +212,9 @@ class ChessEngineManager:
     def _configure_uci(engine: chess.engine.SimpleEngine, threads: Optional[int], hash_mb: Optional[int]) -> None:
         options: Dict[str, int] = {}
         if threads is not None:
-            options["Threads"] = max(1, int(threads))
+            options["Threads"] = max(1, min(64, int(threads)))
         if hash_mb is not None:
-            options["Hash"] = max(16, int(hash_mb))
+            options["Hash"] = max(16, min(2048, int(hash_mb)))
         if options:
             try:
                 engine.configure(options)

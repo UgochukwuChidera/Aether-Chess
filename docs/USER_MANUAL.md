@@ -8,18 +8,24 @@ Launch Aether Chess. The **Play** tab opens automatically with the board ready.
 
 ## Starting a New Game
 
-1. Tap **New Game** (bottom of the Play tab) to start a fresh game against the mentor bot.
-2. White pieces are at the bottom by default. Press **Flip** or `Space` to swap perspectives.
+1. Use the **New Game Setup** panel at the bottom of the Play tab to choose your settings.
+2. **Mode** — pick Human vs AI, Human vs Human, or AI vs AI.
+3. **Play as** — choose White, Black, or Random (hidden for AI vs AI).
+4. Press **New Game** to apply your selection and start.
+
+White pieces are at the bottom by default. Press **Flip** or `F` to swap perspectives.
 
 ### Game Modes
 
-Configured in **Settings → Gameplay** before starting:
-
 | Mode | Description |
 |------|-------------|
-| Human vs AI | You play against the Aether mentor bot or Stockfish |
-| Human vs Human | Two players on the same device |
-| AI vs AI | Watch the engine play itself |
+| Human vs AI | You play against the Aether Mentor bot or Stockfish |
+| Human vs Human | Two players take turns on the same device |
+| AI vs AI | Watch the engine play both sides (no human input) |
+
+> **Human vs AI — playing Black:** the engine automatically makes the first move as White before you can interact with the board.
+
+> **AI vs AI:** resign and draw controls are hidden; use **New Game** to stop the demonstration.
 
 ---
 
@@ -101,7 +107,8 @@ Access via the **Settings** tab or the gear icon in the top bar.
 
 ### Appearance
 - Switch between **Dark**, **Light**, and **High Contrast** themes.
-- Choose board style and piece set.
+- **Board style** — choose from 8 palettes: Classic, Wood, Marble, Neon, Ice, Forest, Tournament, Aether.
+- **Piece set** — Material Symbols (font icons), Alpha (outline Unicode), or Neo (coloured Unicode with gold White / dark Black).
 - Adjust animation speed.
 
 ### Engine
@@ -109,6 +116,17 @@ Access via the **Settings** tab or the gear icon in the top bar.
 - Configure thread count and hash memory.
 - Set Multi-PV lines for analysis (1–5).
 - Adjust mentor bot difficulty (1–10).
+
+#### Memory presets
+
+| Hardware tier | Recommended Hash | Recommended Threads |
+|---------------|-----------------|---------------------|
+| Low-end PC    | 64 MB           | 1                   |
+| Mid-range     | 256 MB          | 2                   |
+| High-end      | 512 MB          | 4+                  |
+
+> Maximum allowed values: **2048 MB** hash, **64 threads**.  
+> A warning appears in Settings when hash exceeds 512 MB.
 
 ### Gameplay
 - Choose time control (Blitz, Rapid, Classical, Unlimited).
