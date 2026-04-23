@@ -35,17 +35,11 @@ export const AnalysisView: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (!settings.showEvalBar) {
-      runningRef.current = false;
-      store.setAnalysis({ running: false });
-      window.electronAPI.stopAnalysis().catch(() => {});
-      return;
-    }
     handleStartAnalysis();
     return () => {
       window.electronAPI.stopAnalysis().catch(() => {});
     };
-  }, [store.fen, settings.showEvalBar, settings.multipv, settings.stockfishPath, settings.threads, settings.hashMb]);
+  }, [store.fen, settings.multipv, settings.stockfishPath, settings.threads, settings.hashMb]);
 
   async function handleStartAnalysis() {
     runningRef.current = true;
