@@ -25,7 +25,10 @@ Stockfish is thinking or a full-game accuracy analysis is running.
 
   • Engine commands (get_engine_move, get_bot_move) use a FEN supplied in
     params — they never touch the shared board object and therefore require
-    NO lock.  They may block for several hundred ms; that is now fine.
+    NO board lock.  They may block for several hundred ms; that is now fine.
+    Each engine singleton (engine_mgr._uci_engine, mentor_bot._uci_engine)
+    is protected by its own _uci_lock to prevent concurrent UCI protocol
+    corruption when overlapping requests hit the same engine process.
 
   • calculate_accuracy_from_history briefly acquires _board_lock to snapshot
     history, then releases it BEFORE the long Stockfish computation.
@@ -297,6 +300,11 @@ def _process_request(request_id: str, command: str, params: Dict[str, Any]) -> N
         return
 
     try:
+        if command == "new_game":
+            # Stop analysis before we acquire _board_lock for new_game so
+            # waiting on analysis thread teardown does not block board traffic.
+            engine_mgr.stop_analysis()
+
         if command in _BOARD_MUTATION_CMDS or command in _BOARD_READ_CMDS:
             with _board_lock:
                 result = handler(params)
@@ -349,4 +357,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
