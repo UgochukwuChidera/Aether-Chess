@@ -227,31 +227,41 @@ export const BoardDrawingLayer: React.FC<Props> = ({
     allArrows.push({ from: drawStart, to: previewEnd, colorIdx: drawColorIdx });
   }
 
-  if (showArrowsFromAnalysis && analysisPV.length >= 2) {
-    for (let i = 0; i < Math.min(analysisPV.length - 1, 2); i++) {
-      const from = analysisPV[i].slice(0, 2);
-      const to = analysisPV[i + 1].slice(0, 2);
+  // Best move PV arrow - from first move's from/to
+  if (showArrowsFromAnalysis && analysisPV.length >= 1) {
+    const bestMove = analysisPV[0];
+    if (bestMove.length >= 4) {
+      const from = bestMove.slice(0, 2);
+      const to = bestMove.slice(2, 4);
       if (!allArrows.some((a) => a.from === from && a.to === to)) {
-        allArrows.push({ from, to, colorIdx: 0 });
+        allArrows.push({ from, to, colorIdx: 0 }); // gold = best
       }
     }
   }
 
-  if (showArrowsFromAnalysis && showThreatPV.length >= 2) {
-    const from = showThreatPV[0].slice(0, 2);
-    const to = showThreatPV[1].slice(0, 2);
-    if (!allArrows.some((a) => a.from === from && a.to === to)) {
-      allArrows.push({ from, to, colorIdx: 1 });
+  // ThreatPV - shows next move from opponent's perspective
+  if (showArrowsFromAnalysis && showThreatPV.length >= 1) {
+    const threatMove = showThreatPV[0];
+    if (threatMove.length >= 4) {
+      const from = threatMove.slice(0, 2);
+      const to = threatMove.slice(2, 4);
+      if (!allArrows.some((a) => a.from === from && a.to === to)) {
+        allArrows.push({ from, to, colorIdx: 1 }); // red = threat
+      }
     }
   }
 
+  // Alternative PVs - other good moves considered
   if (showArrowsFromAnalysis) {
     analysisAltPVs.forEach((pv, pi) => {
-      if (pv.length >= 2) {
-        const from = pv[0].slice(0, 2);
-        const to = pv[1].slice(0, 2);
-        if (!allArrows.some((a) => a.from === from && a.to === to)) {
-          allArrows.push({ from, to, colorIdx: Math.min(pi + 2, DRAW_COLORS.length - 1) });
+      if (pv.length >= 1) {
+        const altMove = pv[0];
+        if (altMove.length >= 4) {
+          const from = altMove.slice(0, 2);
+          const to = altMove.slice(2, 4);
+          if (!allArrows.some((a) => a.from === from && a.to === to)) {
+            allArrows.push({ from, to, colorIdx: Math.min(pi + 2, DRAW_COLORS.length - 1) });
+          }
         }
       }
     });

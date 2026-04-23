@@ -15,7 +15,14 @@ export type BoardStyle =
   | 'ice'
   | 'forest'
   | 'tournament'
-  | 'aether';
+  | 'aether'
+  | 'purple'
+  | 'blue'
+  | 'green'
+  | 'sunset'
+  | 'midnight'
+  | 'royal'
+  | 'copper';
 
 export interface BoardStyleConfig {
   light: string;
@@ -32,11 +39,18 @@ export const BOARD_STYLES: Record<BoardStyle, BoardStyleConfig> = {
   forest:     { light: '#C8DDB5', dark: '#4A6741', label: 'Forest' },
   tournament: { light: '#F0EAD6', dark: '#769656', label: 'Tournament' },
   aether:     { light: '#1A2535', dark: '#0D1520', label: 'Aether' },
+  purple:     { light: '#E8E0F0', dark: '#906090', label: 'Purple' },
+  blue:       { light: '#C0D8E8', dark: '#406080', label: 'Blue' },
+  green:      { light: '#D0E8D0', dark: '#306050', label: 'Green' },
+  sunset:     { light: '#FFE4B5', dark: '#CD853F', label: 'Sunset' },
+  midnight:   { light: '#2D3436', dark: '#1A1A2E', label: 'Midnight' },
+  royal:      { light: '#FFF8DC', dark: '#8B4513', label: 'Royal' },
+  copper:     { light: '#FDEBD0', dark: '#873600', label: 'Copper' },
 };
 
 // ── Piece Sets ────────────────────────────────────────────────────────────────
 
-export type PieceSet = 'material' | 'alpha' | 'neo';
+export type PieceSet = 'material' | 'alpha' | 'neo' | 'emoji' | 'modern';
 
 export interface PieceSetConfig {
   label: string;
@@ -46,6 +60,8 @@ export const PIECE_SETS: Record<PieceSet, PieceSetConfig> = {
   material: { label: 'Material Symbols' },
   alpha:    { label: 'Alpha' },
   neo:      { label: 'Neo (Coloured)' },
+  emoji:    { label: 'Emoji' },
+  modern:   { label: 'Modern' },
 };
 
 // ── Piece Glyph Maps ──────────────────────────────────────────────────────────
@@ -53,6 +69,18 @@ export const PIECE_SETS: Record<PieceSet, PieceSetConfig> = {
 /** Unicode chess symbols used by the "alpha" and "neo" piece sets. */
 export const PIECE_GLYPHS: Record<string, string> = {
   K: '♔', Q: '♕', R: '♖', B: '♗', N: '♘', P: '♙',
+  k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟',
+};
+
+/** Emoji chess pieces */
+export const PIECE_EMOJI: Record<string, string> = {
+  K: '👑', Q: '👸', R: '🏰', B: '♗', N: '🐴', P: '♟',
+  k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟',
+};
+
+/** Modern colored pieces */
+export const PIECE_MODERN: Record<string, string> = {
+  K: '♚', Q: '♛', R: '♜', B: '♝', N: '♞', P: '♟',
   k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟',
 };
 

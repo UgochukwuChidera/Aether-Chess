@@ -5,7 +5,7 @@
 import React, { useCallback, useRef } from 'react';
 import { useGameStore } from '../stores/gameStore';
 import { useSettingsStore } from '../stores/settingsStore';
-import { BOARD_STYLES, PIECE_ICONS, PIECE_GLYPHS } from '../config/pieceConfig';
+import { BOARD_STYLES, PIECE_ICONS, PIECE_GLYPHS, PIECE_EMOJI, PIECE_MODERN } from '../config/pieceConfig';
 import {
   BoardDrawingLayer,
   type Arrow,
@@ -87,11 +87,19 @@ export const Board: React.FC<Props> = ({
 
   const renderSquare = useCallback(
     (index: number) => {
-      const displayIndex = flipped ? 63 - index : index;
+      const rank = Math.floor(index / 8);
+      const file = index % 8;
+
+      let displayRank = rank;
+      let displayFile = file;
+      if (flipped) {
+        displayRank = 7 - rank;
+        displayFile = 7 - file;
+      }
+
+      const displayIndex = displayRank * 8 + displayFile;
       const sq = indexToAlgebraic(displayIndex);
       const piece = pieces[displayIndex];
-      const file = displayIndex % 8;
-      const rank = Math.floor(displayIndex / 8);
       const isLight = (file + rank) % 2 !== 0;
 
       // Determine square background class
@@ -275,6 +283,32 @@ export const Board: React.FC<Props> = ({
                 }}
               >
                 {PIECE_GLYPHS[piece]}
+              </span>
+            </div>
+          )}
+          {piece && pieceSet === 'emoji' && (
+            <div
+              className="absolute inset-0 flex items-center justify-center pointer-events-none"
+              style={{ fontSize: 'clamp(24px, 6vmin, 56px)' }}
+            >
+              {PIECE_EMOJI[piece]}
+            </div>
+          )}
+          {piece && pieceSet === 'modern' && (
+            <div
+              className="absolute inset-0 flex items-center justify-center pointer-events-none"
+            >
+              <span
+                style={{
+                  fontSize: 'clamp(24px, 5.5vmin, 52px)',
+                  lineHeight: 1,
+                  color: piece === piece.toUpperCase() ? '#E5E5E5' : '#1A1A1A',
+                  filter: piece === piece.toUpperCase()
+                    ? 'drop-shadow(0 2px 3px rgba(0,0,0,0.5))'
+                    : 'drop-shadow(0 1px 1px rgba(255,255,255,0.3))',
+                }}
+              >
+                {PIECE_MODERN[piece]}
               </span>
             </div>
           )}

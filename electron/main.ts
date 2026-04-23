@@ -403,11 +403,16 @@ ipcMain.handle('open-external-url', async (_event, url: string) => {
 });
 
 // Books directory for opening explorer
-ipcMain.handle('get-books-dir', () => {
-  const booksDir = app.isPackaged
-    ? path.join(process.resourcesPath, 'books')
-    : path.join(__dirname, '..', '..', 'resources', 'books');
-  return booksDir;
+ipcMain.handle('get-books-dir', async () => {
+  // Open folder picker dialog
+  const result = await dialog.showOpenDialog({
+    properties: ['openDirectory'],
+    title: 'Select Opening Books Folder',
+  });
+  if (result.canceled || result.filePaths.length === 0) {
+    return null;
+  }
+  return result.filePaths[0];
 });
 
 // PGN export / open in file explorer

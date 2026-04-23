@@ -41,10 +41,15 @@ const Label: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <span className="text-xs font-sans text-muted">{children}</span>
 );
 
-const Row: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
-  <div className="flex items-center gap-3">
+const Row: React.FC<{ label: string; children: React.ReactNode; tooltip?: string }> = ({ label, children, tooltip }) => (
+  <div className="flex items-center gap-3 group relative">
     <Label>{label}</Label>
     <div className="flex-1 flex justify-end">{children}</div>
+    {tooltip && (
+      <div className="absolute right-0 top-full mt-1 w-48 p-2 bg-surface2 border border-surface rounded text-[10px] text-muted opacity-0 group-hover:opacity-100 transition-opacity z-50 pointer-events-none">
+        {tooltip}
+      </div>
+    )}
   </div>
 );
 
@@ -62,16 +67,38 @@ export const SettingsPanel: React.FC = () => {
     bundledExists: boolean;
     settingsPath: string;
   } | null>(null);
+  const [bookMoves, setBookMoves] = useState(0);
+  const [loadingBook, setLoadingBook] = useState(false);
 
   useEffect(() => {
     window.electronAPI.getCpuCount().then(setCpuCount);
     window.electronAPI.getStockfishInfo().then(setStockfishInfo).catch(() => {});
   }, []);
 
+  // Load book moves count when opening book path changes
+  useEffect(() => {
+    if (!settings.useOpeningBook) {
+      setBookMoves(0);
+      return;
+    }
+    setLoadingBook(true);
+    window.electronAPI.getBookMoves({ fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1' })
+      .then((res) => {
+        const data = res as { moves?: { uci: string; weight: number }[] };
+        setBookMoves(data.moves?.length ?? 0);
+      })
+      .catch(() => setBookMoves(0))
+      .finally(() => setLoadingBook(false));
+  }, [settings.useOpeningBook, settings.openingBookPath]);
+
   const handleStockfishPick = async () => {
-    const p = await window.electronAPI.pickStockfishPath();
-    if (p) settings.update({ stockfishPath: p });
-    window.electronAPI.getStockfishInfo().then(setStockfishInfo).catch(() => {});
+    try {
+      const p = await window.electronAPI.pickStockfishPath();
+      if (p) settings.update({ stockfishPath: p });
+      window.electronAPI.getStockfishInfo().then(setStockfishInfo).catch(() => {});
+    } catch (err) {
+      console.error('Failed to pick Stockfish:', err);
+    }
   };
 
   const handleUseBundledStockfish = () => {
@@ -165,7 +192,10 @@ export const SettingsPanel: React.FC = () => {
 
       {/* ── Engine ──────────────────────────────────────────────────────── */}
       <Section title="Engine" icon="memory">
-        <Row label="Play engine">
+        <Row 
+          label="Play engine" 
+          tooltip="Mentor plays like human mistakes. Stockfish is pure engine."
+        >
           <select
             className={selectClass}
             value={settings.playEngine}
@@ -175,7 +205,7 @@ export const SettingsPanel: React.FC = () => {
             <option value="stockfish">Stockfish</option>
           </select>
         </Row>
-        <Row label="Stockfish path">
+        <Row label="Stockfish path" tooltip="Path to Stockfish executable">
           <div className="flex items-center gap-1">
             <span className="text-xs font-mono text-muted truncate max-w-[120px]" title={settings.stockfishPath}>
               {settings.stockfishPath.split(/[\\/]/).pop() ?? settings.stockfishPath}
@@ -216,7 +246,7 @@ export const SettingsPanel: React.FC = () => {
             </button>
           </Row>
         )}
-        <Row label={`Threads (1–${cpuCount})`}>
+        <Row label={`Threads (1–${cpuCount})`} tooltip="CPU threads for Stockfish. More = faster but more CPU usage.">
           <input
             type="range" min={1} max={cpuCount} step={1}
             value={settings.threads}
@@ -225,7 +255,7 @@ export const SettingsPanel: React.FC = () => {
           />
           <span className="text-xs font-mono text-muted w-5 text-right">{settings.threads}</span>
         </Row>
-        <Row label="Hash (MB)">
+        <Row label="Hash (MB)" tooltip="Transposition table size. Larger = deeper searches, more RAM usage.">
           <select
             className={selectClass}
             value={settings.hashMb}
@@ -247,7 +277,7 @@ export const SettingsPanel: React.FC = () => {
             <span className="text-yellow-400"> ⚠ Large cache — ensure you have enough free RAM.</span>
           )}
         </p>
-        <Row label="Multi-PV lines">
+        <Row label="Multi-PV lines" tooltip="Number of principal variations to show. More lines = more info but slower.">
           <select
             className={selectClass}
             value={settings.multipv}
@@ -258,7 +288,7 @@ export const SettingsPanel: React.FC = () => {
             ))}
           </select>
         </Row>
-        <Row label="Bot difficulty">
+        <Row label="Bot difficulty" tooltip="AI strength 1 (Beginner) to 10 (Grandmaster). Affects search time and depth.">
           <input
             type="range" min={1} max={10} step={1}
             value={settings.botStrength}
@@ -266,6 +296,56 @@ export const SettingsPanel: React.FC = () => {
             className="w-28 accent-[#A3E635]"
           />
           <span className="text-xs font-mono text-muted w-5 text-right">{settings.botStrength}</span>
+        </Row>
+      </Section>
+
+      {/* ── Opening Book ────────────────────────────────────────────────────── */}
+      <Section title="Opening Book" icon="menu_book">
+        <Row label="Use book">
+          <input
+            type="checkbox"
+            checked={settings.useOpeningBook}
+            onChange={(e) => settings.update({ useOpeningBook: e.target.checked })}
+            className="accent-[#A3E635] w-4 h-4"
+          />
+        </Row>
+        <Row label="Book directory">
+          <span className="text-xs font-mono text-muted truncate max-w-[120px]" title={settings.openingBookPath}>
+            {settings.openingBookPath.split(/[\\/]/).pop() ?? settings.openingBookPath}
+          </span>
+          <button
+            onClick={async () => {
+              try {
+                const dir = await window.electronAPI.getBooksDir();
+                if (dir) settings.update({ openingBookPath: dir });
+              } catch (err) {
+                console.error('Failed to pick books folder:', err);
+              }
+            }}
+            className="px-2 py-1 border border-surface2 rounded text-xs text-muted
+                       hover:border-accent hover:text-accent transition-colors"
+          >
+            Browse
+          </button>
+        </Row>
+        <Row label="Book depth (plies)">
+          <select
+            className={selectClass}
+            value={settings.openingBookDepth}
+            onChange={(e) => settings.update({ openingBookDepth: Number(e.target.value) })}
+          >
+            {[10, 14, 18, 20, 24, 28, 30, 40].map((v) => (
+              <option key={v} value={v}>{v} plies ({Math.floor(v/2)} moves)</option>
+            ))}
+          </select>
+        </Row>
+        <p className="text-[10px] text-muted -mt-1 px-0.5">
+          How far into the opening to use book moves. 20 plies = 10 moves each side.
+        </p>
+        <Row label="Book status">
+          <span className="text-xs text-muted font-mono">
+            {loadingBook ? 'Loading...' : bookMoves > 0 ? `${bookMoves} moves` : 'No book found'}
+          </span>
         </Row>
       </Section>
 
@@ -285,7 +365,7 @@ export const SettingsPanel: React.FC = () => {
             ))}
           </select>
         </Row>
-        <Row label="Auto-queen">
+        <Row label="Auto-queen" tooltip="Automatically promote pawns to queen on promotion.">
           <input
             type="checkbox"
             checked={settings.autoQueen}
@@ -293,7 +373,7 @@ export const SettingsPanel: React.FC = () => {
             className="accent-[#A3E635] w-4 h-4"
           />
         </Row>
-        <Row label="Show eval bar">
+        <Row label="Show eval bar" tooltip="Show evaluation bar above the board (white advantage vs black).">
           <input
             type="checkbox"
             checked={settings.showEvalBar}
@@ -301,7 +381,15 @@ export const SettingsPanel: React.FC = () => {
             className="accent-[#A3E635] w-4 h-4"
           />
         </Row>
-        <Row label="Sound">
+        <Row label="Show arrows while thinking" tooltip="Show best move arrows before you make your move.">
+          <input
+            type="checkbox"
+            checked={settings.showArrowsBeforeMove}
+            onChange={(e) => settings.update({ showArrowsBeforeMove: e.target.checked })}
+            className="accent-[#A3E635] w-4 h-4"
+          />
+        </Row>
+        <Row label="Sound" tooltip="Enable game sounds (move, capture, check, checkmate).">
           <input
             type="checkbox"
             checked={settings.soundEnabled}
@@ -323,7 +411,7 @@ export const SettingsPanel: React.FC = () => {
 
       {/* ── Analysis ────────────────────────────────────────────────────── */}
       <Section title="Analysis" icon="analytics">
-        <Row label="Show threats">
+        <Row label="Show threats" tooltip="Show opponent's threatening moves (red arrows).">
           <input
             type="checkbox"
             checked={settings.showAnalysisThreats}
@@ -331,7 +419,7 @@ export const SettingsPanel: React.FC = () => {
             className="accent-[#A3E635] w-4 h-4"
           />
         </Row>
-        <Row label="Show top move">
+        <Row label="Show top move" tooltip="Show best move (gold arrow) from engine analysis.">
           <input
             type="checkbox"
             checked={settings.showAnalysisTopMoves}
@@ -339,7 +427,7 @@ export const SettingsPanel: React.FC = () => {
             className="accent-[#A3E635] w-4 h-4"
           />
         </Row>
-        <Row label="Show alternatives">
+        <Row label="Show alternatives" tooltip="Show other good moves considered by the engine.">
           <input
             type="checkbox"
             checked={settings.showAnalysisTopAlternatives}

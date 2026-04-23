@@ -32,13 +32,16 @@ declare global {
         stockfish_path?: string;
         threads?: number;
         hash_mb?: number;
+        time_remaining?: number;
+        time_increment?: number;
+        total_moves?: number;
       }) => Promise<unknown>;
       exportPgn: () => Promise<unknown>;
       importPgn: (params: { pgn: string }) => Promise<unknown>;
       exportFen: () => Promise<unknown>;
       calculateAccuracy: (params: { fen_list: string[]; moves: string[] }) => Promise<unknown>;
       calculateAccuracyFromHistory: (params: { stockfish_path?: string }) => Promise<unknown>;
-      estimateElo: (params: { accuracy: number; blunder_rate: number }) => Promise<unknown>;
+      estimateElo: (params: { accuracy: number; blunder_rate: number; avg_cp_loss?: number }) => Promise<unknown>;
       getBookMoves: (params: { fen: string }) => Promise<unknown>;
 
       // Analysis streaming

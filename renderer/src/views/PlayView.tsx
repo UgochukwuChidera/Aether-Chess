@@ -11,6 +11,7 @@ import { GameOverModal } from '../components/GameOverModal';
 import { PromotionDialog } from '../components/PromotionDialog';
 import { useGameStore, type BackendMoveResult, type PVLine, type GameMode, type Color } from '../stores/gameStore';
 import { useSettingsStore } from '../stores/settingsStore';
+import { Sound } from '../utils/sound';
 import type { Tab } from '../components/BottomNav';
 
 interface Props {
@@ -92,6 +93,10 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
         store.setAnalysis({ running: false });
         return;
       }
+      // Only accept analysis for the current position - ignore stale results
+      if (data.fen !== store.fen) {
+        return;
+      }
       store.setAnalysis({
         pvs: (data.pvs as PVLine[]) ?? [],
         fen: data.fen ?? store.fen,
@@ -166,33 +171,103 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
     const isWhiteTurn = gs.turn === 'white';
     const timeRemaining = isWhiteTurn ? whiteTime : blackTime;
     const totalMoves = gs.fullMoveHistoryUCI.length;
-    try {
-      const reply = cfg.playEngine === 'stockfish'
-        ? await window.electronAPI.getEngineMove({
-            fen,
-            time_limit: 0.35,
-            depth: stockfishDepthForStrength(cfg.botStrength),
-            stockfish_path: cfg.stockfishPath,
-            threads: cfg.threads,
-            hash_mb: cfg.hashMb,
-          }) as { move: string | null }
-        : await window.electronAPI.getBotMove({
-            fen,
-            strength: cfg.botStrength,
-            stockfish_path: cfg.stockfishPath,
-            threads: cfg.threads,
-            hash_mb: cfg.hashMb,
-            time_remaining: timeRemaining ?? undefined,
-            time_increment: cfg.timeControl.increment ?? undefined,
-            total_moves: totalMoves,
-          }) as { move: string | null };
-      if (!reply.move) return null;
-      const result = await window.electronAPI.makeMove({ move: reply.move }) as BackendMoveResult;
+    console.log('[AI] makeAiMove called', { fen: fen?.slice(0, 30), totalMoves, playEngine: cfg.playEngine, botStrength: cfg.botStrength });
+
+    // Try opening book first if enabled and we're in the opening (first 20 moves total)
+    if (cfg.useOpeningBook && totalMoves < cfg.openingBookDepth) {
+      try {
+        const bookData = await window.electronAPI.getBookMoves({
+          fen,
+        }) as { moves?: { uci: string; weight: number }[] };
+        if (bookData.moves && bookData.moves.length > 0) {
+          // Pick a random move weighted by book popularity
+          const totalWeight = bookData.moves.reduce((sum, m) => sum + m.weight, 0);
+          let rand = Math.random() * totalWeight;
+          for (const move of bookData.moves) {
+            rand -= move.weight;
+            if (rand <= 0) {
+              console.log('[AI] Book move:', move.uci);
+              const result = await window.electronAPI.makeMove({ move: move.uci }) as BackendMoveResult;
+              return result;
+            }
+          }
+        }
+      } catch (e) { console.warn('[AI] Book error:', e); }
+    }
+
+    // Get engine move with fallback if timeout - simple promise race wrapper
+  async function getEngineMoveSafe(): Promise<{ move: string | null }> {
+    const cfg = useSettingsStore.getState();
+    const ms = Math.min(2000, 500 + cfg.botStrength * 150); // 0.5-2s based on strength
+    
+    let enginePromise: Promise<{ move: string | null }>;
+    if (cfg.playEngine === 'stockfish') {
+      enginePromise = window.electronAPI.getEngineMove({
+        fen,
+        time_limit: cfg.botStrength <= 3 ? 0.1 : cfg.botStrength <= 6 ? 0.2 : 0.35,
+        depth: stockfishDepthForStrength(cfg.botStrength),
+        stockfish_path: cfg.stockfishPath,
+        threads: cfg.threads,
+        hash_mb: cfg.hashMb,
+      }) as Promise<{ move: string | null }>;
+    } else {
+      enginePromise = window.electronAPI.getBotMove({
+        fen,
+        strength: cfg.botStrength,
+        stockfish_path: cfg.stockfishPath,
+        threads: cfg.threads,
+        hash_mb: cfg.hashMb,
+        time_remaining: timeRemaining ?? undefined,
+        time_increment: cfg.timeControl.increment ?? undefined,
+        total_moves: totalMoves,
+      }) as Promise<{ move: string | null }>;
+    }
+    
+    // Simple timeout wrapper using Promise.race
+    return new Promise<{ move: string | null }>((resolve) => {
+      const timeout = setTimeout(() => {
+        console.warn('[AI] Engine timed out after', ms, 'ms');
+        resolve({ move: null });
+      }, ms);
+      enginePromise.then((result) => {
+        clearTimeout(timeout);
+        resolve(result);
+      }).catch((err) => {
+        clearTimeout(timeout);
+        console.error('[AI] Engine error:', err);
+        resolve({ move: null });
+      });
+    });
+  }
+
+  // Get engine move - always try this as fallback
+  let reply: { move: string | null };
+  try {
+    console.log('[AI] Requesting engine move', { engine: cfg.playEngine });
+    reply = await getEngineMoveSafe();
+  } catch (e) {
+    console.error('[AI] Engine call failed:', e);
+    return null;
+  }
+
+  if (!reply || !reply.move) {
+    console.warn('[AI] No move returned, using fallback');
+    // Fallback: return a legal move as last resort
+    const legal = await window.electronAPI.getLegalMoves({ fen }) as { moves?: { uci: string }[] };
+    const moves = legal?.moves;
+    if (moves && moves.length > 0) {
+      const fallbackMove = moves[0].uci;
+      console.log('[AI] Using fallback move:', fallbackMove);
+      const result = await window.electronAPI.makeMove({ move: fallbackMove }) as BackendMoveResult;
       useGameStore.getState().applyMoveResult(result);
       return result;
-    } catch {
-      return null;
     }
+    return null;
+  }
+  console.log('[AI] Engine returned:', reply.move);
+    const result = await window.electronAPI.makeMove({ move: reply.move }) as BackendMoveResult;
+    useGameStore.getState().applyMoveResult(result);
+    return result;
   }, [whiteTime, blackTime]);
 
   // ── AI vs AI autonomous loop ──────────────────────────────────────────────
@@ -272,17 +347,29 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
   };
 
   const commitMove = async (moveUCI: string) => {
+    const oldFen = store.fen;
     store.selectSquare(null);
     store.setEngineBusy(true);
     try {
       const result = await window.electronAPI.makeMove({ move: moveUCI }) as BackendMoveResult;
+      
+      // Determine if this was a capture for sound
+      const oldBoard = oldFen.split(' ')[0];
+      const newBoard = result.fen.split(' ')[0];
+      const isCapture = oldBoard.replace(/[PNBRQK]/g, '') !== newBoard.replace(/[pnbrqk]/g, '');
+      
       store.applyMoveResult(result);
+      Sound.move();
+      if (isCapture) Sound.capture();
+      if (result.in_check) Sound.check();
+      if (result.game_over && result.result && result.result !== '1/2-1/2') Sound.checkmate();
 
       // In Human vs AI, trigger the engine reply immediately after the human move
       if (!result.game_over && useGameStore.getState().mode === 'human_vs_ai') {
         await makeAiMove(result.fen);
       }
     } catch (err) {
+      Sound.illegal();
       store.pushToast(`Move error: ${err}`, 'error');
     } finally {
       store.setEngineBusy(false);
@@ -510,43 +597,55 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
   let topName: string;
   let topElo: number | undefined;
   let topIsUser: boolean;
-  let topThinking: boolean;
+  let topThinking = false;
   let bottomName: string;
   let bottomIsUser: boolean;
   let topActive: boolean;
   let topTime: number | null;
   let bottomTime: number | null;
-  let showResignDraw: boolean;
+let showResignDraw: boolean;
 
+  const flipped = store.flipped;
   const mode = store.mode;
+
+  // Determine card data for both positions
+  let whiteCard: { name: string; elo?: number; isUser: boolean; time: number | null; active: boolean };
+  let blackCard: { name: string; elo?: number; isUser: boolean; time: number | null; active: boolean };
+
   if (mode === 'human_vs_human') {
-    topName = 'Black';     topElo = undefined; topIsUser = true;
-    bottomName = 'White'; bottomIsUser = true;
-    topActive = store.turn === 'black';
-    topThinking = false;
-    topTime = blackTime;   bottomTime = whiteTime;
+    whiteCard = { name: 'White', elo: undefined, isUser: true, time: whiteTime, active: store.turn === 'white' };
+    blackCard = { name: 'Black', elo: undefined, isUser: true, time: blackTime, active: store.turn === 'black' };
     showResignDraw = true;
   } else if (mode === 'ai_vs_ai') {
-    topName = `${engineName} (Black)`;   topElo = engineElo; topIsUser = false;
-    bottomName = `${engineName} (White)`; bottomIsUser = false;
-    topActive = store.turn === 'black';
-    topThinking = store.engineBusy;
-    topTime = blackTime;   bottomTime = whiteTime;
+    whiteCard = { name: `${engineName} (White)`, elo: engineElo, isUser: false, time: whiteTime, active: store.turn === 'white' };
+    blackCard = { name: `${engineName} (Black)`, elo: engineElo, isUser: false, time: blackTime, active: store.turn === 'black' };
     showResignDraw = false;
+    topThinking = store.engineBusy;
   } else {
     // human_vs_ai
     const humanIsWhite = store.humanColor === 'white';
-    topName = humanIsWhite ? engineName : 'You';
-    topElo  = humanIsWhite ? engineElo  : undefined;
-    topIsUser  = !humanIsWhite;
-    bottomName = humanIsWhite ? 'You' : engineName;
-    bottomIsUser = humanIsWhite;
-    topActive = humanIsWhite ? store.turn === 'black' : store.turn === 'white';
-    topThinking = store.engineBusy;
-    topTime    = humanIsWhite ? blackTime : whiteTime;
-    bottomTime = humanIsWhite ? whiteTime : blackTime;
+    whiteCard = humanIsWhite
+      ? { name: 'You', elo: undefined, isUser: true, time: whiteTime, active: store.turn === 'white' }
+      : { name: engineName, elo: engineElo, isUser: false, time: whiteTime, active: store.turn === 'white' };
+    blackCard = humanIsWhite
+      ? { name: engineName, elo: engineElo, isUser: false, time: blackTime, active: store.turn === 'black' }
+      : { name: 'You', elo: undefined, isUser: true, time: blackTime, active: store.turn === 'black' };
     showResignDraw = true;
+    topThinking = store.engineBusy;
   }
+
+  // When flipped, swap white and black card data
+  const topCard = flipped ? whiteCard : blackCard;
+  const bottomCard = flipped ? blackCard : whiteCard;
+  topName = topCard.name;
+  topElo = topCard.elo;
+  topIsUser = topCard.isUser;
+  topTime = topCard.time;
+  topActive = topCard.active;
+
+bottomName = bottomCard.name;
+  bottomIsUser = bottomCard.isUser;
+  bottomTime = bottomCard.time;
 
   return (
     <div className="flex flex-col gap-2 w-full">
@@ -563,7 +662,13 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
       <Board
         onSquareClick={handleSquareClick}
         onDropMove={handleDropMove}
-        showAnalysisArrows={settings.showAnalysisTopMoves}
+        showAnalysisArrows={
+          settings.showAnalysisTopMoves && (
+            settings.showArrowsBeforeMove
+              ? !store.selectedSquare
+              : !!store.selectedSquare
+          )
+        }
         analysisPV={store.analysis.pvs[0]?.pv ?? []}
         analysisAltPVs={store.analysis.pvs.slice(1).map((p) => p.pv)}
         threatPV={store.analysis.pvs[0]?.pv?.slice(1, 5) ?? []}

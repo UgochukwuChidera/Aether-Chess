@@ -174,7 +174,7 @@
   box-shadow: 0 0 6px 2px rgba(163, 230, 53, 0.6);
 }
 
-/* ── Piece contrast colors (theme-aware, never inverts) ─────────────────── */
+/* ── Piece contrast colors (theme-aware) ─────────────────── */
 .text-white-piece {
   color: #F8F8F2;
 }
@@ -182,12 +182,15 @@
   color: #1A1A1A;
 }
 
-:where([data-theme='light']) .text-white-piece {
-  color: #1A1A1A;
-  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.6));
+:root[data-theme='light'] .text-white-piece {
+  color: #FFFFFF !important;
+  text-shadow: 0 0 2px #000, 0 1px 2px rgba(0,0,0,0.8) !important;
+  -webkit-text-shadow: 0 0 2px #000, 0 1px 2px rgba(0,0,0,0.8) !important;
 }
-:where([data-theme='light']) .text-black-piece {
-  color: #1A1A1A;
+:root[data-theme='light'] .text-black-piece {
+  color: #1A1A1A !important;
+  text-shadow: 0 1px 1px rgba(255,255,255,0.4) !important;
+  -webkit-text-shadow: 0 1px 1px rgba(255,255,255,0.4) !important;
 }
 
 /* ── Board drawing layer (SVG overlay for arrows/shapes) ─────────────────── */

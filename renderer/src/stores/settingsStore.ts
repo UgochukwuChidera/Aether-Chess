@@ -44,10 +44,15 @@ export interface AppSettings {
   hashMb: number;
   multipv: number;
   botStrength: number;
+  // Opening Book
+  useOpeningBook: boolean;
+  openingBookPath: string;
+  openingBookDepth: number; // plies to use book (e.g., 10 = 5 moves each side)
   // Gameplay
   timeControl: TimeControl;
   autoQueen: boolean;
   showEvalBar: boolean;
+  showArrowsBeforeMove: boolean;
   soundEnabled: boolean;
   soundVolume: number;
   // Analysis
@@ -76,9 +81,13 @@ const DEFAULTS: AppSettings = {
   hashMb: 128,
   multipv: 3,
   botStrength: 7,
+  useOpeningBook: true,
+  openingBookPath: 'resources/books',
+  openingBookDepth: 20, // default to 20 plies (10 moves each side)
   timeControl: TIME_CONTROLS[3], // Unlimited
   autoQueen: false,
   showEvalBar: true,
+  showArrowsBeforeMove: true,
   soundEnabled: true,
   soundVolume: 0.7,
   showAnalysisThreats: true,
