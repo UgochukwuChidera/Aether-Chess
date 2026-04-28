@@ -3,9 +3,11 @@
  * Shows white advantage (light gray), black advantage (dark gray),
  * and a narrow glowing accent segment at the evaluation point.
  * Also shows captured pieces and material advantage.
+ * Uses custom Mentor evaluation when enabled in settings.
  */
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useGameStore } from '../stores/gameStore';
+import { useSettingsStore } from '../stores/settingsStore';
 import { PIECE_GLYPHS } from '../config/pieceConfig';
 
 const PIECE_VALUES: Record<string, number> = {
@@ -90,20 +92,34 @@ function formatMaterial(cp: number): string {
 }
 
 export const EvalBar: React.FC = () => {
-  const { analysis, fen } = useGameStore();
+  const { analysis, fen, fetchMentorEval } = useGameStore();
+  const settings = useSettingsStore();
   const top = analysis.pvs[0];
+  const mentorEval = analysis.mentorEval;
 
-  const cp   = top?.score_cp ?? 0;
+  // Fetch Mentor eval when position changes (if enabled and no analysis running)
+  useEffect(() => {
+    if (settings.useMentorEval && !analysis.running && settings.playEngine === 'mentor') {
+      fetchMentorEval(fen);
+    }
+  }, [fen, settings.useMentorEval, settings.playEngine, analysis.running]);
+
+  // Use custom eval if enabled and available, otherwise fall back to Stockfish
+  const cp = mentorEval?.eval_cp ?? top?.score_cp ?? 0;
   const mate = top?.mate ?? null;
   const depth = top?.depth ?? 0;
 
   const whitePct = evalToWhitePct(cp, mate);
   const GLOW_WIDTH = 2;
 
-  const scoreLabel = top ? formatScore(cp, mate) : '0.0';
+  const scoreLabel = mentorEval 
+    ? `${cp >= 0 ? '+' : ''}${(cp / 100).toFixed(1)}`
+    : (top ? formatScore(cp, mate) : '0.0');
   const material = computeMaterialAdvantage(fen);
   const captured = computeCapturedPieces(fen);
   const materialLabel = formatMaterial(material);
+
+  const evalSource = mentorEval ? 'mentor' : (analysis.running ? 'sf' : '0.0');
 
   return (
     <div className="w-full flex flex-col gap-0.5 mb-1">
@@ -126,7 +142,7 @@ export const EvalBar: React.FC = () => {
       {/* Score + depth label */}
       <div className="flex justify-between items-center px-0.5">
         <span className="text-[11px] font-mono text-muted">
-          {analysis.running ? `depth ${depth}` : 'eval'}
+          {analysis.running ? `depth ${depth}` : (mentorEval ? 'mentor' : 'eval')}
         </span>
         <span
           className={`text-[11px] font-mono font-semibold

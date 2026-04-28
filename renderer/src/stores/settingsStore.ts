@@ -44,6 +44,8 @@ export interface AppSettings {
   hashMb: number;
   multipv: number;
   botStrength: number;
+  // Custom Eval
+  useMentorEval: boolean;
   // Opening Book
   useOpeningBook: boolean;
   openingBookPath: string;
@@ -78,9 +80,10 @@ const DEFAULTS: AppSettings = {
   playEngine: 'stockfish',
   stockfishPath: 'stockfish',
   threads: 1,
-  hashMb: 128,
+  hashMb: 128,  // Lower default to avoid allocation failures
   multipv: 3,
   botStrength: 7,
+  useMentorEval: true,
   useOpeningBook: true,
   openingBookPath: 'resources/books',
   openingBookDepth: 20, // default to 20 plies (10 moves each side)

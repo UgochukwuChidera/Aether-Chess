@@ -36,6 +36,10 @@ declare global {
         time_increment?: number;
         total_moves?: number;
       }) => Promise<unknown>;
+      getEval: (params: {
+        fen: string;
+        use_mentor_eval?: boolean;
+      }) => Promise<unknown>;
       exportPgn: () => Promise<unknown>;
       importPgn: (params: { pgn: string }) => Promise<unknown>;
       exportFen: () => Promise<unknown>;

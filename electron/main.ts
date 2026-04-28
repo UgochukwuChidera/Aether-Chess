@@ -301,6 +301,7 @@ const CHESS_COMMANDS = [
   'navigate_to_move',
   'get_engine_move',
   'get_bot_move',
+  'get_eval',
   'export_pgn',
   'import_pgn',
   'export_fen',

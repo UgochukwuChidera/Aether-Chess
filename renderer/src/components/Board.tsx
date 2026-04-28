@@ -42,10 +42,6 @@ interface Props {
   onSquareClick: (sq: string) => void;
   onDropMove?: (from: string, to: string) => void;
   arrows?: Arrow[];
-  showAnalysisArrows?: boolean;
-  analysisPV?: string[];
-  analysisAltPVs?: string[][];
-  threatPV?: string[];
   onArrowsChange?: (arrows: Arrow[]) => void;
   onMarksChange?: (marks: SquareMark[]) => void;
 }
@@ -54,10 +50,6 @@ export const Board: React.FC<Props> = ({
     onSquareClick,
     onDropMove,
     arrows = [],
-    showAnalysisArrows = false,
-    analysisPV = [],
-    analysisAltPVs = [],
-    threatPV = [],
     onArrowsChange,
     onMarksChange,
   }) => {
@@ -334,10 +326,6 @@ export const Board: React.FC<Props> = ({
       <BoardDrawingLayer
         flipped={flipped}
         arrows={arrows}
-        showArrowsFromAnalysis={showAnalysisArrows}
-        analysisPV={analysisPV}
-        analysisAltPVs={analysisAltPVs}
-        showThreatPV={threatPV}
         onArrowsChange={onArrowsChange}
         onMarksChange={onMarksChange}
       />

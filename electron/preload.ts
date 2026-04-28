@@ -31,6 +31,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     hash_mb?: number;
   }) =>
     ipcRenderer.invoke('get_bot_move', params),
+  getEval: (params: {
+    fen: string;
+    use_mentor_eval?: boolean;
+  }) =>
+    ipcRenderer.invoke('get_eval', params),
   exportPgn: () => ipcRenderer.invoke('export_pgn'),
   importPgn: (params: { pgn: string }) => ipcRenderer.invoke('import_pgn', params),
   exportFen: () => ipcRenderer.invoke('export_fen'),

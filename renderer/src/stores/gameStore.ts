@@ -27,6 +27,7 @@ export interface AnalysisData {
   pvs: PVLine[];
   fen: string;
   running: boolean;
+  mentorEval?: { eval_cp: number; phase: number; mg_score: number; eg_score: number };
 }
 
 export type GameResult =
@@ -82,8 +83,10 @@ export interface GameState {
   selectSquare: (sq: string | null) => void;
   setLegalMoves: (moves: string[]) => void;
   flipBoard: () => void;
+  setFlipped: (flipped: boolean) => void;
   setPendingPromotion: (promo: { from: string; to: string } | null) => void;
   setAnalysis: (data: Partial<AnalysisData>) => void;
+  fetchMentorEval: (fen: string) => Promise<void>;
   pushToast: (message: string, type?: Toast['type']) => void;
   dismissToast: (id: string) => void;
   setEngineBusy: (busy: boolean) => void;
@@ -191,8 +194,19 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   setLegalMoves: (moves) => set({ legalMoves: moves }),
   flipBoard: () => set((s) => ({ flipped: !s.flipped })),
+  setFlipped: (flipped: boolean) => set({ flipped }),
   setPendingPromotion: (promo) => set({ pendingPromotion: promo }),
   setAnalysis: (data) => set((s) => ({ analysis: { ...s.analysis, ...data } })),
+
+  fetchMentorEval: async (fen) => {
+    try {
+      const result = await window.electronAPI.getEval({ fen, use_mentor_eval: true });
+      const data = result as { eval_cp?: number; phase?: number; mg_score?: number; eg_score?: number };
+      if (data.eval_cp !== undefined) {
+        set((s) => ({ analysis: { ...s.analysis, mentorEval: data as any } }));
+      }
+    } catch { /* ignore */ }
+  },
 
   pushToast: (message, type = 'info') => {
     const id = `toast-${Date.now()}`;

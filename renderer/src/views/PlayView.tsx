@@ -173,30 +173,39 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
     const totalMoves = gs.fullMoveHistoryUCI.length;
     console.log('[AI] makeAiMove called', { fen: fen?.slice(0, 30), totalMoves, playEngine: cfg.playEngine, botStrength: cfg.botStrength });
 
-    // Try opening book first if enabled and we're in the opening (first 20 moves total)
+// Try opening book first if enabled and we're in the opening (first 20 moves total)
     if (cfg.useOpeningBook && totalMoves < cfg.openingBookDepth) {
       try {
         const bookData = await window.electronAPI.getBookMoves({
           fen,
         }) as { moves?: { uci: string; weight: number }[] };
         if (bookData.moves && bookData.moves.length > 0) {
-          // Pick a random move weighted by book popularity
-          const totalWeight = bookData.moves.reduce((sum, m) => sum + m.weight, 0);
-          let rand = Math.random() * totalWeight;
-          for (const move of bookData.moves) {
-            rand -= move.weight;
-            if (rand <= 0) {
-              console.log('[AI] Book move:', move.uci);
-              const result = await window.electronAPI.makeMove({ move: move.uci }) as BackendMoveResult;
-              return result;
+          // Validate each candidate move against fresh legal moves before playing
+          const freshLegal = await window.electronAPI.getLegalMoves({ fen }) as { moves: string[] };
+          const legalSet = new Set(freshLegal.moves || []);
+          // Filter to only legal moves from book
+          const legalBookMoves = bookData.moves.filter(m => legalSet.has(m.uci));
+          if (legalBookMoves.length > 0) {
+            // Pick a random move weighted by book popularity
+            const totalWeight = legalBookMoves.reduce((sum, m) => sum + m.weight, 0);
+            let rand = Math.random() * totalWeight;
+            for (const move of legalBookMoves) {
+              rand -= move.weight;
+              if (rand <= 0) {
+                console.log('[AI] Book move:', move.uci);
+                const result = await window.electronAPI.makeMove({ move: move.uci }) as BackendMoveResult;
+                return result;
+              }
             }
           }
         }
       } catch (e) { console.warn('[AI] Book error:', e); }
     }
 
+    console.log('[AI] Getting engine move, FEN:', fen);
+
     // Get engine move with fallback if timeout - simple promise race wrapper
-  async function getEngineMoveSafe(): Promise<{ move: string | null }> {
+    async function getEngineMoveSafe(): Promise<{ move: string | null }> {
     const cfg = useSettingsStore.getState();
     const ms = Math.min(2000, 500 + cfg.botStrength * 150); // 0.5-2s based on strength
     
@@ -243,7 +252,7 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
   // Get engine move - always try this as fallback
   let reply: { move: string | null };
   try {
-    console.log('[AI] Requesting engine move', { engine: cfg.playEngine });
+    console.log('[AI] Requesting engine move', { engine: cfg.playEngine, fen });
     reply = await getEngineMoveSafe();
   } catch (e) {
     console.error('[AI] Engine call failed:', e);
@@ -264,10 +273,18 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
     }
     return null;
   }
+  
+  // Validate move is legal before pushing (critical!)
+  const legalMoves = await window.electronAPI.getLegalMoves({ fen }) as { moves: string[] };
+  if (!legalMoves.moves.includes(reply.move)) {
+    console.error('[AI] Illegal engine move:', reply.move, 'legal:', legalMoves.moves);
+    return null;
+  }
+  
   console.log('[AI] Engine returned:', reply.move);
-    const result = await window.electronAPI.makeMove({ move: reply.move }) as BackendMoveResult;
-    useGameStore.getState().applyMoveResult(result);
-    return result;
+  const result = await window.electronAPI.makeMove({ move: reply.move }) as BackendMoveResult;
+  useGameStore.getState().applyMoveResult(result);
+  return result;
   }, [whiteTime, blackTime]);
 
   // ── AI vs AI autonomous loop ──────────────────────────────────────────────
@@ -321,6 +338,8 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
       store.resetGame();
       // resetGame doesn't touch mode/humanColor; re-assert to be explicit
       useGameStore.setState({ mode: setupMode, humanColor: resolvedColor });
+      // Flip board if human is playing as black
+      store.setFlipped(resolvedColor === 'black');
       store.applyMoveResult(result);
 
       if (settings.timeControl.seconds > 0) {
@@ -336,7 +355,10 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
         // Human chose black — AI (white) moves first
         store.setEngineBusy(true);
         try {
-          await makeAiMove(result.fen);
+          const aiResult = await makeAiMove(result.fen);
+          if (aiResult) {
+            store.applyMoveResult(aiResult);
+          }
         } finally {
           store.setEngineBusy(false);
         }
@@ -366,7 +388,10 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
 
       // In Human vs AI, trigger the engine reply immediately after the human move
       if (!result.game_over && useGameStore.getState().mode === 'human_vs_ai') {
-        await makeAiMove(result.fen);
+        const aiResult = await makeAiMove(result.fen);
+        if (aiResult) {
+          store.applyMoveResult(aiResult);
+        }
       }
     } catch (err) {
       Sound.illegal();
@@ -662,16 +687,6 @@ bottomName = bottomCard.name;
       <Board
         onSquareClick={handleSquareClick}
         onDropMove={handleDropMove}
-        showAnalysisArrows={
-          settings.showAnalysisTopMoves && (
-            settings.showArrowsBeforeMove
-              ? !store.selectedSquare
-              : !!store.selectedSquare
-          )
-        }
-        analysisPV={store.analysis.pvs[0]?.pv ?? []}
-        analysisAltPVs={store.analysis.pvs.slice(1).map((p) => p.pv)}
-        threatPV={store.analysis.pvs[0]?.pv?.slice(1, 5) ?? []}
       />
       <PlayerCard
         name={bottomName}

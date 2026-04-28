@@ -201,10 +201,23 @@ export const SettingsPanel: React.FC = () => {
             value={settings.playEngine}
             onChange={(e) => settings.update({ playEngine: e.target.value as PlayEngine })}
           >
-            <option value="mentor">Mentor</option>
+            <option value="mentor">Mentor (your bot)</option>
             <option value="stockfish">Stockfish</option>
           </select>
         </Row>
+        {settings.playEngine === 'mentor' && (
+          <Row 
+            label="Use custom eval" 
+            tooltip="Enable MentorEngine's Stockfish-style evaluation. Disable to use Stockfish eval only."
+          >
+            <input
+              type="checkbox"
+              checked={settings.useMentorEval}
+              onChange={(e) => settings.update({ useMentorEval: e.target.checked })}
+              className="accent-[#A3E635] w-4 h-4"
+            />
+          </Row>
+        )}
         <Row label="Stockfish path" tooltip="Path to Stockfish executable">
           <div className="flex items-center gap-1">
             <span className="text-xs font-mono text-muted truncate max-w-[120px]" title={settings.stockfishPath}>

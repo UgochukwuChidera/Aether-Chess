@@ -26,9 +26,8 @@ Stockfish is thinking or a full-game accuracy analysis is running.
   • Engine commands (get_engine_move, get_bot_move) use a FEN supplied in
     params — they never touch the shared board object and therefore require
     NO board lock.  They may block for several hundred ms; that is now fine.
-    Each engine singleton (engine_mgr._uci_engine, mentor_bot._uci_engine)
-    is protected by its own _uci_lock to prevent concurrent UCI protocol
-    corruption when overlapping requests hit the same engine process.
+    The shared engine singleton is protected by _uci_lock to prevent concurrent
+    UCI protocol corruption when overlapping requests hit the same engine.
 
   • calculate_accuracy_from_history briefly acquires _board_lock to snapshot
     history, then releases it BEFORE the long Stockfish computation.
@@ -51,13 +50,11 @@ import chess
 # PyInstaller they are included via hidden-imports in the .spec file).
 from chess_engine import ChessEngineManager
 from analysis import AccuracyAnalyser
-from custom_bot import MentorBotAdapter
 
 # ── Global state ─────────────────────────────────────────────────────────────
 
 engine_mgr = ChessEngineManager()
 accuracy_analyser = AccuracyAnalyser()
-mentor_bot = MentorBotAdapter()
 
 # Protects all reads/writes to engine_mgr.board / game_state
 _board_lock = threading.Lock()
@@ -67,8 +64,7 @@ _stdout_lock = threading.Lock()
 
 
 def _cleanup() -> None:
-    mentor_bot.close()
-    engine_mgr._close_uci()
+    engine_mgr.close()
 
 
 atexit.register(_cleanup)
@@ -180,7 +176,7 @@ def handle_get_bot_move(params: Dict[str, Any]) -> Any:
     time_remaining = params.get("time_remaining")
     time_increment = params.get("time_increment")
     total_moves = params.get("total_moves")
-    return mentor_bot.get_move(
+    return engine_mgr.get_mentor_move(
         fen,
         strength=strength,
         stockfish_path=stockfish_path,
@@ -239,6 +235,15 @@ def handle_get_book_moves(params: Dict[str, Any]) -> Any:
     return engine_mgr.get_book_moves(fen, books_dir=books_dir)
 
 
+def handle_get_eval(params: Dict[str, Any]) -> Any:
+    """Get evaluation from MentorEngine's evaluation function (custom eval)."""
+    fen = params.get("fen") or engine_mgr.fen()
+    use_mentor_eval = params.get("use_mentor_eval", True)
+    if not use_mentor_eval:
+        return {"eval_cp": None, "note": "Mentor eval disabled"}
+    return engine_mgr.get_mentor_eval(fen)
+
+
 def handle_start_analysis(params: Dict[str, Any]) -> Any:
     fen = params.get("fen") or engine_mgr.fen()
     multipv = int(params.get("multipv", 3))
@@ -273,6 +278,7 @@ HANDLERS: Dict[str, Any] = {
     "navigate_to_move":   handle_navigate_to_move,
     "get_engine_move":    handle_get_engine_move,
     "get_bot_move":       handle_get_bot_move,
+    "get_eval":          handle_get_eval,
     "export_pgn":         handle_export_pgn,
     "import_pgn":         handle_import_pgn,
     "export_fen":         handle_export_fen,

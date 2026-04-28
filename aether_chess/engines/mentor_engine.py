@@ -16,53 +16,56 @@ MATE_SCORE = 100_000
 
 PIECE_VALUES = {
     chess.PAWN: 100,
-    chess.KNIGHT: 320,
-    chess.BISHOP: 330,
-    chess.ROOK: 500,
+    chess.KNIGHT: 350,  # Increased from 325
+    chess.BISHOP: 350,  # Increased from 335
+    chess.ROOK: 550,  # Increased from 475
     chess.QUEEN: 950,
     chess.KING: 20000,
 }
 
-# Piece‑square tables (midgame)
+# Improved piece-square tables - encourage AGGRESSIVE play and center control
 PAWN_TABLE = [
-    0,  0,  0,  0,  0,  0,  0,  0,
-    5, 10, 10,-20,-20, 10, 10,  5,
-    2,  4,  8, 12, 12,  8,  4,  2,
-    0,  2,  6, 10, 10,  6,  2,  0,
-    0,  0,  4,  8,  8,  4,  0,  0,
-    2,  2,  2,  4,  4,  2,  2,  2,
-    5,  5,  5,  5,  5,  5,  5,  5,
-    0,  0,  0,  0,  0,  0,  0,  0,
+     0,  0,  0,  0,  0,  0,  0,  0,
+     5,  5,  5,-10,-10,  5,  5,  5,
+     5, 10, 20, 25, 25, 20, 10,  5,  # Push to center
+     5, 15, 25, 30, 30, 25, 15,  5,  # More aggressive
+     5, 15, 25, 35, 35, 25, 15,  5,  # Advance!
+     5, 10, 20, 25, 25, 20, 10,  5,
+     5,  5, 10, 15, 15, 10,  5,  5,
+    10, 10, 10, 10, 10, 10, 10, 10,
 ]
 KNIGHT_TABLE = [
-    -50,-40,-30,-30,-30,-30,-40,-50,
-    -40,-20,  0,  5,  5,  0,-20,-40,
-    -30,  5, 10, 15, 15, 10,  5,-30,
-    -30,  5, 15, 20, 20, 15,  5,-30,
-    -30,  5, 15, 20, 20, 15,  5,-30,
-    -30,  5, 10, 15, 15, 10,  5,-30,
-    -40,-20,  0,  0,  0,  0,-20,-40,
-    -50,-40,-30,-30,-30,-30,-40,-50,
+    -50,-40,-30,-20,-20,-30,-40,-50,
+    -40,-20, 10, 15, 15, 10,-20,-40,  # Better center
+    -30, 10, 20, 25, 25, 20, 10,-30,
+    -25, 15, 25, 30, 30, 25, 15,-25,
+    -25, 15, 25, 30, 30, 25, 15,-25,
+    -30, 10, 20, 25, 25, 20, 10,-30,
+    -40,-20, 10, 15, 15, 10,-20,-40,
+    -50,-40,-30,-20,-20,-30,-40,-50,
 ]
 BISHOP_TABLE = [
-    -20,-10,-10,-10,-10,-10,-10,-20,
-    -10,  5,  0,  0,  0,  0,  5,-10,
-    -10,  0, 10, 10, 10, 10,  0,-10,
-    -10,  0, 10, 15, 15, 10,  0,-10,
+    -20,-10,-10, -5, -5,-10,-10,-20,
+    -10,  0,  0,  0,  0,  0,  0,-10,
+    -10,  0,  5, 10, 10,  5,  0,-10,
     -10,  5, 10, 15, 15, 10,  5,-10,
-    -10, 10, 10, 10, 10, 10, 10,-10,
-    -10,  5,  0,  0,  0,  0,  5,-10,
-    -20,-10,-10,-10,-10,-10,-10,-20,
+    -10,  0, 10, 15, 15, 10,  0,-10,
+    -10,  0,  5, 10, 10,  5,  0,-10,
+    -20,-10,  0,  5,  5,  0,-10,-20,
+    -20,-10,-10, -5, -5,-10,-10,-20,
 ]
+# Rook tables - reward OPEN files, NOT center. Rooks belong on back rank in opening.
+# Higher values = better squares. Edge files (0,7) good for development.
+# Center files only good in endgame when files open up.
 ROOK_TABLE = [
-    0,  0,  0,  5,  5,  0,  0,  0,
-   -5,  0,  0,  0,  0,  0,  0, -5,
-   -5,  0,  0,  0,  0,  0,  0, -5,
-   -5,  0,  0,  0,  0,  0,  0, -5,
-   -5,  0,  0,  0,  0,  0,  0, -5,
-   -5,  0,  0,  0,  0,  0,  0, -5,
-    5, 10, 10, 10, 10, 10, 10,  5,
-    0,  0,  0,  0,  0,  0,  0,  0,
+    50, 50, 50, 50, 50, 50, 50, 50,  # Rank 1 (home) - good for development
+    40, 40, 40, 40, 40, 40, 40, 40,  # Rank 2
+    30, 30, 30, 30, 30, 30, 30, 30,  # Rank 3
+    20, 20, 20, 20, 20, 20, 20, 20,  # Rank 4
+    10, 10, 10, 10, 10, 10, 10, 10,  # Rank 5
+     5,  5, 10, 15, 15, 10,  5,  5,  # Rank 6 - entering enemy territory
+     0,  0,  5, 10, 10,  5,  0,  0,  # Rank 7
+     0,  0,  0,  5,  5,  0,  0,  0,  # Rank 8 (promotion rank)
 ]
 QUEEN_TABLE = [
     -20,-10,-10, -5, -5,-10,-10,-20,
@@ -106,12 +109,12 @@ PST = {
 
 @dataclass
 class SearchConfig:
-    max_depth: int = 6
-    max_nodes: int = 10_000_000        # added to match controller
-    time_limit_sec: float = 1.0
-    difficulty: float = 1.0
-    tt_max_entries: int = 2_000_000
-    threads: int = 1                   # keep 1 to avoid threading issues
+    max_depth: int = 8  # Increased from 6
+    max_nodes: int = 1_500_000  # Increased from 10M
+    time_limit_sec: float = 1.5  # Increased from 1.0
+    difficulty: float = 0.85  # Increased from 1.0
+    tt_max_entries: int = 500_000  # Increased from 2M
+    threads: int = 1
 
 
 class TTEntry:
@@ -195,6 +198,55 @@ class MentorEngine:
         if len(board.pieces(chess.BISHOP, chess.BLACK)) >= 2:
             score -= 50
 
+        # ========== ROOK EVALUATION (permanent, no phase restriction) ==========
+        for color in (chess.WHITE, chess.BLACK):
+            rooks = board.pieces(chess.ROOK, color)
+            for sq in rooks:
+                file_idx = chess.square_file(sq)
+                rank_idx = chess.square_rank(sq)
+                bonus = 0
+
+                # Open file (no pawns of either color) - STRONG bonus
+                white_pawns_on_file = any(chess.square_file(p) == file_idx for p in board.pieces(chess.PAWN, chess.WHITE))
+                black_pawns_on_file = any(chess.square_file(p) == file_idx for p in board.pieces(chess.PAWN, chess.BLACK))
+                if not white_pawns_on_file and not black_pawns_on_file:
+                    bonus += 70  # Increased from 45
+                # Semi-open file (only opponent pawns)
+                elif (color == chess.WHITE and not white_pawns_on_file and black_pawns_on_file) or \
+                     (color == chess.BLACK and not black_pawns_on_file and white_pawns_on_file):
+                    bonus += 35  # Increased from 25
+
+                # 7th rank (rank 6 for white, rank 1 for black) - STRONG bonus
+                if color == chess.WHITE and rank_idx == 6:
+                    bonus += 50  # Increased from 35
+                elif color == chess.BLACK and rank_idx == 1:
+                    score += 50  # Black rook on 7th = white advantage, so add to white's score
+
+                # Penalize rooks trapped behind own pawns (rook shuffling fix)
+                if color == chess.WHITE:
+                    # Check if rook is blocked by own pawns ahead
+                    own_pawn_blocked = any(
+                        chess.square_file(p) == file_idx and chess.square_rank(p) > rank_idx
+                        for p in board.pieces(chess.PAWN, chess.WHITE)
+                    )
+                else:
+                    own_pawn_blocked = any(
+                        chess.square_file(p) == file_idx and chess.square_rank(p) < rank_idx
+                        for p in board.pieces(chess.PAWN, chess.BLACK)
+                    )
+                if own_pawn_blocked:
+                    bonus -= 40  # Strong penalty for blocked rooks
+
+                if color == chess.WHITE:
+                    score += bonus
+                else:
+                    score -= bonus
+
+        # Note: Bit-twiddling optimizations could be applied here for pawn structure:
+        # - Use python-chess bitboards (board.pawns, board.occupied) for faster lookup
+        # - Precompute file masks: 0x0101010101010101 << file
+        # - Count bits with .bit_count() instead of iterating
+
         return score if board.turn == chess.WHITE else -score
 
     # ------------------------ Move Ordering ------------------------
@@ -211,23 +263,53 @@ class MentorEngine:
     def _move_score(self, board: chess.Board, move: chess.Move, tt_move: Optional[chess.Move], ply: int) -> int:
         score = 0
         if tt_move and move == tt_move:
-            score += 20000
+            score += 50000
+        
         if board.is_capture(move):
             victim = board.piece_type_at(move.to_square)
             attacker = board.piece_type_at(move.from_square)
             if victim and attacker:
-                score += 10000 + PIECE_VALUES[victim] - PIECE_VALUES[attacker]
-            score += self.see(board, move) * 5
+                score += 20000 + PIECE_VALUES[victim] - PIECE_VALUES[attacker]
+        
         if move.promotion:
-            score += 5000
+            score += 10000
+        
         if board.gives_check(move):
-            score += 300
+            score += 500
+        
+        # Rook shuffling fix: Penalize rook moves that don't improve position
+        rook_moving = board.piece_type_at(move.from_square) == chess.ROOK
+        if rook_moving:
+            # Penalize if rook is moving from back rank to front
+            from_rank = chess.square_rank(move.from_square)
+            to_rank = chess.square_rank(move.to_square)
+            if board.turn == chess.WHITE:
+                if from_rank <= 1 and to_rank > from_rank:
+                    score -= 50  # Discourage rooks advancing into pawns
+            else:
+                if from_rank >= 6 and to_rank < from_rank:
+                    score -= 50
+        
+        # Early opening: prioritize center control
+        if board.fullmove_number <= 6:
+            to_sq = move.to_square
+            file_idx = chess.square_file(to_sq)
+            rank_idx = chess.square_rank(to_sq)
+            if 3 <= file_idx <= 4 and 3 <= rank_idx <= 4:
+                score += 200
+            elif 2 <= file_idx <= 5 and 2 <= rank_idx <= 5:
+                score += 100
+        
+        # Killers
         killers = self.killers.get(ply, [None, None])
         if killers[0] == move:
-            score += 1000
+            score += 100
         elif killers[1] == move:
-            score += 500
+            score += 50
+        
+        # History
         score += self.history.get((board.turn, move.from_square, move.to_square), 0)
+        
         return score
 
     def _ordered_moves(self, board: chess.Board, tt_move: Optional[chess.Move], ply: int) -> List[chess.Move]:
