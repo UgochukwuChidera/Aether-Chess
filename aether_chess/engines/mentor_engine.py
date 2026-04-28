@@ -220,7 +220,7 @@ class MentorEngine:
                 if color == chess.WHITE and rank_idx == 6:
                     bonus += 50  # Increased from 35
                 elif color == chess.BLACK and rank_idx == 1:
-                    score += 50  # Black rook on 7th = white advantage, so add to white's score
+                    score -= 50  # Black rook on 7th = black advantage, so subtract from white's score
 
                 # Penalize rooks trapped behind own pawns (rook shuffling fix)
                 if color == chess.WHITE:
@@ -471,7 +471,8 @@ class MentorEngine:
         self.nodes = 0
         self.killers.clear()
         self.history.clear()
-        self.tt.clear()
+        # TT is intentionally NOT cleared between searches so that results from
+        # previous positions can still be reused (avoids search instability).
 
         best_move = None
         best_score = -INF

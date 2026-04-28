@@ -65,11 +65,11 @@ class ChessEngineManager:
         level = max(1, min(10, int(strength)))
         # INCREASE depth and nodes for smarter play
         self._mentor_engine.config = SearchConfig(
-            max_depth=4 + level * 2,  # 6-24 plies (was 3-12)
-            max_nodes=100_000 + level * 100_000,  # 200K-1.1M (was 100K-550K)
+            max_depth=4 + level * 2,  # 6-24 plies
+            max_nodes=200_000 + level * 200_000,  # 400K-2.2M
             time_limit_sec=0.5 + level * 0.3,  # 0.8-3.5s
             difficulty=min(1.0, 0.5 + level * 0.05),  # 0.55-1.0
-            tt_max_entries=200_000 + level * 50_000,
+            tt_max_entries=500_000 + level * 50_000,  # 550K-1M
             threads=1,
         )
         return self._mentor_engine
@@ -361,9 +361,9 @@ class ChessEngineManager:
             move_num = total_moves or 30
             moves_left = max(1, 40 - move_num)
             share = time_remaining / moves_left
-            base_time = max(0.15, min(time_remaining * 0.3, share * 0.4, 2.5))
+            base_time = max(0.15, min(time_remaining * 0.3, share * 0.4, 1.0))
             if time_increment and time_increment > 0:
-                base_time = max(0.15, min(base_time + time_increment * 0.2, 2.5))
+                base_time = max(0.15, min(base_time + time_increment * 0.2, 1.0))
         
         # Get configured mentor engine
         mentor = self._get_mentor_engine(strength)

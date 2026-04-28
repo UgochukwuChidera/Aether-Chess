@@ -66,6 +66,9 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
   // ── AI vs AI loop control ─────────────────────────────────────────────────
   const aiLoopRef = useRef(false);
 
+  // ── Component mounted guard (prevents state updates after unmount) ─────────
+  const mountedRef = useRef(true);
+
   // ── Analysis debounce ─────────────────────────────────────────────────────
   const analysisDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -80,8 +83,9 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
   };
 
   useEffect(() => {
+    mountedRef.current = true;
     handleNewGame();
-    return () => { aiLoopRef.current = false; };
+    return () => { aiLoopRef.current = false; mountedRef.current = false; };
   }, []);
 
 
@@ -352,16 +356,19 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
         aiLoopRef.current = true;
         void runAiVsAiLoop();
       } else if (setupMode === 'human_vs_ai' && result.turn !== resolvedColor) {
-        // Human chose black — AI (white) moves first
+        // Human chose black — AI (white) moves first.
+        // Defer the engine call so the board renders before we block on the AI.
         store.setEngineBusy(true);
-        try {
-          const aiResult = await makeAiMove(result.fen);
-          if (aiResult) {
-            store.applyMoveResult(aiResult);
+        setTimeout(async () => {
+          try {
+            const aiResult = await makeAiMove(result.fen);
+            if (mountedRef.current && aiResult) {
+              store.applyMoveResult(aiResult);
+            }
+          } finally {
+            if (mountedRef.current) store.setEngineBusy(false);
           }
-        } finally {
-          store.setEngineBusy(false);
-        }
+        }, 50);
       }
     } catch (err) {
       store.pushToast(`Failed to start game: ${err}`, 'error');
@@ -386,11 +393,16 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
       if (result.in_check) Sound.check();
       if (result.game_over && result.result && result.result !== '1/2-1/2') Sound.checkmate();
 
-      // In Human vs AI, trigger the engine reply immediately after the human move
+      // In Human vs AI, trigger the engine reply after a short debounce so the
+      // human move renders visually before the engine starts thinking.
       if (!result.game_over && useGameStore.getState().mode === 'human_vs_ai') {
-        const aiResult = await makeAiMove(result.fen);
-        if (aiResult) {
-          store.applyMoveResult(aiResult);
+        await new Promise<void>((resolve) => setTimeout(resolve, 100));
+        // Re-check state after the debounce in case the game ended or user navigated away
+        if (mountedRef.current && !useGameStore.getState().gameResult) {
+          const aiResult = await makeAiMove(result.fen);
+          if (aiResult) {
+            store.applyMoveResult(aiResult);
+          }
         }
       }
     } catch (err) {
