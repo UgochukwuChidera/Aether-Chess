@@ -21,5 +21,6 @@
   "showAnalysisThreats": true,
   "showAnalysisTopMoves": true,
   "showAnalysisTopAlternatives": true,
-  "clearHistoryOnNewGame": false
+  "clearHistoryOnNewGame": false,
+  "autoSaveGameHistory": true
 }

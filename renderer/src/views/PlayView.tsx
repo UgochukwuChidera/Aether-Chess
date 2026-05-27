@@ -58,6 +58,7 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
   const [whiteTime, setWhiteTime] = useState<number | null>(null);
   const [blackTime, setBlackTime] = useState<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const autoSaveRef = useRef(false);
 
   // ── Game setup state (applied on next "New Game") ─────────────────────────
   const [setupMode, setSetupMode] = useState<GameMode>(store.mode);
@@ -73,9 +74,10 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
     const s = Math.max(1, Math.min(10, strength));
     return 5 + s;
   };
-  const botEloForStrength = (strength: number, engine: 'stockfish' | 'mentor'): number => {
+  const botEloForStrength = (strength: number, engine: 'stockfish' | 'mentor' | 'maia3'): number => {
     const s = Math.max(1, Math.min(10, strength));
     if (engine === 'stockfish') return Math.round(900 + s * 180);
+    if (engine === 'maia3') return Math.round(1000 + s * 150);
     return Math.round(850 + s * 170);
   };
 
@@ -153,6 +155,58 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
   }, [store.gameResult]);
 
   useEffect(() => {
+    if (!store.gameResult || !settings.autoSaveGameHistory || autoSaveRef.current) return;
+    if (store.fullMoveHistoryUCI.length === 0) return;
+    autoSaveRef.current = true;
+
+    const resultMap: Record<NonNullable<typeof store.gameResult>, string> = {
+      white_wins: '1-0',
+      black_wins: '0-1',
+      draw: '1/2-1/2',
+    };
+
+    const engineName = settings.playEngine === 'stockfish'
+      ? 'Stockfish'
+      : settings.playEngine === 'maia3'
+        ? 'Maia3'
+        : 'Mentor';
+
+    const whiteName = store.mode === 'human_vs_ai'
+      ? (store.humanColor === 'white' ? 'You' : engineName)
+      : store.mode === 'ai_vs_ai'
+        ? engineName
+        : 'White';
+    const blackName = store.mode === 'human_vs_ai'
+      ? (store.humanColor === 'black' ? 'You' : engineName)
+      : store.mode === 'ai_vs_ai'
+        ? engineName
+        : 'Black';
+
+    window.electronAPI.exportPgn()
+      .then((res) => {
+        const pgn = (res as { pgn?: string }).pgn ?? '';
+        return window.electronAPI.saveGameHistory({
+          pgn,
+          meta: {
+            white: whiteName,
+            black: blackName,
+            result: resultMap[store.gameResult],
+            termination: store.termination,
+            moves: store.fullMoveHistoryUCI.length,
+            mode: store.mode,
+            engine: settings.playEngine,
+            time_control: settings.timeControl,
+            played_at: new Date().toISOString(),
+          },
+        });
+      })
+      .catch(() => {
+        store.pushToast('Auto-save failed', 'error');
+        autoSaveRef.current = false;
+      });
+  }, [store.gameResult, store.fullMoveHistoryUCI.length, store.termination, store.mode, store.humanColor, settings.autoSaveGameHistory, settings.playEngine, settings.timeControl]);
+
+  useEffect(() => {
     const tc = settings.timeControl;
     if (tc.seconds === 0 || !whiteTime) return;
     if (timerRef.current) clearInterval(timerRef.current);
@@ -171,7 +225,8 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
     const isWhiteTurn = gs.turn === 'white';
     const timeRemaining = isWhiteTurn ? whiteTime : blackTime;
     const totalMoves = gs.fullMoveHistoryUCI.length;
-    console.log('[AI] makeAiMove called', { fen: fen?.slice(0, 30), totalMoves, playEngine: cfg.playEngine, botStrength: cfg.botStrength });
+    const requestedEngine = cfg.playEngine;
+    console.log('[AI] makeAiMove called', { fen: fen?.slice(0, 30), totalMoves, playEngine: requestedEngine, botStrength: cfg.botStrength });
 
 // Try opening book first if enabled and we're in the opening (first 20 moves total)
     if (cfg.useOpeningBook && totalMoves < cfg.openingBookDepth) {
@@ -181,8 +236,8 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
         }) as { moves?: { uci: string; weight: number }[] };
         if (bookData.moves && bookData.moves.length > 0) {
           // Validate each candidate move against fresh legal moves before playing
-          const freshLegal = await window.electronAPI.getLegalMoves({ fen }) as { moves: string[] };
-          const legalSet = new Set(freshLegal.moves || []);
+          const freshLegal = await window.electronAPI.getLegalMoves({ fen }) as { moves: { uci: string }[] };
+          const legalSet = new Set((freshLegal.moves || []).map((m) => typeof m === 'string' ? m : m.uci));
           // Filter to only legal moves from book
           const legalBookMoves = bookData.moves.filter(m => legalSet.has(m.uci));
           if (legalBookMoves.length > 0) {
@@ -207,17 +262,38 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
     // Get engine move with fallback if timeout - simple promise race wrapper
     async function getEngineMoveSafe(): Promise<{ move: string | null }> {
     const cfg = useSettingsStore.getState();
-    const ms = Math.min(2000, 500 + cfg.botStrength * 150); // 0.5-2s based on strength
+    // Timeout per think profile (covers max bucket * complexity * jitter)
+    const profileTimeouts: Record<string, number> = {
+      blitz: 15_000,
+      rapid: 30_000,
+      classical: 180_000,
+      human_like: 180_000,
+    };
+    const ms = profileTimeouts[cfg.thinkProfile] ?? 180_000;
     
     let enginePromise: Promise<{ move: string | null }>;
     if (cfg.playEngine === 'stockfish') {
       enginePromise = window.electronAPI.getEngineMove({
         fen,
-        time_limit: cfg.botStrength <= 3 ? 0.1 : cfg.botStrength <= 6 ? 0.2 : 0.35,
         depth: stockfishDepthForStrength(cfg.botStrength),
         stockfish_path: cfg.stockfishPath,
         threads: cfg.threads,
         hash_mb: cfg.hashMb,
+        engine_type: 'stockfish',
+        think_profile: cfg.thinkProfile,
+        time_remaining: timeRemaining ?? undefined,
+        time_increment: cfg.timeControl.increment ?? undefined,
+      }) as Promise<{ move: string | null }>;
+    } else if (cfg.playEngine === 'maia3') {
+      enginePromise = window.electronAPI.getEngineMove({
+        fen,
+        engine_type: 'maia3',
+        maia3_model: cfg.maia3Model,
+        maia3_device: cfg.maia3Device,
+        maia3_elo: cfg.maia3Elo,
+        think_profile: cfg.thinkProfile,
+        time_remaining: timeRemaining ?? undefined,
+        time_increment: cfg.timeControl.increment ?? undefined,
       }) as Promise<{ move: string | null }>;
     } else {
       enginePromise = window.electronAPI.getBotMove({
@@ -250,7 +326,7 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
   }
 
   // Get engine move - always try this as fallback
-  let reply: { move: string | null };
+  let reply: { move: string | null; _fallback_msg?: string };
   try {
     console.log('[AI] Requesting engine move', { engine: cfg.playEngine, fen });
     reply = await getEngineMoveSafe();
@@ -261,6 +337,8 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
 
   if (!reply || !reply.move) {
     console.warn('[AI] No move returned, using fallback');
+    const toast = useGameStore.getState().pushToast;
+    toast(`${requestedEngine === 'stockfish' ? 'Stockfish' : requestedEngine === 'maia3' ? 'Maia3' : 'Mentor'} failed — using fallback move`, 'error');
     // Fallback: return a legal move as last resort
     const legal = await window.electronAPI.getLegalMoves({ fen }) as { moves?: { uci: string }[] };
     const moves = legal?.moves;
@@ -275,12 +353,21 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
   }
   
   // Validate move is legal before pushing (critical!)
-  const legalMoves = await window.electronAPI.getLegalMoves({ fen }) as { moves: string[] };
-  if (!legalMoves.moves.includes(reply.move)) {
-    console.error('[AI] Illegal engine move:', reply.move, 'legal:', legalMoves.moves);
-    return null;
+  const legalMoves = await window.electronAPI.getLegalMoves({ fen }) as { moves: { uci: string }[] };
+  const legalUcis = (legalMoves.moves || []).map((m) => typeof m === 'string' ? m : m.uci);
+  if (!legalUcis.includes(reply.move)) {
+    console.error('[AI] Illegal engine move:', reply.move, 'legal:', legalUcis);
+    const fallbackMove = legalUcis[Math.floor(Math.random() * legalUcis.length)];
+    if (!fallbackMove) return null;
+    const result = await window.electronAPI.makeMove({ move: fallbackMove }) as BackendMoveResult;
+    useGameStore.getState().applyMoveResult(result);
+    return result;
   }
   
+  if (reply._fallback_msg) {
+    const toast = useGameStore.getState().pushToast;
+    toast(reply._fallback_msg, 'warning');
+  }
   console.log('[AI] Engine returned:', reply.move);
   const result = await window.electronAPI.makeMove({ move: reply.move }) as BackendMoveResult;
   useGameStore.getState().applyMoveResult(result);
@@ -311,6 +398,7 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
   const handleNewGame = async () => {
     // Stop any running AI loop / analysis before resetting
     aiLoopRef.current = false;
+    autoSaveRef.current = false;
     if (analysisDebounceRef.current) {
       clearTimeout(analysisDebounceRef.current);
       analysisDebounceRef.current = null;
@@ -330,6 +418,11 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
         human_color: resolvedColor,
         strength: settings.botStrength,
         stockfish_path: settings.stockfishPath,
+        maia3_path: settings.maia3Path,
+        maia3_model: settings.maia3Model,
+        maia3_device: settings.maia3Device,
+        maia3_elo: settings.maia3Elo,
+        think_profile: settings.thinkProfile,
         threads: settings.threads,
         hash_mb: settings.hashMb,
         multipv: settings.multipv,
@@ -352,16 +445,16 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
         aiLoopRef.current = true;
         void runAiVsAiLoop();
       } else if (setupMode === 'human_vs_ai' && result.turn !== resolvedColor) {
-        // Human chose black — AI (white) moves first
+        // Human chose black — AI (white) moves first.
+        // Show board immediately by firing AI async so UI stays responsive.
         store.setEngineBusy(true);
-        try {
-          const aiResult = await makeAiMove(result.fen);
+        makeAiMove(result.fen).then((aiResult) => {
           if (aiResult) {
             store.applyMoveResult(aiResult);
           }
-        } finally {
+        }).finally(() => {
           store.setEngineBusy(false);
-        }
+        });
       }
     } catch (err) {
       store.pushToast(`Failed to start game: ${err}`, 'error');
@@ -386,17 +479,21 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
       if (result.in_check) Sound.check();
       if (result.game_over && result.result && result.result !== '1/2-1/2') Sound.checkmate();
 
-      // In Human vs AI, trigger the engine reply immediately after the human move
+      // In Human vs AI, trigger the engine reply asynchronously so UI shows human move immediately
       if (!result.game_over && useGameStore.getState().mode === 'human_vs_ai') {
-        const aiResult = await makeAiMove(result.fen);
-        if (aiResult) {
-          store.applyMoveResult(aiResult);
-        }
+        makeAiMove(result.fen).then((aiResult) => {
+          if (aiResult) {
+            store.applyMoveResult(aiResult);
+          }
+        }).finally(() => {
+          store.setEngineBusy(false);
+        });
+      } else {
+        store.setEngineBusy(false);
       }
     } catch (err) {
       Sound.illegal();
       store.pushToast(`Move error: ${err}`, 'error');
-    } finally {
       store.setEngineBusy(false);
     }
   };
@@ -585,6 +682,59 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
     }
   };
 
+  const handleSaveGame = async () => {
+    try {
+      const res = await window.electronAPI.exportPgn() as { pgn: string };
+      const pgn = res.pgn ?? '';
+      if (!pgn) {
+        store.pushToast('No PGN to save yet', 'error');
+        return;
+      }
+      const resultMap: Record<string, string> = {
+        white_wins: '1-0',
+        black_wins: '0-1',
+        draw: '1/2-1/2',
+      };
+      const engineName = settings.playEngine === 'stockfish'
+        ? 'Stockfish'
+        : settings.playEngine === 'maia3'
+          ? 'Maia3'
+          : 'Mentor';
+      const whiteName = store.mode === 'human_vs_ai'
+        ? (store.humanColor === 'white' ? 'You' : engineName)
+        : store.mode === 'ai_vs_ai'
+          ? engineName
+          : 'White';
+      const blackName = store.mode === 'human_vs_ai'
+        ? (store.humanColor === 'black' ? 'You' : engineName)
+        : store.mode === 'ai_vs_ai'
+          ? engineName
+          : 'Black';
+      const mappedResult = store.gameResult ? resultMap[store.gameResult] : '*';
+      const saveRes = await window.electronAPI.saveGameHistory({
+        pgn,
+        meta: {
+          white: whiteName,
+          black: blackName,
+          result: mappedResult,
+          termination: store.termination,
+          moves: store.fullMoveHistoryUCI.length,
+          mode: store.mode,
+          engine: settings.playEngine,
+          time_control: settings.timeControl,
+          played_at: new Date().toISOString(),
+        },
+      });
+      if (saveRes.ok) {
+        store.pushToast('Game saved', 'success');
+      } else {
+        store.pushToast('Save failed', 'error');
+      }
+    } catch (err) {
+      store.pushToast(`Save failed: ${err}`, 'error');
+    }
+  };
+
   const handleExportFen = async () => {
     try {
       const res = await window.electronAPI.exportFen() as { fen: string };
@@ -616,18 +766,10 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
   };
 
   // ── Player card labels — adapt to current game mode ───────────────────────
-  const engineName = settings.playEngine === 'stockfish' ? 'Stockfish' : 'Mentor';
+  const engineName = settings.playEngine === 'stockfish' ? 'Stockfish' : settings.playEngine === 'maia3' ? 'Maia3' : 'Mentor';
   const engineElo = botEloForStrength(settings.botStrength, settings.playEngine);
 
-  let topName: string;
-  let topElo: number | undefined;
-  let topIsUser: boolean;
   let topThinking = false;
-  let bottomName: string;
-  let bottomIsUser: boolean;
-  let topActive: boolean;
-  let topTime: number | null;
-  let bottomTime: number | null;
 let showResignDraw: boolean;
 
   const flipped = store.flipped;
@@ -662,15 +804,15 @@ let showResignDraw: boolean;
   // When flipped, swap white and black card data
   const topCard = flipped ? whiteCard : blackCard;
   const bottomCard = flipped ? blackCard : whiteCard;
-  topName = topCard.name;
-  topElo = topCard.elo;
-  topIsUser = topCard.isUser;
-  topTime = topCard.time;
-  topActive = topCard.active;
+  const topName = topCard.name;
+  const topElo = topCard.elo;
+  const topIsUser = topCard.isUser;
+  const topTime = topCard.time;
+  const topActive = topCard.active;
 
-bottomName = bottomCard.name;
-  bottomIsUser = bottomCard.isUser;
-  bottomTime = bottomCard.time;
+  const bottomName = bottomCard.name;
+  const bottomIsUser = bottomCard.isUser;
+  const bottomTime = bottomCard.time;
 
   return (
     <div className="flex flex-col gap-2 w-full">
@@ -747,6 +889,13 @@ bottomName = bottomCard.name;
                        hover:border-accent hover:text-accent active:scale-95 transition-all"
           >
             Copy PGN
+          </button>
+          <button
+            onClick={handleSaveGame}
+            className="flex-1 py-1.5 border border-surface2 rounded text-xs text-muted font-sans
+                       hover:border-accent hover:text-accent active:scale-95 transition-all"
+          >
+            Save Game
           </button>
           <button
             onClick={handleExportFen}

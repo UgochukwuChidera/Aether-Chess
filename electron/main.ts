@@ -12,6 +12,19 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
 
+type GameHistoryMeta = {
+  white: string;
+  black: string;
+  result: string;
+  termination: string | null;
+  moves: number;
+  mode: string;
+  engine: string;
+  time_control?: { seconds: number; increment: number; label: string };
+  played_at: string;
+  tags?: string[];
+};
+
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 const EXECUTABLE_PERMISSION_MASK = 0o111;
 
@@ -175,8 +188,10 @@ function startPython(mainWindow: BrowserWindow): void {
 const LONG_RUNNING_COMMANDS = new Set([
   'calculate_accuracy',
   'calculate_accuracy_from_history',
+  'calculate_accuracy_from_pgn',
   'get_engine_move',
   'get_bot_move',
+  'maia3_cache',
 ]);
 
 function sendCommand(
@@ -307,6 +322,7 @@ const CHESS_COMMANDS = [
   'export_fen',
   'calculate_accuracy',
   'calculate_accuracy_from_history',
+  'calculate_accuracy_from_pgn',
   'estimate_elo',
   'get_book_moves',
   'stop_analysis',
@@ -328,6 +344,72 @@ ipcMain.handle(
 
 // Settings persistence
 const settingsPath = path.join(app.getPath('userData'), 'settings.json');
+
+function ensureDirSync(dirPath: string): void {
+  if (!fs.existsSync(dirPath)) {
+    fs.mkdirSync(dirPath, { recursive: true });
+  }
+}
+
+function getHistoryDir(): string {
+  return path.join(app.getPath('userData'), 'games');
+}
+
+function getHistoryIndexPath(): string {
+  return path.join(getHistoryDir(), 'index.json');
+}
+
+function loadGameIndex(): {
+  version: number;
+  max_entries: number;
+  games: Array<{
+    id: string;
+    pgn_file: string;
+    meta: GameHistoryMeta;
+  }>;
+} {
+  const indexPath = getHistoryIndexPath();
+  if (!fs.existsSync(indexPath)) {
+    return { version: 1, max_entries: 1000, games: [] };
+  }
+  try {
+    const raw = JSON.parse(fs.readFileSync(indexPath, 'utf-8')) as {
+      version?: number;
+      max_entries?: number;
+      games?: Array<{ id: string; pgn_file: string; meta: GameHistoryMeta & { time_control?: { seconds: number; increment: number; label: string } } }>;
+    };
+    return {
+      version: raw.version ?? 1,
+      max_entries: raw.max_entries ?? 1000,
+      games: (raw.games ?? []).map((g) => ({
+        ...g,
+        meta: { ...g.meta, tags: g.meta?.tags ?? [] },
+      })),
+    };
+  } catch {
+    return { version: 1, max_entries: 1000, games: [] };
+  }
+}
+
+function saveGameIndex(data: { version: number; max_entries: number; games: Array<{ id: string; pgn_file: string; meta: GameHistoryMeta }> }): void {
+  const indexPath = getHistoryIndexPath();
+  fs.writeFileSync(indexPath, JSON.stringify(data, null, 2), 'utf-8');
+}
+
+function pruneGameIndex(data: { max_entries: number; games: Array<{ id: string; pgn_file: string }> }): void {
+  const overflow = data.games.length - data.max_entries;
+  if (overflow <= 0) return;
+  const toRemove = data.games.slice(0, overflow);
+  for (const entry of toRemove) {
+    const filePath = path.join(getHistoryDir(), entry.pgn_file);
+    try {
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    } catch {
+      /* ignore */
+    }
+  }
+  data.games.splice(0, overflow);
+}
 
 ipcMain.handle('settings-load', () => {
   try {
@@ -403,6 +485,14 @@ ipcMain.handle('open-external-url', async (_event, url: string) => {
   return true;
 });
 
+ipcMain.handle('maia3-cache', async (_event, params: { model?: string; cache_dir?: string; force_download?: boolean; hf_token?: string }) => {
+  return sendCommand('maia3_cache', params ?? {});
+});
+
+ipcMain.handle('check-maia3-cache', async (_event, params: { model?: string }) => {
+  return sendCommand('check_maia3_cache', params ?? {});
+});
+
 // Books directory for opening explorer
 ipcMain.handle('get-books-dir', async () => {
   // Open folder picker dialog
@@ -424,3 +514,85 @@ ipcMain.handle('reveal-in-folder', (_event, filePath: string) => {
 
 // System info
 ipcMain.handle('get-cpu-count', () => os.cpus().length);
+
+// Game history persistence (index.json + per-game PGN file)
+ipcMain.handle('save-game-history', (_event, params: { pgn?: string; meta?: GameHistoryMeta }) => {
+  const pgn = typeof params?.pgn === 'string' ? params.pgn.trim() : '';
+  const meta = params?.meta;
+  if (!pgn || !meta) return { ok: false };
+
+  const historyDir = getHistoryDir();
+  ensureDirSync(historyDir);
+
+  const index = loadGameIndex();
+  const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const pgnFile = `${id}.pgn`;
+  const pgnPath = path.join(historyDir, pgnFile);
+
+  fs.writeFileSync(pgnPath, pgn, 'utf-8');
+
+  index.games.push({ id, pgn_file: pgnFile, meta });
+  pruneGameIndex(index);
+  saveGameIndex(index);
+
+  return { ok: true, path: pgnPath };
+});
+
+ipcMain.handle('list-game-history', () => {
+  const historyDir = getHistoryDir();
+  ensureDirSync(historyDir);
+  return loadGameIndex();
+});
+
+ipcMain.handle('load-game-pgn', (_event, params: { id?: string }) => {
+  const id = typeof params?.id === 'string' ? params.id : '';
+  if (!id) return { pgn: '' };
+  const index = loadGameIndex();
+  const entry = index.games.find((g) => g.id === id);
+  if (!entry) return { pgn: '' };
+  const pgnPath = path.join(getHistoryDir(), entry.pgn_file);
+  if (!fs.existsSync(pgnPath)) return { pgn: '' };
+  return { pgn: fs.readFileSync(pgnPath, 'utf-8') };
+});
+
+ipcMain.handle('get-game-file-path', (_event, params: { id?: string }) => {
+  const id = typeof params?.id === 'string' ? params.id : '';
+  if (!id) return { path: undefined };
+  const index = loadGameIndex();
+  const entry = index.games.find((g) => g.id === id);
+  if (!entry) return { path: undefined };
+  const pgnPath = path.join(getHistoryDir(), entry.pgn_file);
+  if (!fs.existsSync(pgnPath)) return { path: undefined };
+  return { path: pgnPath };
+});
+
+ipcMain.handle('delete-game-history', (_event, params: { id?: string }) => {
+  const id = typeof params?.id === 'string' ? params.id : '';
+  if (!id) return { ok: false };
+  const index = loadGameIndex();
+  const next = index.games.filter((g) => g.id !== id);
+  const removed = index.games.find((g) => g.id === id);
+  if (removed) {
+    const pgnPath = path.join(getHistoryDir(), removed.pgn_file);
+    try {
+      if (fs.existsSync(pgnPath)) fs.unlinkSync(pgnPath);
+    } catch {
+      /* ignore */
+    }
+  }
+  index.games = next;
+  saveGameIndex(index);
+  return { ok: true };
+});
+
+ipcMain.handle('update-game-tags', (_event, params: { id?: string; tags?: string[] }) => {
+  const id = typeof params?.id === 'string' ? params.id : '';
+  const tags = Array.isArray(params?.tags) ? params?.tags.filter((t) => typeof t === 'string') : [];
+  if (!id) return { ok: false };
+  const index = loadGameIndex();
+  const entry = index.games.find((g) => g.id === id);
+  if (!entry) return { ok: false };
+  entry.meta.tags = tags;
+  saveGameIndex(index);
+  return { ok: true };
+});

@@ -30,3 +30,7 @@ Thumbs.db
 # Secrets / local config
 .env
 *.local
+
+# Local data
+inspiration/
+model_cache/

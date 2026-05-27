@@ -44,14 +44,22 @@ interface Props {
   arrows?: Arrow[];
   onArrowsChange?: (arrows: Arrow[]) => void;
   onMarksChange?: (marks: SquareMark[]) => void;
+  showArrowsFromAnalysis?: boolean;
+  analysisPV?: string[];
+  analysisAltPVs?: string[][];
+  showThreatPV?: string[];
 }
 
-export const Board: React.FC<Props> = ({
+export const Board: React.FC<React.PropsWithChildren<Props>> = ({
     onSquareClick,
     onDropMove,
     arrows = [],
     onArrowsChange,
     onMarksChange,
+    showArrowsFromAnalysis = false,
+    analysisPV = [],
+    analysisAltPVs = [],
+    showThreatPV = [],
   }) => {
   const {
     fen,
@@ -328,6 +336,10 @@ export const Board: React.FC<Props> = ({
         arrows={arrows}
         onArrowsChange={onArrowsChange}
         onMarksChange={onMarksChange}
+        showArrowsFromAnalysis={showArrowsFromAnalysis}
+        analysisPV={analysisPV}
+        analysisAltPVs={analysisAltPVs}
+        showThreatPV={showThreatPV}
       />
     </div>
   );

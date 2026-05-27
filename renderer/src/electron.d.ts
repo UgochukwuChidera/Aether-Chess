@@ -13,7 +13,22 @@ declare global {
       isMaximized: () => Promise<boolean>;
 
       // Chess commands
-      newGame: (params: Record<string, unknown>) => Promise<unknown>;
+      newGame: (params: {
+        mode?: string;
+        engine_type?: string;
+        human_color?: string;
+        strength?: number;
+        stockfish_path?: string;
+        maia3_path?: string;
+        maia3_model?: string;
+        maia3_device?: 'cpu' | 'cuda';
+        maia3_elo?: number;
+        think_profile?: string;
+        threads?: number;
+        hash_mb?: number;
+        multipv?: number;
+        time_control?: Record<string, unknown>;
+      }) => Promise<unknown>;
       makeMove: (params: { move: string }) => Promise<unknown>;
       getLegalMoves: (params: { fen: string }) => Promise<unknown>;
       undoMove: () => Promise<unknown>;
@@ -25,6 +40,14 @@ declare global {
         stockfish_path?: string;
         threads?: number;
         hash_mb?: number;
+        engine_type?: 'stockfish' | 'mentor' | 'maia3';
+        maia3_path?: string;
+        maia3_model?: string;
+        maia3_device?: 'cpu' | 'cuda';
+        maia3_elo?: number;
+        think_profile?: string;
+        time_remaining?: number;
+        time_increment?: number;
       }) => Promise<unknown>;
       getBotMove: (params: {
         fen: string;
@@ -44,9 +67,20 @@ declare global {
       importPgn: (params: { pgn: string }) => Promise<unknown>;
       exportFen: () => Promise<unknown>;
       calculateAccuracy: (params: { fen_list: string[]; moves: string[] }) => Promise<unknown>;
-      calculateAccuracyFromHistory: (params: { stockfish_path?: string }) => Promise<unknown>;
+      calculateAccuracyFromHistory: (params: {
+        stockfish_path?: string;
+        engine_type?: 'stockfish' | 'mentor' | 'maia3';
+      }) => Promise<unknown>;
+      calculateAccuracyFromPgn: (params: { pgn: string; stockfish_path?: string }) => Promise<unknown>;
       estimateElo: (params: { accuracy: number; blunder_rate: number; avg_cp_loss?: number }) => Promise<unknown>;
       getBookMoves: (params: { fen: string }) => Promise<unknown>;
+      maia3Cache: (params: {
+        model?: string;
+        cache_dir?: string;
+        force_download?: boolean;
+        hf_token?: string;
+      }) => Promise<unknown>;
+      checkMaia3Cache: (params: { model?: string }) => Promise<{ cached: boolean; model: string }>;
 
       // Analysis streaming
       startAnalysis: (params: {
@@ -56,6 +90,9 @@ declare global {
         stockfish_path?: string;
         threads?: number;
         hash_mb?: number;
+        engine_type?: 'stockfish' | 'mentor' | 'maia3';
+        maia3_model?: string;
+        maia3_device?: 'cpu' | 'cuda';
       }) => Promise<unknown>;
       stopAnalysis: () => Promise<unknown>;
       onAnalysisUpdate: (callback: (data: unknown) => void) => void;
@@ -82,6 +119,44 @@ declare global {
       getBooksDir: () => Promise<string>;
       revealInFolder: (filePath: string) => Promise<boolean>;
       getCpuCount: () => Promise<number>;
+      saveGameHistory: (params: {
+        pgn: string;
+        meta: {
+          white: string;
+          black: string;
+          result: string;
+          termination: string | null;
+          moves: number;
+          mode: string;
+          engine: string;
+          time_control?: { seconds: number; increment: number; label: string };
+          played_at: string;
+        };
+      }) => Promise<{ ok: boolean; path?: string }>;
+      listGameHistory: () => Promise<{
+        version: number;
+        max_entries: number;
+        games: Array<{
+          id: string;
+          pgn_file: string;
+          meta: {
+            white: string;
+            black: string;
+            result: string;
+            termination: string | null;
+            moves: number;
+            mode: string;
+            engine: string;
+            played_at: string;
+            time_control?: { seconds: number; increment: number; label: string };
+            tags?: string[];
+          };
+        }>;
+      }>;
+      loadGamePgn: (params: { id: string }) => Promise<{ pgn: string }>;
+      getGameFilePath: (params: { id: string }) => Promise<{ path?: string }>;
+      deleteGameHistory: (params: { id: string }) => Promise<{ ok: boolean }>;
+      updateGameTags: (params: { id: string; tags: string[] }) => Promise<{ ok: boolean }>;
     };
   }
 }

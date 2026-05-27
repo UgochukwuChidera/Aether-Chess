@@ -8,6 +8,8 @@ from typing import Any, Dict, Optional, Union
 
 import chess
 import chess.engine
+import random
+from aether_chess.engines.mentor_engine import MentorEngine, SearchConfig
 
 
 class MentorBotAdapter:
@@ -98,25 +100,21 @@ class MentorBotAdapter:
             time_increment=time_increment,
             total_moves=total_moves,
         )
-        with self._uci_lock:
-            engine = self._ensure_uci(stockfish_path)
-            self._configure_engine(
-                engine,
-                skill_level=int(profile["skill_level"]),
-                threads=threads,
-                hash_mb=hash_mb,
-            )
-            result = engine.play(
-                board,
-                chess.engine.Limit(
-                    time=float(profile["time_limit"]),
-                    depth=int(profile["depth"]),
-                ),
-            )
-        move: Optional[chess.Move] = result.move
+        # Use MentorEngine (pure Python AI) for move generation
+        mentor = MentorEngine()
+        # Configure search depth based on strength (similar scaling as earlier)
+        level = max(1, min(10, int(strength)))
+        mentor.config = SearchConfig(
+            max_depth=4 + level * 2,  # 6-24 plies
+            max_nodes=200_000 + level * 200_000,
+            time_limit_sec=0.3 + level * 0.2,
+            difficulty=min(1.0, 0.5 + level * 0.05),
+            tt_max_entries=200_000 + level * 50_000,
+            threads=1,
+        )
+        move = mentor.search(board)
         if move is None:
-            return {"move": None, "san": None}
-        return {
-            "move": move.uci(),
-            "san": board.san(move),
-        }
+            # Fallback: random legal move
+            move = random.choice(list(board.legal_moves))
+        return {"move": move.uci(), "san": board.san(move)}
+

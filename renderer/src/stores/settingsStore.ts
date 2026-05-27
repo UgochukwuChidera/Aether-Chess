@@ -8,7 +8,7 @@ import type { BoardStyle, PieceSet } from '../config/pieceConfig';
 export type { BoardStyle, PieceSet } from '../config/pieceConfig';
 
 export type Theme = 'dark' | 'light' | 'high-contrast';
-export type PlayEngine = 'mentor' | 'stockfish';
+export type PlayEngine = 'mentor' | 'stockfish' | 'maia3';
 
 // ── Memory/engine hard limits ────────────────────────────────────────────────
 /** Maximum transposition-table size that can be saved through the settings. */
@@ -40,6 +40,11 @@ export interface AppSettings {
   // Engine
   playEngine: PlayEngine;
   stockfishPath: string;
+  maia3Path: string;
+  maia3Model: string;
+  maia3Device: 'cpu' | 'cuda';
+  maia3Elo: number;
+  thinkProfile: string;
   threads: number;
   hashMb: number;
   multipv: number;
@@ -63,6 +68,7 @@ export interface AppSettings {
   showAnalysisTopAlternatives: boolean;
   // Data
   clearHistoryOnNewGame: boolean;
+  autoSaveGameHistory: boolean;
 }
 
 interface SettingsStore extends AppSettings {
@@ -79,6 +85,11 @@ const DEFAULTS: AppSettings = {
   animationSpeed: 'normal',
   playEngine: 'stockfish',
   stockfishPath: 'stockfish',
+  maia3Path: '',
+  maia3Model: 'maia3-5m',
+  maia3Device: 'cpu',
+  maia3Elo: 1500,
+  thinkProfile: 'human_like',
   threads: 1,
   hashMb: 128,  // Lower default to avoid allocation failures
   multipv: 3,
@@ -97,6 +108,7 @@ const DEFAULTS: AppSettings = {
   showAnalysisTopMoves: true,
   showAnalysisTopAlternatives: true,
   clearHistoryOnNewGame: false,
+  autoSaveGameHistory: true,
 };
 
 export const useSettingsStore = create<SettingsStore>((set, get) => ({

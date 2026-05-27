@@ -63,14 +63,15 @@ export const AnalysisView: React.FC = () => {
     runningRef.current = true;
     store.setAnalysis({ running: true });
     try {
-      await window.electronAPI.startAnalysis({
-        fen: store.fen,
-        multipv: settings.multipv,
-        callback_id: ANALYSIS_CB_ID,
-        stockfish_path: settings.stockfishPath,
-        threads: settings.threads,
-        hash_mb: settings.hashMb,
-      });
+    await window.electronAPI.startAnalysis({
+      fen: store.fen,
+      multipv: settings.multipv,
+      callback_id: ANALYSIS_CB_ID,
+      stockfish_path: settings.stockfishPath,
+      engine_type: settings.playEngine === 'maia3' ? 'stockfish' : settings.playEngine,
+      threads: settings.threads,
+      hash_mb: settings.hashMb,
+    });
     } catch (err) {
       store.pushToast(`Analysis failed: ${err}`, 'error');
       store.setAnalysis({ running: false });
@@ -186,10 +187,10 @@ export const AnalysisView: React.FC = () => {
       {settings.showEvalBar && <EvalBar />}
       <Board
         onSquareClick={() => {}}
-        showAnalysisArrows={true}
+        showArrowsFromAnalysis={true}
         analysisPV={store.analysis.pvs[0]?.pv ?? []}
         analysisAltPVs={store.analysis.pvs.slice(1).map((p) => p.pv)}
-        threatPV={store.analysis.pvs[0]?.pv?.slice(1, 5) ?? []}
+        showThreatPV={store.analysis.pvs[0]?.pv?.slice(1, 5) ?? []}
       />
       <MoveHistory
         onMoveClick={handleNavigate}

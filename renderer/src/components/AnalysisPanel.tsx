@@ -4,7 +4,7 @@
  * accuracy progression chart, and Glicko-based Elo estimate.
  */
 import React, { useEffect, useRef } from 'react';
-import { useGameStore, type PVLine, type AccuracyMoveResult } from '../stores/gameStore';
+import { useGameStore, type PVLine } from '../stores/gameStore';
 import { useSettingsStore } from '../stores/settingsStore';
 
 const CLASSIFICATION_COLORS: Record<string, string> = {
@@ -208,7 +208,7 @@ const AccuracyProgressionChart: React.FC<{ classified: { san: string; color: str
       const x = 10 + i * stepX;
       const loss = m.cp_loss ?? 0;
       const y = 10 + ((maxLoss - loss) / maxLoss) * (H - 20);
-      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      if (i === 0) { ctx.moveTo(x, y); } else { ctx.lineTo(x, y); }
     });
     ctx.stroke();
     ctx.fillStyle = '#A3E635';

@@ -43,9 +43,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('calculate_accuracy', params),
   calculateAccuracyFromHistory: (params: { stockfish_path?: string }) =>
     ipcRenderer.invoke('calculate_accuracy_from_history', params),
+  calculateAccuracyFromPgn: (params: { pgn: string; stockfish_path?: string }) =>
+    ipcRenderer.invoke('calculate_accuracy_from_pgn', params),
   estimateElo: (params: { accuracy: number; blunder_rate: number }) =>
     ipcRenderer.invoke('estimate_elo', params),
   getBookMoves: (params: { fen: string }) => ipcRenderer.invoke('get_book_moves', params),
+  maia3Cache: (params: { model?: string; cache_dir?: string; force_download?: boolean; hf_token?: string }) =>
+    ipcRenderer.invoke('maia3-cache', params),
+  checkMaia3Cache: (params: { model?: string }) =>
+    ipcRenderer.invoke('check-maia3-cache', params),
 
   // ── Analysis streaming ───────────────────────────────────────────────────
   startAnalysis: (params: {
@@ -84,4 +90,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getBooksDir: () => ipcRenderer.invoke('get-books-dir'),
   revealInFolder: (filePath: string) => ipcRenderer.invoke('reveal-in-folder', filePath),
   getCpuCount: () => ipcRenderer.invoke('get-cpu-count'),
+  saveGameHistory: (params: {
+    pgn: string;
+    meta: {
+      white: string;
+      black: string;
+      result: string;
+      termination: string | null;
+      moves: number;
+      mode: string;
+      engine: string;
+      time_control?: { seconds: number; increment: number; label: string };
+      played_at: string;
+    };
+  }) => ipcRenderer.invoke('save-game-history', params),
+  listGameHistory: () => ipcRenderer.invoke('list-game-history'),
+  loadGamePgn: (params: { id: string }) => ipcRenderer.invoke('load-game-pgn', params),
+  getGameFilePath: (params: { id: string }) => ipcRenderer.invoke('get-game-file-path', params),
+  deleteGameHistory: (params: { id: string }) => ipcRenderer.invoke('delete-game-history', params),
+  updateGameTags: (params: { id: string; tags: string[] }) => ipcRenderer.invoke('update-game-tags', params),
 });

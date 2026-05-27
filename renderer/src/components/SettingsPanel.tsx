@@ -10,6 +10,7 @@ import {
   type PlayEngine,
   type AnimationSpeed,
 } from '../stores/settingsStore';
+import { useGameStore } from '../stores/gameStore';
 import { BOARD_STYLES, PIECE_SETS, type BoardStyle, type PieceSet } from '../config/pieceConfig';
 
 interface SectionProps {
@@ -69,11 +70,20 @@ export const SettingsPanel: React.FC = () => {
   } | null>(null);
   const [bookMoves, setBookMoves] = useState(0);
   const [loadingBook, setLoadingBook] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [modelCached, setModelCached] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     window.electronAPI.getCpuCount().then(setCpuCount);
     window.electronAPI.getStockfishInfo().then(setStockfishInfo).catch(() => {});
   }, []);
+
+  // Check cache status whenever the selected model changes
+  useEffect(() => {
+    window.electronAPI.checkMaia3Cache({ model: settings.maia3Model })
+      .then((res) => setModelCached((prev) => ({ ...prev, [res.model]: res.cached })))
+      .catch(() => {});
+  }, [settings.maia3Model]);
 
   // Load book moves count when opening book path changes
   useEffect(() => {
@@ -194,7 +204,7 @@ export const SettingsPanel: React.FC = () => {
       <Section title="Engine" icon="memory">
         <Row 
           label="Play engine" 
-          tooltip="Mentor plays like human mistakes. Stockfish is pure engine."
+          tooltip="Mentor = custom bot. Stockfish = classic engine. Maia3 = neural model."
         >
           <select
             className={selectClass}
@@ -203,6 +213,7 @@ export const SettingsPanel: React.FC = () => {
           >
             <option value="mentor">Mentor (your bot)</option>
             <option value="stockfish">Stockfish</option>
+            <option value="maia3">Maia3 (neural)</option>
           </select>
         </Row>
         {settings.playEngine === 'mentor' && (
@@ -250,13 +261,45 @@ export const SettingsPanel: React.FC = () => {
         )}
         {!stockfishInfo?.bundledExists && (
           <Row label="Download Stockfish">
-            <button
-              onClick={() => window.electronAPI.openExternalUrl('https://stockfishchess.org/download/')}
-              className="px-2 py-1 border border-surface2 rounded text-xs text-muted
-                         hover:border-accent hover:text-accent transition-colors"
-            >
-              Open official download page
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => window.electronAPI.openExternalUrl('https://stockfishchess.org/download/')}
+                className="px-2 py-1 border border-surface2 rounded text-xs text-muted
+                           hover:border-accent hover:text-accent transition-colors"
+              >
+                Open official download page
+              </button>
+              <button
+                onClick={() => window.electronAPI.openExternalUrl('https://stockfishchess.org/download/')}
+                className="px-2 py-1 border border-surface2 rounded text-xs text-muted
+                           hover:border-accent hover:text-accent transition-colors"
+              >
+                One-click download (coming soon)
+              </button>
+            </div>
+          </Row>
+        )}
+        {settings.playEngine === 'maia3' && (
+          <Row label="Maia3 path" tooltip="Optional: custom maia3-uci executable path">
+            <div className="flex items-center gap-1">
+              <span className="text-xs font-mono text-muted truncate max-w-[120px]" title={settings.maia3Path}>
+                {settings.maia3Path ? settings.maia3Path.split(/[\\/]/).pop() : 'python -m maia3.uci'}
+              </span>
+              <button
+                onClick={async () => {
+                  try {
+                    const p = await window.electronAPI.pickStockfishPath();
+                    if (p) settings.update({ maia3Path: p });
+                  } catch (err) {
+                    console.error('Failed to pick Maia3 path:', err);
+                  }
+                }}
+                className="px-2 py-1 border border-surface2 rounded text-xs text-muted
+                           hover:border-accent hover:text-accent transition-colors"
+              >
+                Browse
+              </button>
+            </div>
           </Row>
         )}
         <Row label={`Threads (1–${cpuCount})`} tooltip="CPU threads for Stockfish. More = faster but more CPU usage.">
@@ -309,6 +352,93 @@ export const SettingsPanel: React.FC = () => {
             className="w-28 accent-[#A3E635]"
           />
           <span className="text-xs font-mono text-muted w-5 text-right">{settings.botStrength}</span>
+        </Row>
+        {settings.playEngine === 'maia3' && (
+          <>
+            <Row label="Maia3 model" tooltip="Pretrained model size/strength">
+              <select
+                className={selectClass}
+                value={settings.maia3Model}
+                onChange={(e) => settings.update({ maia3Model: e.target.value })}
+              >
+                {['maia3-5m', 'maia3-23m', 'maia3-79m'].map((v) => (
+                  <option key={v} value={v}>{v}</option>
+                ))}
+              </select>
+            </Row>
+            <Row label="Maia3 device" tooltip="CPU is slower but no GPU required">
+              <select
+                className={selectClass}
+                value={settings.maia3Device}
+                onChange={(e) => settings.update({ maia3Device: e.target.value as 'cpu' | 'cuda' })}
+              >
+                <option value="cpu">CPU</option>
+                <option value="cuda">CUDA</option>
+              </select>
+            </Row>
+            <Row label="Maia3 cache" tooltip="Download model weights to project_dir/model_cache/ (check console for progress)">
+              <div className="flex items-center gap-2">
+              <button
+                disabled={downloading}
+                onClick={async () => {
+                  setDownloading(true);
+                  const toast = useGameStore.getState().pushToast;
+                  toast(`Downloading ${settings.maia3Model}...`, 'info');
+                  try {
+                    const result = await Promise.race([
+                      window.electronAPI.maia3Cache({ model: settings.maia3Model }),
+                      new Promise<never>((_, reject) =>
+                        setTimeout(() => reject(new Error('Download timed out after 5 min')), 300_000)
+                      ),
+                    ]) as { ok?: boolean };
+                    if (result?.ok) {
+                      setModelCached((prev) => ({ ...prev, [settings.maia3Model]: true }));
+                      toast(`Downloaded ${settings.maia3Model} successfully`, 'success');
+                    }
+                  } catch (err) {
+                    const msg = err instanceof Error ? err.message : String(err);
+                    toast(`Download failed: ${msg}`, 'error');
+                    console.error('Failed to cache Maia3 model:', err);
+                  } finally {
+                    setDownloading(false);
+                  }
+                }}
+                className={`px-2 py-1 border rounded text-xs transition-colors ${
+                  downloading
+                    ? 'border-accent text-accent bg-accent/10 cursor-wait'
+                    : 'border-surface2 text-muted hover:border-accent hover:text-accent'
+                }`}
+              >
+                {downloading
+                  ? `Downloading ${settings.maia3Model}...`
+                  : modelCached[settings.maia3Model]
+                    ? `Cached ${settings.maia3Model}`
+                    : `Download ${settings.maia3Model}`}
+              </button>
+              </div>
+            </Row>
+            <Row label="Elo rating" tooltip="Maia3 skill level from 0 (weak) to 5000 (strong). Default 1500.">
+              <input
+                type="range" min={0} max={3000} step={100}
+                value={settings.maia3Elo}
+                onChange={(e) => settings.update({ maia3Elo: Number(e.target.value) })}
+                className="w-28 accent-[#A3E635]"
+              />
+              <span className="text-xs font-mono text-muted w-10 text-right">{settings.maia3Elo}</span>
+            </Row>
+          </>
+        )}
+        <Row label="Think profile" tooltip="Controls move-to-move think-time distribution. Budget-aware — won't exceed clock.">
+          <select
+            className={selectClass}
+            value={settings.thinkProfile}
+            onChange={(e) => settings.update({ thinkProfile: e.target.value })}
+          >
+            <option value="blitz">Blitz (fast, 1-8s)</option>
+            <option value="rapid">Rapid (balanced, 2-15s)</option>
+            <option value="classical">Classical (deep, 5-120s)</option>
+            <option value="human_like">Human-like (natural varied)</option>
+          </select>
         </Row>
       </Section>
 
@@ -452,6 +582,14 @@ export const SettingsPanel: React.FC = () => {
 
       {/* ── Data & Privacy ──────────────────────────────────────────────── */}
       <Section title="Data & Privacy" icon="folder">
+        <Row label="Auto-save games" tooltip="Save completed games to history automatically as PGN + metadata.">
+          <input
+            type="checkbox"
+            checked={settings.autoSaveGameHistory}
+            onChange={(e) => settings.update({ autoSaveGameHistory: e.target.checked })}
+            className="accent-[#A3E635] w-4 h-4"
+          />
+        </Row>
         <p className="text-[11px] text-muted break-all">Settings file: {stockfishInfo?.settingsPath ?? 'loading...'}</p>
         <div className="flex gap-2">
           <button

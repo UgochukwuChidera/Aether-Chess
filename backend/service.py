@@ -42,9 +42,11 @@ import json
 import sys
 import threading
 import traceback
+import io
 from typing import Any, Dict
 
 import chess
+import chess.pgn
 
 # Import domain modules (same package when running from source; bundled by
 # PyInstaller they are included via hidden-imports in the .spec file).
@@ -96,6 +98,11 @@ def handle_new_game(params: Dict[str, Any]) -> Any:
     strength = int(params.get("strength", 7))
     time_control = params.get("time_control", None)  # {"seconds": int, "increment": int}
     stockfish_path = params.get("stockfish_path")
+    maia3_path = params.get("maia3_path")
+    maia3_model = params.get("maia3_model")
+    maia3_device = params.get("maia3_device")
+    maia3_elo = params.get("maia3_elo")
+    think_profile = params.get("think_profile")
     threads = params.get("threads")
     hash_mb = params.get("hash_mb")
     multipv = params.get("multipv")
@@ -107,6 +114,11 @@ def handle_new_game(params: Dict[str, Any]) -> Any:
         strength=strength,
         time_control=time_control,
         stockfish_path=stockfish_path,
+        maia3_path=maia3_path,
+        maia3_model=maia3_model,
+        maia3_device=maia3_device,
+        maia3_elo=maia3_elo,
+        think_profile=think_profile,
         threads=threads,
         hash_mb=hash_mb,
         multipv=multipv,
@@ -157,6 +169,14 @@ def handle_get_engine_move(params: Dict[str, Any]) -> Any:
     stockfish_path = params.get("stockfish_path")
     threads = params.get("threads")
     hash_mb = params.get("hash_mb")
+    engine_type = params.get("engine_type")
+    maia3_path = params.get("maia3_path")
+    maia3_model = params.get("maia3_model")
+    maia3_device = params.get("maia3_device")
+    maia3_elo = params.get("maia3_elo")
+    think_profile = params.get("think_profile")
+    time_remaining = params.get("time_remaining")
+    time_increment = params.get("time_increment")
     return engine_mgr.get_engine_move(
         fen,
         time_limit=time_limit,
@@ -164,6 +184,14 @@ def handle_get_engine_move(params: Dict[str, Any]) -> Any:
         stockfish_path=stockfish_path,
         threads=threads,
         hash_mb=hash_mb,
+        engine_type=engine_type,
+        maia3_path=maia3_path,
+        maia3_model=maia3_model,
+        maia3_device=maia3_device,
+        maia3_elo=maia3_elo,
+        think_profile=think_profile,
+        time_remaining=time_remaining,
+        time_increment=time_increment,
     )
 
 
@@ -188,6 +216,68 @@ def handle_get_bot_move(params: Dict[str, Any]) -> Any:
     )
 
 
+def handle_check_maia3_cache(params: Dict[str, Any]) -> Any:
+    import os
+
+    model = params.get("model", "maia3-5m")
+    hf_home = os.environ.get("HF_HOME", os.path.expanduser("~/.cache/huggingface"))
+    hub_dir = os.path.join(hf_home, "hub")
+
+    # Map model alias to HF repo ID
+    repo_map = {
+        "maia3-5m": "models--UofTCSSLab--Maia3-5M",
+        "maia3-23m": "models--UofTCSSLab--Maia3-23M",
+        "maia3-79m": "models--UofTCSSLab--Maia3-79M",
+    }
+    repo_dir = repo_map.get(model)
+    if repo_dir:
+        model_path = os.path.join(hub_dir, repo_dir, "snapshots")
+        cached = os.path.isdir(model_path) and bool(os.listdir(model_path))
+    else:
+        cached = False
+
+    return {"cached": cached, "model": model}
+
+
+def handle_maia3_cache(params: Dict[str, Any]) -> Any:
+    import contextlib
+    import io
+    import os
+
+    model = params.get("model", "maia3-5m")
+    cache_dir = params.get("cache_dir")
+    force_download = bool(params.get("force_download", False))
+    token = params.get("hf_token")
+    try:
+        import maia3
+        from maia3.cache import main as maia3_cache
+    except Exception as exc:
+        raise RuntimeError(f"Maia3 is not installed in this environment. Run: python -m pip install -e .\\inspiration [{exc}]") from exc
+
+    args = ["--model", str(model)]
+    if cache_dir:
+        args += ["--cache-dir", str(cache_dir)]
+    if force_download:
+        args += ["--force-download"]
+    if token:
+        args += ["--hf-token", str(token)]
+
+    # Suppress stdout (cache.py prints "Maia3 5M: /path" which breaks JSON protocol)
+    # and filter stderr noise (symlink warnings, image.png errors),
+    # but let tqdm progress bars (lines with %) show through.
+    with contextlib.redirect_stdout(io.StringIO()):
+        with contextlib.redirect_stderr(io.StringIO()) as err_buf:
+            try:
+                maia3_cache(args)
+            except SystemExit:
+                pass
+    for line in err_buf.getvalue().splitlines():
+        if "%" in line:
+            print(line, file=sys.stderr)
+
+    return {"ok": True, "model": model}
+
+
 def handle_export_pgn(_params: Dict[str, Any]) -> Any:
     return {"pgn": engine_mgr.export_pgn()}
 
@@ -195,11 +285,9 @@ def handle_export_pgn(_params: Dict[str, Any]) -> Any:
 def handle_import_pgn(params: Dict[str, Any]) -> Any:
     pgn_text = str(params["pgn"])
     engine_mgr.import_pgn(pgn_text)
-    return {
-        "fen": engine_mgr.fen(),
-        "turn": "white" if engine_mgr.board.turn == chess.WHITE else "black",
-        "move_history": engine_mgr.move_history_san(),
-    }
+    san_history = engine_mgr.move_history_san()
+    last_san = san_history[-1] if san_history else ""
+    return engine_mgr._state_snapshot(last_san=last_san)
 
 
 def handle_export_fen(_params: Dict[str, Any]) -> Any:
@@ -219,6 +307,26 @@ def handle_calculate_accuracy_from_history(params: Dict[str, Any]) -> Any:
     # Snapshot history under the board lock (fast), then release before heavy computation.
     with _board_lock:
         fen_list, moves = engine_mgr.history_fens_and_moves()
+    return accuracy_analyser.calculate(fen_list, moves, stockfish_path=stockfish_path)
+
+
+def handle_calculate_accuracy_from_pgn(params: Dict[str, Any]) -> Any:
+    pgn_text = str(params.get("pgn", ""))
+    stockfish_path: str = params.get("stockfish_path", engine_mgr.settings.get("stockfish_path", "stockfish"))
+    if not pgn_text.strip():
+        return {"error": "Missing PGN", "moves": [], "white_accuracy": 0, "black_accuracy": 0}
+
+    game = chess.pgn.read_game(io.StringIO(pgn_text))
+    if game is None:
+        return {"error": "Invalid PGN", "moves": [], "white_accuracy": 0, "black_accuracy": 0}
+
+    board = game.board()
+    fen_list: list[str] = []
+    moves: list[str] = []
+    for move in game.mainline_moves():
+        fen_list.append(board.fen())
+        moves.append(move.uci())
+        board.push(move)
     return accuracy_analyser.calculate(fen_list, moves, stockfish_path=stockfish_path)
 
 
@@ -284,10 +392,13 @@ HANDLERS: Dict[str, Any] = {
     "export_fen":         handle_export_fen,
     "calculate_accuracy": handle_calculate_accuracy,
     "calculate_accuracy_from_history": handle_calculate_accuracy_from_history,
+    "calculate_accuracy_from_pgn": handle_calculate_accuracy_from_pgn,
     "estimate_elo":       handle_estimate_elo,
     "get_book_moves":     handle_get_book_moves,
     "start_analysis":     handle_start_analysis,
     "stop_analysis":      handle_stop_analysis,
+    "maia3_cache":         handle_maia3_cache,
+    "check_maia3_cache":   handle_check_maia3_cache,
 }
 
 # Commands that mutate board state — must hold _board_lock
@@ -302,7 +413,7 @@ _BOARD_READ_CMDS = frozenset({
 
 # Commands that operate on a FEN from params + need no board lock:
 #   get_engine_move, get_bot_move, calculate_accuracy,
-#   estimate_elo, start_analysis, stop_analysis
+#   estimate_elo, start_analysis, stop_analysis, maia3_cache
 # calculate_accuracy_from_history acquires the lock internally (snapshot only).
 
 

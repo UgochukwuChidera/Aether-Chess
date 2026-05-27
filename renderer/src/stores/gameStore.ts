@@ -203,7 +203,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       const result = await window.electronAPI.getEval({ fen, use_mentor_eval: true });
       const data = result as { eval_cp?: number; phase?: number; mg_score?: number; eg_score?: number };
       if (data.eval_cp !== undefined) {
-        set((s) => ({ analysis: { ...s.analysis, mentorEval: data as any } }));
+        set((s) => ({ analysis: { ...s.analysis, mentorEval: data } }));
       }
     } catch { /* ignore */ }
   },

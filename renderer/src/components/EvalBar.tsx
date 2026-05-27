@@ -119,8 +119,6 @@ export const EvalBar: React.FC = () => {
   const captured = computeCapturedPieces(fen);
   const materialLabel = formatMaterial(material);
 
-  const evalSource = mentorEval ? 'mentor' : (analysis.running ? 'sf' : '0.0');
-
   return (
     <div className="w-full flex flex-col gap-0.5 mb-1">
       {/* Captured pieces row */}

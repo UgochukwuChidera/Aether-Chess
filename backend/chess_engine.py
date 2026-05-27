@@ -9,6 +9,7 @@ import os
 import random
 import sys
 import threading
+import time
 from typing import Any, Callable, Dict, List, Optional
 
 import chess
@@ -16,11 +17,20 @@ import chess.engine
 import chess.pgn
 import chess.polyglot
 
-# Add parent directory to path so existing aether_chess modules can be imported
+# Add parent directory to path so aether_chess modules can be imported
 _HERE = os.path.dirname(__file__)
 _ROOT = os.path.join(_HERE, "..")
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
+
+# Point Hugging Face cache to a project-local directory instead of ~/.cache
+_HF_CACHE = os.path.normpath(os.path.join(_ROOT, "model_cache"))
+os.makedirs(_HF_CACHE, exist_ok=True)
+os.environ.setdefault("HF_HOME", _HF_CACHE)
+os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
+
+from aether_chess.engines.maia3_proxy import Maia3Proxy, Maia3UnavailableError
+from aether_chess.think_profile import get_profile, sample_think_time
 
 from aether_chess.models.game_state import GameState
 from aether_chess.engines.mentor_engine import MentorEngine, SearchConfig
@@ -39,6 +49,11 @@ class ChessEngineManager:
             "human_color": "white",
             "strength": 7,
             "stockfish_path": "stockfish",
+            "maia3_path": "",
+            "maia3_model": "maia3-5m",
+            "maia3_device": "cpu",
+            "maia3_elo": 1500,
+            "think_profile": "human_like",
             "threads": 1,
             "hash_mb": 128,
             "multipv": 3,
@@ -53,6 +68,13 @@ class ChessEngineManager:
         self._uci_path: str = "stockfish"
         self._uci_lock = threading.Lock()
 
+        # Shared Analysis Engine (Stockfish)
+        self._analysis_engine: Optional[chess.engine.SimpleEngine] = None
+        self._analysis_engine_path: str = "stockfish"
+        self._analysis_engine_lock = threading.Lock()
+
+        self._maia3_proxy = Maia3Proxy()
+
         # Analysis thread control
         self._analysis_stop = threading.Event()
         self._analysis_thread: Optional[threading.Thread] = None
@@ -63,13 +85,13 @@ class ChessEngineManager:
             self._mentor_engine = MentorEngine()
         
         level = max(1, min(10, int(strength)))
-        # INCREASE depth and nodes for smarter play
+        # Realistic depth for nodes budget - depth 18 needs millions of nodes
         self._mentor_engine.config = SearchConfig(
-            max_depth=4 + level * 2,  # 6-24 plies (was 3-12)
-            max_nodes=100_000 + level * 100_000,  # 200K-1.1M (was 100K-550K)
-            time_limit_sec=0.5 + level * 0.3,  # 0.8-3.5s
-            difficulty=min(1.0, 0.5 + level * 0.05),  # 0.55-1.0
-            tt_max_entries=200_000 + level * 50_000,
+            max_depth=max(4, level + 2),  # 6-12 plies only (was 6-24)
+            max_nodes=200_000 * level,  # 200K-2M nodes (was 100K-1.1M)
+            time_limit_sec=max(0.3, min(2.0, 0.3 + level * 0.2)),  # 0.5-2.3s but capped at 2s
+            difficulty=min(1.0, 0.5 + level * 0.05),
+            tt_max_entries=500_000,  # Fixed size, not scaling
             threads=1,
         )
         return self._mentor_engine
@@ -84,6 +106,11 @@ class ChessEngineManager:
         strength: int = 7,
         time_control: Optional[Dict[str, int]] = None,
         stockfish_path: Optional[str] = None,
+        maia3_path: Optional[str] = None,
+        maia3_model: Optional[str] = None,
+        maia3_device: Optional[str] = None,
+        maia3_elo: Optional[int] = None,
+        think_profile: Optional[str] = None,
         threads: Optional[int] = None,
         hash_mb: Optional[int] = None,
         multipv: Optional[int] = None,
@@ -102,6 +129,16 @@ class ChessEngineManager:
             self.settings["time_control"] = time_control
         if stockfish_path:
             self.settings["stockfish_path"] = stockfish_path
+        if maia3_path is not None:
+            self.settings["maia3_path"] = maia3_path
+        if maia3_model:
+            self.settings["maia3_model"] = maia3_model
+        if maia3_device:
+            self.settings["maia3_device"] = maia3_device
+        if maia3_elo is not None:
+            self.settings["maia3_elo"] = max(0, min(5000, int(maia3_elo)))
+        if think_profile is not None:
+            self.settings["think_profile"] = think_profile
         if threads is not None:
             self.settings["threads"] = max(1, min(8, int(threads)))  # Cap at 8
         if hash_mb is not None:
@@ -225,6 +262,32 @@ class ChessEngineManager:
                 pass
             self._uci_engine = None
 
+    def _ensure_analysis_uci(self, stockfish_path: str) -> chess.engine.SimpleEngine:
+        """Return the shared analysis Stockfish SimpleEngine (reused for analysis)."""
+        if self._analysis_engine is not None and stockfish_path == self._analysis_engine_path:
+            try:
+                if self._analysis_engine.is_alive():
+                    return self._analysis_engine
+            except Exception:
+                pass
+        self._close_analysis_uci()
+        try:
+            self._analysis_engine = chess.engine.SimpleEngine.popen_uci(stockfish_path)
+            self._analysis_engine_path = stockfish_path
+            return self._analysis_engine
+        except Exception as e:
+            print(f"[ERROR] Failed to start analysis Stockfish: {e}", file=sys.stderr)
+            raise
+
+    def _close_analysis_uci(self) -> None:
+        """Shut down the shared analysis Stockfish process."""
+        if self._analysis_engine is not None:
+            try:
+                self._analysis_engine.quit()
+            except Exception:
+                pass
+            self._analysis_engine = None
+
     @staticmethod
     def _configure_uci(
         engine: chess.engine.SimpleEngine,
@@ -238,10 +301,14 @@ class ChessEngineManager:
         # Cap threads to prevent memory issues
         if threads is not None:
             options["Threads"] = max(1, min(8, int(threads)))
+        else:
+            options["Threads"] = 1
         
-        # Cap hash to prevent memory issues (Stockfish default is fine below 512MB)
+        # Cap hash to prevent memory issues (default to 64MB if not provided)
         if hash_mb is not None:
             options["Hash"] = max(16, min(512, int(hash_mb)))
+        else:
+            options["Hash"] = 64
         
         # Skill level for weaker play (0-20)
         if skill_level is not None:
@@ -263,36 +330,118 @@ class ChessEngineManager:
         stockfish_path: Optional[str] = None,
         threads: Optional[int] = None,
         hash_mb: Optional[int] = None,
+        engine_type: Optional[str] = None,
+        maia3_path: Optional[str] = None,
+        maia3_model: Optional[str] = None,
+        maia3_device: Optional[str] = None,
+        maia3_elo: Optional[int] = None,
+        think_profile: Optional[str] = None,
+        time_remaining: Optional[float] = None,
+        time_increment: Optional[float] = None,
     ) -> Dict[str, Any]:
-        """Get move from Stockfish at full strength."""
-        sp = stockfish_path or self.settings.get("stockfish_path", "stockfish")
+        """Get move from selected engine. Falls back to mentor with logged reason."""
+        engine_choice = engine_type or self.settings.get("engine_type", "stockfish")
+        profile_name = think_profile or self.settings.get("think_profile", "human_like")
+        profile = get_profile(profile_name)
         board = chess.Board(fen)
-        
-        with self._uci_lock:
-            engine = self._ensure_uci(sp)
-            self._configure_uci(
-                engine,
-                threads if threads is not None else self.settings.get("threads"),
-                hash_mb if hash_mb is not None else self.settings.get("hash_mb"),
-                skill_level=None,  # Full strength
-            )
-            limit = chess.engine.Limit(
-                time=time_limit,
-                depth=depth,
-            )
+        fallback_from: Optional[str] = None
+
+        if engine_choice == "maia3":
             try:
-                result = engine.play(board, limit)
+                result = self.get_maia3_move(
+                    fen=fen,
+                    model=maia3_model or self.settings.get("maia3_model", "maia3-5m"),
+                    device=maia3_device or self.settings.get("maia3_device", "cpu"),
+                    maia3_path=maia3_path or self.settings.get("maia3_path") or None,
+                    cache_dir=self.settings.get("maia3_cache_dir") or os.environ.get("HF_HOME"),
+                    elo=maia3_elo if maia3_elo is not None else self.settings.get("maia3_elo", 1500),
+                    think_profile=profile_name,
+                    time_remaining=time_remaining,
+                    time_increment=time_increment,
+                )
+                if result and result.get("move"):
+                    return result
+            except Maia3UnavailableError as e:
+                print(f"[ERROR] Maia3 unavailable: {e}, falling back", file=sys.stderr)
             except Exception as e:
-                print(f"[ERROR] Engine play failed: {e}", file=sys.stderr)
-                # Try to restart engine on error
+                print(f"[ERROR] Maia3 failed: {e}, falling back", file=sys.stderr)
+            fallback_from = "maia3"
+
+        if engine_choice == "mentor":
+            target = sample_think_time(
+                profile, board=board,
+                time_remaining=time_remaining,
+                time_increment=time_increment,
+            )
+            return self.get_mentor_move(fen=fen, strength=self.settings.get("strength", 7), time_override=target)
+
+        # Stockfish path
+        sp = stockfish_path or self.settings.get("stockfish_path", "stockfish")
+        if os.path.isfile(sp):
+            try:
+                target = sample_think_time(
+                    profile, board=board,
+                    time_remaining=time_remaining,
+                    time_increment=time_increment,
+                )
+                with self._uci_lock:
+                    engine = self._ensure_uci(sp)
+                    self._configure_uci(
+                        engine,
+                        threads if threads is not None else self.settings.get("threads"),
+                        hash_mb if hash_mb is not None else self.settings.get("hash_mb"),
+                        skill_level=None,
+                    )
+                    limit = chess.engine.Limit(time=target, depth=depth)
+                    result = engine.play(board, limit)
+                if result and result.move:
+                    san = board.san(result.move)
+                    ret: Dict[str, Any] = {"move": result.move.uci(), "san": san}
+                    if fallback_from:
+                        ret["_fallback_msg"] = f"Maia3 unavailable — using Stockfish"
+                    return ret
+            except Exception as e:
+                print(f"[ERROR] Stockfish failed: {e}, falling back to mentor", file=sys.stderr)
                 self._close_uci()
-                return {"move": None, "san": None}
-        
-        move = result.move
-        if move is None:
-            return {"move": None, "san": None}
-        san = board.san(move)
-        return {"move": move.uci(), "san": san}
+        else:
+            print(f"[ERROR] Stockfish binary not found at: {sp}, falling back to mentor", file=sys.stderr)
+
+        # Fallback to mentor engine
+        print("[WARN] Using mentor engine as fallback", file=sys.stderr)
+        result = self.get_mentor_move(fen=fen, strength=self.settings.get("strength", 7))
+        result["_fallback"] = True
+        if fallback_from:
+            result["_fallback_msg"] = "Maia3 unavailable — using Mentor"
+        return result
+
+    def get_maia3_move(
+        self,
+        fen: str,
+        model: str = "maia3-5m",
+        device: str = "cpu",
+        maia3_path: Optional[str] = None,
+        cache_dir: Optional[str] = None,
+        temperature: float = 0.0,
+        top_p: float = 1.0,
+        elo: int = 1500,
+        think_profile: str = "human_like",
+        time_remaining: Optional[float] = None,
+        time_increment: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        """Get a move from Maia3 via its UCI engine (safely, no stdout noise)."""
+        return self._maia3_proxy.play(
+            fen=fen,
+            model=model,
+            device=device,
+            maia3_path=maia3_path,
+            cache_dir=cache_dir or os.environ.get("HF_HOME"),
+            temperature=temperature,
+            top_p=top_p,
+            elo=elo,
+            think_profile=think_profile,
+            time_remaining=time_remaining,
+            time_increment=time_increment,
+        )
 
     # ── Mentor bot move (pure Python AI) ─────────────────────────────────────
 
@@ -306,25 +455,9 @@ class ChessEngineManager:
         time_remaining: Optional[float] = None,
         time_increment: Optional[float] = None,
         total_moves: Optional[int] = None,
+        time_override: Optional[float] = None,
     ) -> Dict[str, Any]:
-        """Get move from custom MentorEngine (pure Python AI, no Stockfish).
-        
-        This is your OWN chess bot with:
-        - Alpha-beta search with quiescence
-        - Piece-square tables
-        - Transposition table
-        - Null move pruning
-        - Late move reductions
-        - Killer move heuristics
-        - Opening book integration (VALIDATED for legality)
-        - Custom evaluation function
-        
-        Strength 1-10 scales:
-        - depth: 3-12 plies
-        - nodes: 50K-550K
-        - time: 0.35s-1.7s
-        - difficulty: 0.46-1.0 (probability of playing best move)
-        """
+        """Get move from custom MentorEngine (pure Python AI, no Stockfish)."""
         board = chess.Board(fen)
         legal_moves = list(board.legal_moves)
         
@@ -355,22 +488,30 @@ class ChessEngineManager:
         
         level = max(1, min(10, int(strength)))
         
-        # Adjust time based on time control if provided
-        base_time = 0.2 + level * 0.15
-        if time_remaining is not None and time_remaining > 0:
-            move_num = total_moves or 30
-            moves_left = max(1, 40 - move_num)
-            share = time_remaining / moves_left
-            base_time = max(0.15, min(time_remaining * 0.3, share * 0.4, 2.5))
-            if time_increment and time_increment > 0:
-                base_time = max(0.15, min(base_time + time_increment * 0.2, 2.5))
+        # Use profile-sampled time if provided, else compute from clock
+        if time_override is not None:
+            think_time = time_override
+        else:
+            base_time = 0.4 + level * 0.25
+            if time_remaining is not None and time_remaining > 0:
+                move_num = total_moves or 30
+                moves_left = max(1, 40 - move_num)
+                share = time_remaining / moves_left
+                base_time = max(0.2, min(time_remaining * 0.35, share * 0.5, 3.0))
+                if time_increment and time_increment > 0:
+                    base_time = max(0.2, min(base_time + time_increment * 0.3, 3.0))
+            jitter = random.uniform(0.85, 1.35)
+            think_time = base_time * jitter
         
         # Get configured mentor engine
         mentor = self._get_mentor_engine(strength)
-        mentor.config.time_limit_sec = base_time
+        mentor.config.time_limit_sec = think_time
         
         try:
             move = mentor.search(board)
+            elapsed = time.time() - mentor.start_time
+            if elapsed < think_time:
+                time.sleep(think_time - elapsed)
             if move is None or move not in legal_moves:
                 print(f"[WARN] Engine returned illegal move {move}, selecting random")
                 # Fallback: random legal move
@@ -404,37 +545,37 @@ class ChessEngineManager:
         self._analysis_stop.clear()
 
         def _run() -> None:
-            engine = None
             try:
-                engine = chess.engine.SimpleEngine.popen_uci(stockfish_path)
-                self._configure_uci(engine, threads, hash_mb)
-                board = chess.Board(fen)
-                
-                with engine.analysis(board, chess.engine.Limit(time=60.0), multipv=multipv) as analysis:
-                    for info in analysis:
-                        if self._analysis_stop.is_set():
-                            break
-                        pvs = []
-                        for pv_info in (info if isinstance(info, list) else [info]):
-                            pv = pv_info.get("pv", [])
-                            score = pv_info.get("score")
-                            depth_v = pv_info.get("depth", 0)
-                            if score is not None:
-                                cp = score.white().score(mate_score=10000)
-                                pvs.append({
-                                    "depth": depth_v,
-                                    "score_cp": cp,
-                                    "mate": score.white().mate(),
-                                    "pv": [m.uci() for m in pv[:10]],
-                                    "pv_san": _moves_to_san(board, pv[:10]),
+                with self._analysis_engine_lock:
+                    engine = self._ensure_analysis_uci(stockfish_path)
+                    self._configure_uci(engine, threads, hash_mb)
+                    board = chess.Board(fen)
+                    
+                    with engine.analysis(board, chess.engine.Limit(time=3600.0), multipv=multipv) as analysis:
+                        for info in analysis:
+                            if self._analysis_stop.is_set():
+                                break
+                            pvs = []
+                            for pv_info in (info if isinstance(info, list) else [info]):
+                                pv = pv_info.get("pv", [])
+                                score = pv_info.get("score")
+                                depth_v = pv_info.get("depth", 0)
+                                if score is not None:
+                                    cp = score.white().score(mate_score=10000)
+                                    pvs.append({
+                                        "depth": depth_v,
+                                        "score_cp": cp,
+                                        "mate": score.white().mate(),
+                                        "pv": [m.uci() for m in pv[:10]],
+                                        "pv_san": _moves_to_san(board, pv[:10]),
+                                    })
+                            if pvs:
+                                push_fn({
+                                    "type": "analysis_update",
+                                    "callback_id": callback_id,
+                                    "pvs": pvs,
+                                    "fen": fen,
                                 })
-                        if pvs:
-                            push_fn({
-                                "type": "analysis_update",
-                                "callback_id": callback_id,
-                                "pvs": pvs,
-                                "fen": fen,
-                            })
             except Exception as exc:
                 push_fn({
                     "type": "analysis_update",
@@ -443,12 +584,6 @@ class ChessEngineManager:
                     "pvs": [],
                     "fen": fen,
                 })
-            finally:
-                if engine:
-                    try:
-                        engine.quit()
-                    except Exception:
-                        pass
 
         self._analysis_thread = threading.Thread(target=_run, daemon=True)
         self._analysis_thread.start()
@@ -530,20 +665,32 @@ class ChessEngineManager:
     # ── Opening book ──────────────────────────────────────────────────────────
 
     def get_book_moves(self, fen: str, books_dir: str = "resources/books") -> Dict[str, Any]:
-        # Import here to avoid issues when not available
-        from aether_chess.io.opening_book import OpeningBook
-        
-        book = OpeningBook(paths=[os.path.join(books_dir, f) for f in os.listdir(books_dir) if f.endswith('.bin')] if os.path.isdir(books_dir) else [])
-        if not book._all_paths():
+        """Return all book moves with weights for a position."""
+        import glob as globlib
+        bin_files = globlib.glob(os.path.join(books_dir, "*.bin"))
+        if not bin_files:
             return {
                 "moves": [],
                 "hint": "No opening book found. Place .bin files in the books directory.",
             }
         board = chess.Board(fen)
-        moves = book.choose(board)
-        if moves is None or moves not in board.legal_moves:
-            return {"moves": []}
-        return {"moves": [{"uci": moves.uci(), "san": board.san(moves), "weight": 1}]}
+        all_moves: Dict[str, Dict[str, Any]] = {}
+        for bin_path in bin_files:
+            try:
+                with chess.polyglot.open_reader(bin_path) as reader:
+                    for entry in reader.find_all(board):
+                        uci = entry.move.uci()
+                        if uci not in all_moves:
+                            all_moves[uci] = {
+                                "uci": uci,
+                                "san": board.san(entry.move),
+                                "weight": 0,
+                            }
+                        all_moves[uci]["weight"] += entry.weight
+            except OSError:
+                continue
+        moves = sorted(all_moves.values(), key=lambda x: x["weight"], reverse=True)
+        return {"moves": moves}
 
     # ── PGN management ───────────────────────────────────────────────────────
 
@@ -560,6 +707,7 @@ class ChessEngineManager:
         """Clean up all engine resources."""
         self.stop_analysis()
         self._close_uci()
+        self._close_analysis_uci()
 
 
 def _moves_to_san(board: chess.Board, moves: List[chess.Move]) -> List[str]:

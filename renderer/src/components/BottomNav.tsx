@@ -3,7 +3,7 @@
  */
 import React from 'react';
 
-export type Tab = 'play' | 'analysis' | 'extensions' | 'profile' | 'settings';
+export type Tab = 'play' | 'analysis' | 'extensions' | 'history' | 'settings';
 
 interface NavItem {
   id: Tab;
@@ -15,7 +15,7 @@ const ITEMS: NavItem[] = [
   { id: 'play',       icon: 'sports_esports', label: 'Play'       },
   { id: 'analysis',   icon: 'analytics',      label: 'Analysis'   },
   { id: 'extensions', icon: 'extension',      label: 'Extensions' },
-  { id: 'profile',    icon: 'person',         label: 'Profile'    },
+  { id: 'history',    icon: 'history',        label: 'History'    },
   { id: 'settings',   icon: 'settings',       label: 'Settings'   },
 ];
 

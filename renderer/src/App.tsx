@@ -1,7 +1,7 @@
 /**
  * App.tsx — Root component. Manages tab routing, top bar, and global UI chrome.
  */
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { TopBar } from './components/TopBar';
 import { BottomNav, type Tab } from './components/BottomNav';
 import { ToastStack } from './components/Toast';
@@ -9,7 +9,7 @@ import { PlayView } from './views/PlayView';
 import { AnalysisView } from './views/AnalysisView';
 import { SettingsView } from './views/SettingsView';
 import { ExtensionsView } from './views/ExtensionsView';
-import { ProfileView } from './views/ProfileView';
+import { HistoryView } from './views/HistoryView';
 import { useSettingsStore } from './stores/settingsStore';
 import { useGameStore } from './stores/gameStore';
 
@@ -47,7 +47,7 @@ export default function App() {
       case 'analysis':   return <AnalysisView />;
       case 'settings':   return <SettingsView />;
       case 'extensions': return <ExtensionsView />;
-      case 'profile':    return <ProfileView />;
+       case 'history':    return <HistoryView />;
     }
   };
 

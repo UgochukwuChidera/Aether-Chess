@@ -5,7 +5,6 @@
  *   3. Custom square highlighting from modifier-key combos
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { useGameStore } from '../stores/gameStore';
 
 const SQ_SIZE = 56;
 
@@ -26,7 +25,6 @@ function drawArrowSvg(
   const angle = Math.atan2(dy, dx);
   const len = Math.sqrt(dx * dx + dy * dy);
   const headLen = Math.min(14, len * 0.35);
-  const headWidth = Math.min(10, headLen * 0.7);
   const ax1 = x2 - headLen * Math.cos(angle - Math.PI / 6);
   const ay1 = y2 - headLen * Math.sin(angle - Math.PI / 6);
   const ax2 = x2 - headLen * Math.cos(angle + Math.PI / 6);
@@ -110,9 +108,8 @@ export const BoardDrawingLayer: React.FC<Props> = ({
   const [userArrows, setUserArrows] = useState<Arrow[]>(arrows);
   const [squareMarks, setSquareMarks] = useState<SquareMark[]>([]);
   const [drawColorIdx, setDrawColorIdx] = useState(0);
-  const [shiftHeld, setShiftHeld] = useState(false);
+  const [_shiftHeld, setShiftHeld] = useState(false);
   const [altHeld, setAltHeld] = useState(false);
-  const store = useGameStore();
 
   useEffect(() => { setUserArrows(arrows); }, [arrows]);
 
