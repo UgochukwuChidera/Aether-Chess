@@ -72,7 +72,7 @@ declare global {
         engine_type?: 'stockfish' | 'mentor' | 'maia3';
       }) => Promise<unknown>;
       calculateAccuracyFromPgn: (params: { pgn: string; stockfish_path?: string }) => Promise<unknown>;
-      estimateElo: (params: { accuracy: number; blunder_rate: number; avg_cp_loss?: number }) => Promise<unknown>;
+      estimateElo: (params: { accuracy: number; blunder_rate: number; avg_cp_loss?: number; num_games?: number }) => Promise<unknown>;
       getBookMoves: (params: { fen: string }) => Promise<unknown>;
       maia3Cache: (params: {
         model?: string;
@@ -105,6 +105,9 @@ declare global {
       // Settings
       loadSettings: () => Promise<unknown>;
       saveSettings: (data: unknown) => Promise<boolean>;
+
+      // Clipboard
+      copyToClipboard: (text: string) => Promise<boolean>;
 
       // File helpers
       pickStockfishPath: () => Promise<string | null>;
@@ -157,6 +160,18 @@ declare global {
       getGameFilePath: (params: { id: string }) => Promise<{ path?: string }>;
       deleteGameHistory: (params: { id: string }) => Promise<{ ok: boolean }>;
       updateGameTags: (params: { id: string; tags: string[] }) => Promise<{ ok: boolean }>;
+      computeAndCacheElo: (params: { id: string; stockfish_path?: string }) => Promise<{
+        ok: boolean;
+        error?: string;
+        elo_cache?: {
+          white_accuracy: number;
+          black_accuracy: number;
+          blunder_rate: number;
+          avg_cp_loss: number;
+          computed_at: string;
+        };
+      }>;
+      getGamesNeedingElo: () => Promise<Array<{ id: string; played_at: string; moves: number }>>;
     };
   }
 }

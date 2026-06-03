@@ -2,6 +2,7 @@ import {
   app,
   BrowserWindow,
   ipcMain,
+  clipboard,
   dialog,
   shell,
   Menu,
@@ -11,6 +12,14 @@ import { PythonShell, Options } from 'python-shell';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
+
+type EloCache = {
+  white_accuracy: number;
+  black_accuracy: number;
+  blunder_rate: number;
+  avg_cp_loss: number;
+  computed_at: string;
+};
 
 type GameHistoryMeta = {
   white: string;
@@ -23,6 +32,7 @@ type GameHistoryMeta = {
   time_control?: { seconds: number; increment: number; label: string };
   played_at: string;
   tags?: string[];
+  elo_cache?: EloCache;
 };
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
@@ -480,6 +490,11 @@ ipcMain.handle('stockfish-info', () => {
   };
 });
 
+ipcMain.handle('clipboard-copy', (_event, text: string) => {
+  clipboard.writeText(text);
+  return true;
+});
+
 ipcMain.handle('open-external-url', async (_event, url: string) => {
   await shell.openExternal(url);
   return true;
@@ -595,4 +610,91 @@ ipcMain.handle('update-game-tags', (_event, params: { id?: string; tags?: string
   entry.meta.tags = tags;
   saveGameIndex(index);
   return { ok: true };
+});
+
+// ── Cached Elo estimation ───────────────────────────────────────────
+interface AccuracyFromPgnResult {
+  moves?: Array<{ uci: string; color: string; cp_loss: number; classification: string }>;
+  white_accuracy?: number;
+  black_accuracy?: number;
+  white_avg_cp_loss?: number;
+  black_avg_cp_loss?: number;
+  error?: string;
+}
+
+/** Compute accuracy for a single saved game and store the result in index.json. */
+ipcMain.handle('compute-and-cache-elo', async (_event, params: { id: string; stockfish_path?: string }) => {
+  const id = typeof params?.id === 'string' ? params.id : '';
+  console.log('[Elo] compute-and-cache-elo start — id:', id);
+  if (!id) { console.warn('[Elo] Missing id'); return { ok: false, error: 'Missing id' }; }
+
+  const index = loadGameIndex();
+  const entry = index.games.find((g) => g.id === id);
+  if (!entry) { console.warn('[Elo] Game not found:', id); return { ok: false, error: 'Game not found' }; }
+
+  const pgnPath = path.join(getHistoryDir(), entry.pgn_file);
+  if (!fs.existsSync(pgnPath)) { console.warn('[Elo] PGN file not found:', pgnPath); return { ok: false, error: 'PGN file not found' }; }
+  const pgn = fs.readFileSync(pgnPath, 'utf-8');
+  console.log('[Elo]  PGN loaded —', (entry.meta.white ?? '?'), 'vs', (entry.meta.black ?? '?'), '—', entry.meta.moves, 'moves');
+
+  let result: AccuracyFromPgnResult;
+  try {
+    result = await sendCommand('calculate_accuracy_from_pgn', {
+      pgn,
+      stockfish_path: params?.stockfish_path ?? '',
+    }) as AccuracyFromPgnResult;
+  } catch (err) {
+    console.warn('[Elo]  Stockfish analysis threw:', err);
+    return { ok: false, error: String(err) };
+  }
+
+  if (result.error) { console.warn('[Elo]  Stockfish analysis error:', result.error); return { ok: false, error: result.error }; }
+
+  const rows = result.moves ?? [];
+  const blunders = rows.filter((m) => m.classification === 'Blunder').length;
+  const blunderRate = rows.length > 0 ? blunders / rows.length : 0;
+  const whiteLosses = rows.filter((m) => m.color === 'white').map((m) => m.cp_loss);
+  const blackLosses = rows.filter((m) => m.color === 'black').map((m) => m.cp_loss);
+  const allLosses = [...whiteLosses, ...blackLosses];
+  const avgCpLoss = allLosses.length > 0
+    ? allLosses.reduce((a, b) => a + b, 0) / allLosses.length
+    : 0;
+
+  const eloCache = {
+    white_accuracy: result.white_accuracy ?? 0,
+    black_accuracy: result.black_accuracy ?? 0,
+    blunder_rate: Math.round(blunderRate * 1000) / 1000,
+    avg_cp_loss: Math.round(avgCpLoss * 10) / 10,
+    computed_at: new Date().toISOString(),
+  };
+  console.log('[Elo]  Result — W:', eloCache.white_accuracy.toFixed(1), 'B:', eloCache.black_accuracy.toFixed(1), 'BR:', eloCache.blunder_rate, 'CPL:', eloCache.avg_cp_loss);
+
+  // Re-load index to avoid race conditions with other writes
+  const freshIndex = loadGameIndex();
+  const freshEntry = freshIndex.games.find((g) => g.id === id);
+  if (freshEntry) {
+    freshEntry.meta.elo_cache = eloCache;
+    saveGameIndex(freshIndex);
+    console.log('[Elo] compute-and-cache-elo done — cached for', id);
+  } else {
+    console.warn('[Elo]  Game vanished from index between read and write:', id);
+  }
+
+  return { ok: true, elo_cache: eloCache };
+});
+
+/** Return game IDs (up to 30 most recent) that have no cached elo data. */
+ipcMain.handle('get-games-needing-elo', () => {
+  const index = loadGameIndex();
+  const needing: Array<{ id: string; played_at: string; moves: number }> = [];
+  for (const g of index.games) {
+    if (!g.meta.elo_cache && g.meta.moves >= 2) {
+      needing.push({ id: g.id, played_at: g.meta.played_at, moves: g.meta.moves });
+    }
+  }
+  needing.sort((a, b) => b.played_at.localeCompare(a.played_at));
+  const result = needing.slice(0, 30);
+  console.log('[Elo] get-games-needing-elo —', result.length, 'game(s) without cache (of', index.games.length, 'total)');
+  if (result.length > 0) console.log('[Elo]   First few:', result.slice(0, 3).map((g) => g.id).join(', '));
+  return result;
 });

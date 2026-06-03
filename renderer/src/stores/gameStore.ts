@@ -27,7 +27,7 @@ export interface AnalysisData {
   pvs: PVLine[];
   fen: string;
   running: boolean;
-  mentorEval?: { eval_cp: number; phase: number; mg_score: number; eg_score: number };
+  mentorEval?: { eval_cp?: number; phase?: number; mg_score?: number; eg_score?: number };
 }
 
 export type GameResult =
@@ -39,7 +39,7 @@ export type GameResult =
 export interface Toast {
   id: string;
   message: string;
-  type: 'info' | 'error' | 'success';
+  type: 'info' | 'error' | 'success' | 'warning';
 }
 
 export interface GameState {

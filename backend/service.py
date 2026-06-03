@@ -314,10 +314,12 @@ def handle_calculate_accuracy_from_pgn(params: Dict[str, Any]) -> Any:
     pgn_text = str(params.get("pgn", ""))
     stockfish_path: str = params.get("stockfish_path", engine_mgr.settings.get("stockfish_path", "stockfish"))
     if not pgn_text.strip():
+        print("[Elo] PGN empty", file=sys.stderr)
         return {"error": "Missing PGN", "moves": [], "white_accuracy": 0, "black_accuracy": 0}
 
     game = chess.pgn.read_game(io.StringIO(pgn_text))
     if game is None:
+        print("[Elo] PGN invalid", file=sys.stderr)
         return {"error": "Invalid PGN", "moves": [], "white_accuracy": 0, "black_accuracy": 0}
 
     board = game.board()
@@ -327,14 +329,28 @@ def handle_calculate_accuracy_from_pgn(params: Dict[str, Any]) -> Any:
         fen_list.append(board.fen())
         moves.append(move.uci())
         board.push(move)
-    return accuracy_analyser.calculate(fen_list, moves, stockfish_path=stockfish_path)
+    print(f"[Elo] Analysing {len(moves)} moves with Stockfish (path: {stockfish_path}) …", file=sys.stderr)
+    result = accuracy_analyser.calculate(fen_list, moves, stockfish_path=stockfish_path)
+    if result.get("error"):
+        print(f"[Elo]  Error: {result['error']}", file=sys.stderr)
+    else:
+        print(f"[Elo]  Done — W:{result.get('white_accuracy', '?')} B:{result.get('black_accuracy', '?')}", file=sys.stderr)
+    return result
 
 
 def handle_estimate_elo(params: Dict[str, Any]) -> Any:
     accuracy = float(params["accuracy"])
     blunder_rate = float(params.get("blunder_rate", 0.0))
     avg_cp_loss = float(params.get("avg_cp_loss", 0.0))
-    return accuracy_analyser.estimate_elo(accuracy, blunder_rate, avg_cp_loss)
+    num_games = params.get("num_games")
+    if num_games is not None:
+        num_games = int(num_games)
+    print(f"[Elo] estimate_elo — acc:{accuracy:.1f} blunder:{blunder_rate:.3f} cpl:{avg_cp_loss:.1f} games:{num_games}", file=sys.stderr)
+    result = accuracy_analyser.estimate_elo(
+        accuracy, blunder_rate, avg_cp_loss, num_games=num_games,
+    )
+    print(f"[Elo]  → {result.get('estimated_elo', '?')}  CI:{result.get('confidence_interval', '?')}", file=sys.stderr)
+    return result
 
 
 def handle_get_book_moves(params: Dict[str, Any]) -> Any:

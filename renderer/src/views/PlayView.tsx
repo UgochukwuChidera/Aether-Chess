@@ -4,7 +4,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Board } from '../components/Board';
 import { EvalBar } from '../components/EvalBar';
-import { PlayerCard } from '../components/PlayerCard';
 import { MoveHistory } from '../components/MoveHistory';
 import { GameControls } from '../components/GameControls';
 import { GameOverModal } from '../components/GameOverModal';
@@ -59,6 +58,39 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
   const [blackTime, setBlackTime] = useState<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const autoSaveRef = useRef(false);
+  const boardAreaRef = useRef<HTMLDivElement>(null);
+  const [boardSize, setBoardSize] = useState(0);
+  const [zenMode, setZenMode] = useState(false);
+  const zenBoardRef = useRef<HTMLDivElement>(null);
+  const [zenBoardSize, setZenBoardSize] = useState(0);
+
+  // Maximize board to fill available space
+  useEffect(() => {
+    const el = boardAreaRef.current;
+    if (!el) return;
+    const calc = () => {
+      setBoardSize(Math.max(100, Math.min(el.clientWidth, el.clientHeight)));
+    };
+    calc();
+    const observer = new ResizeObserver(calc);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [zenMode]);
+
+  // Zen mode board sizing
+  useEffect(() => {
+    const el = zenBoardRef.current;
+    if (!el) return;
+    const calc = () => {
+      setZenBoardSize(Math.max(100, Math.min(el.clientWidth, el.clientHeight)));
+    };
+    calc();
+    const observer = new ResizeObserver(calc);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [zenMode]);
+
+  const toggleZenMode = useCallback(() => setZenMode((p) => !p), []);
 
   // ── Game setup state (applied on next "New Game") ─────────────────────────
   const [setupMode, setSetupMode] = useState<GameMode>(store.mode);
@@ -81,11 +113,18 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
     return Math.round(850 + s * 170);
   };
 
+  // ── Backend connectivity tracking ────────────────────────────────────────
+  const [backendConnected, setBackendConnected] = useState(true);
+
+  useEffect(() => {
+    window.electronAPI.onBackendClosed(() => setBackendConnected(false));
+    window.electronAPI.onBackendError(() => setBackendConnected(false));
+  }, []);
+
   useEffect(() => {
     handleNewGame();
     return () => { aiLoopRef.current = false; };
   }, []);
-
 
   useEffect(() => {
     window.electronAPI.onAnalysisUpdate((raw: unknown) => {
@@ -190,7 +229,7 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
           meta: {
             white: whiteName,
             black: blackName,
-            result: resultMap[store.gameResult],
+            result: resultMap[store.gameResult!],
             termination: store.termination,
             moves: store.fullMoveHistoryUCI.length,
             mode: store.mode,
@@ -199,6 +238,22 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
             played_at: new Date().toISOString(),
           },
         });
+      })
+      .then((saveRes) => {
+        // Auto-compute Elo for the saved game in the background (fire-and-forget)
+        const res = saveRes as { ok: boolean; path?: string };
+        if (res.ok) {
+          // Derive game id from the path (last component without .pgn)
+          const gameId = res.path
+            ? res.path.split(/[\\/]/).pop()?.replace(/\.pgn$/i, '') ?? ''
+            : '';
+          if (gameId) {
+            window.electronAPI.computeAndCacheElo({
+              id: gameId,
+              stockfish_path: settings.stockfishPath,
+            }).catch(() => {});
+          }
+        }
       })
       .catch(() => {
         store.pushToast('Auto-save failed', 'error');
@@ -612,7 +667,7 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
   }, [store.navIndex, store.fullMoveHistoryUCI.length]);
 
   // ── Keyboard hotkeys ──────────────────────────────────────────────────────
-  // ←/→ navigate, Home/Ctrl+← first, End/Ctrl+→ last, Ctrl+Z undo, F flip
+  // ←/→ navigate, Home/Ctrl+← first, End/Ctrl+→ last, Ctrl+Z undo, Z zen, Esc exit zen, F flip
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       // Skip when typing in a form field
@@ -639,7 +694,9 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
         case 'z':
         case 'Z':
           if (e.ctrlKey || e.metaKey) { e.preventDefault(); handleUndo(); }
+          else toggleZenMode();
           break;
+
         case 'f':
         case 'F':
           store.flipBoard();
@@ -648,7 +705,7 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [handleNavFirst, handleNavPrev, handleNavNext, handleNavLast]);
+  }, [handleNavFirst, handleNavPrev, handleNavNext, handleNavLast, zenMode, toggleZenMode]);
 
   const handleResign = () => {
     const mode = useGameStore.getState().mode;
@@ -673,9 +730,10 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
   const handleDraw = () => store.pushToast('Draw offered (not accepted by engine)', 'info');
 
   const handleExportPgn = async () => {
+    if (!backendConnected) { store.pushToast('Backend not connected', 'error'); return; }
     try {
       const res = await window.electronAPI.exportPgn() as { pgn: string };
-      await navigator.clipboard.writeText(res.pgn);
+      await window.electronAPI.copyToClipboard(res.pgn);
       store.pushToast('PGN copied to clipboard', 'success');
     } catch (err) {
       store.pushToast(`Export failed: ${err}`, 'error');
@@ -736,9 +794,10 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
   };
 
   const handleExportFen = async () => {
+    if (!backendConnected) { store.pushToast('Backend not connected', 'error'); return; }
     try {
       const res = await window.electronAPI.exportFen() as { fen: string };
-      await navigator.clipboard.writeText(res.fen);
+      await window.electronAPI.copyToClipboard(res.fen);
       store.pushToast('FEN copied to clipboard', 'success');
     } catch (err) {
       store.pushToast(`FEN export failed: ${err}`, 'error');
@@ -746,6 +805,7 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
   };
 
   const handleExportFenCollection = async () => {
+    if (!backendConnected) { store.pushToast('Backend not connected', 'error'); return; }
     try {
       const fenRes = await window.electronAPI.exportFen() as { fen: string };
       const pgnRes = await window.electronAPI.exportPgn() as { pgn: string };
@@ -758,7 +818,7 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
         lines.push('');
         lines.push('# Move FENs (use PGN for full game):');
       }
-      await navigator.clipboard.writeText(lines.join('\n'));
+      await window.electronAPI.copyToClipboard(lines.join('\n'));
       store.pushToast('FEN collection copied to clipboard', 'success');
     } catch (err) {
       store.pushToast(`FEN collection export failed: ${err}`, 'error');
@@ -806,118 +866,218 @@ let showResignDraw: boolean;
   const bottomCard = flipped ? blackCard : whiteCard;
   const topName = topCard.name;
   const topElo = topCard.elo;
-  const topIsUser = topCard.isUser;
   const topTime = topCard.time;
   const topActive = topCard.active;
 
   const bottomName = bottomCard.name;
-  const bottomIsUser = bottomCard.isUser;
   const bottomTime = bottomCard.time;
+  const bottomElo = bottomCard.elo;
+
+  const formatTime = (s: number | null | undefined): string => {
+    if (s == null || s < 0) return '--:--';
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+  };
+
+  const bottomActive = !topActive;
+
+  const zenTimerOverlay = (active: boolean, name: string, elo: number | undefined, time: number | null, top: boolean) => (
+    <div
+      className={`absolute ${top ? 'top-0' : 'bottom-0'} left-0 right-0 flex items-center gap-2 px-2 py-0.5 text-[11px] font-mono ${top ? 'bg-gradient-to-b from-[rgba(0,0,0,0.55)] to-transparent rounded-t-[3px]' : 'bg-gradient-to-t from-[rgba(0,0,0,0.55)] to-transparent rounded-b-[3px]'}`}
+    >
+      <span className={`w-2 h-2 rounded-full ${active ? 'bg-accent' : 'bg-surface2'}`} />
+      <span className="flex-1 truncate font-medium text-on-surface">{name}</span>
+      {elo != null && <span className="text-muted">({elo})</span>}
+      <span className={`tabular-nums font-semibold ${active ? 'text-accent' : 'text-on-surface'}`}>
+        {formatTime(time)}
+      </span>
+    </div>
+  );
+
+  if (zenMode) {
+    return (
+      <div ref={zenBoardRef} className="fixed inset-0 z-[60] bg-bg flex items-center justify-center">
+        {zenBoardSize > 0 && (
+          <div className="relative" style={{ width: zenBoardSize, height: zenBoardSize }}>
+            <Board
+              onSquareClick={handleSquareClick}
+              onDropMove={handleDropMove}
+            />
+            {zenTimerOverlay(topActive, topName, topElo, topTime, true)}
+            {zenTimerOverlay(bottomActive, bottomName, bottomElo, bottomTime, false)}
+          </div>
+        )}
+        <button
+          onClick={toggleZenMode}
+          className="fixed top-2 right-2 z-[70] flex items-center gap-1 px-2 py-1 rounded text-[10px] text-muted hover:text-on-surface bg-surface/60 hover:bg-surface/90 transition-colors"
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 12 }}>close</span>
+          Exit zen
+        </button>
+        {store.pendingPromotion && (
+          <PromotionDialog
+            color={store.turn}
+            onSelect={handlePromotion}
+            onCancel={() => store.setPendingPromotion(null)}
+          />
+        )}
+        {store.gameResult && (
+          <GameOverModal
+            onRematch={handleNewGame}
+            onAnalyze={() => onTabChange('analysis')}
+            onMenu={handleNewGame}
+          />
+        )}
+      </div>
+    );
+  }
 
   return (
-    <div className="flex flex-col gap-2 w-full">
-      <PlayerCard
-        name={topName}
-        elo={topElo}
-        online={true}
-        isUser={topIsUser}
-        timeSeconds={topTime}
-        isActive={topActive}
-        thinking={topThinking}
-      />
-      {settings.showEvalBar && <EvalBar />}
-      <Board
-        onSquareClick={handleSquareClick}
-        onDropMove={handleDropMove}
-      />
-      <PlayerCard
-        name={bottomName}
-        online={true}
-        isUser={bottomIsUser}
-        timeSeconds={bottomTime}
-        isActive={!topActive}
-      />
-      <GameControls
-        onFlip={store.flipBoard}
-        onUndo={handleUndo}
-        onDraw={showResignDraw ? handleDraw : undefined}
-        onResign={showResignDraw ? handleResign : undefined}
-      />
-      <MoveHistory
-        onMoveClick={handleNavigate}
-        onNavFirst={handleNavFirst}
-        onNavPrev={handleNavPrev}
-        onNavNext={handleNavNext}
-        onNavLast={handleNavLast}
-      />
-
-      {/* ── Game Setup ────────────────────────────────────────────────────── */}
-      <div className="flex flex-col gap-2 border border-surface2 rounded-lg p-3 bg-surface">
-        <span className="text-[10px] font-sans text-muted uppercase tracking-wider">New Game Setup</span>
-        <div className="flex gap-2">
-          <div className="flex flex-col gap-1 flex-1">
-            <span className="text-[10px] text-inactive font-sans">Mode</span>
-            <select
-              className={setupSelectClass}
-              value={setupMode}
-              onChange={(e) => setSetupMode(e.target.value as GameMode)}
-            >
-              <option value="human_vs_ai">vs AI</option>
-              <option value="human_vs_human">vs Human</option>
-              <option value="ai_vs_ai">AI vs AI</option>
-            </select>
-          </div>
-          {setupMode !== 'ai_vs_ai' && (
-            <div className="flex flex-col gap-1 flex-1">
-              <span className="text-[10px] text-inactive font-sans">Play as</span>
-              <select
-                className={setupSelectClass}
-                value={setupColor}
-                onChange={(e) => setSetupColor(e.target.value as typeof setupColor)}
-              >
-                <option value="white">White</option>
-                <option value="black">Black</option>
-                <option value="random">Random</option>
-              </select>
+    <div className="flex flex-row gap-3 h-full w-full px-3 py-2">
+      {/* LEFT COLUMN: Board + Eval + Controls */}
+      <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+        {/* Board area - fills available vertical space */}
+        <div ref={boardAreaRef} className="flex-1 min-h-0 flex items-center justify-center overflow-hidden">
+          {boardSize > 0 && (
+            <div className="relative" style={{ width: boardSize, height: boardSize }}>
+              <Board
+                onSquareClick={handleSquareClick}
+                onDropMove={handleDropMove}
+              />
             </div>
           )}
         </div>
-        <div className="flex gap-2">
+
+        {/* Eval bar */}
+        {settings.showEvalBar && <EvalBar />}
+
+        {/* Game controls */}
+        <GameControls
+          onFlip={store.flipBoard}
+          onUndo={handleUndo}
+          onDraw={showResignDraw ? handleDraw : undefined}
+          onResign={showResignDraw ? handleResign : undefined}
+        />
+      </div>
+
+      {/* RIGHT COLUMN: Side panel */}
+      <div className="w-[260px] flex-shrink-0 flex flex-col gap-2">
+        {/* Top player info */}
+        <div className="flex items-center gap-2 px-2 py-1.5 rounded-card bg-surface border border-surface2">
+          <div className="w-7 h-7 rounded-full bg-surface2 flex items-center justify-center border border-surface3 overflow-hidden">
+            <span className="material-symbols-outlined text-muted" style={{ fontSize: 16 }}>person</span>
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-xs font-sans font-medium text-on-surface truncate">{topName}</div>
+            {topElo != null && <div className="text-[10px] font-body text-muted">{topElo}</div>}
+          </div>
+          {topThinking && (
+            <span className="flex gap-0.5 items-center">
+              <span className="w-1 h-1 rounded-full bg-accent animate-bounce" style={{ animationDelay: '0ms' }} />
+              <span className="w-1 h-1 rounded-full bg-accent animate-bounce" style={{ animationDelay: '150ms' }} />
+              <span className="w-1 h-1 rounded-full bg-accent animate-bounce" style={{ animationDelay: '300ms' }} />
+            </span>
+          )}
+          <span className={`w-1.5 h-1.5 rounded-full ${topActive ? 'bg-accent' : 'bg-surface2'}`} />
+          <span className={`tabular-nums font-semibold text-[11px] font-mono ${topActive ? 'text-accent' : 'text-on-surface'}`}>
+            {formatTime(topTime)}
+          </span>
+        </div>
+
+        {/* Move history - fills remaining space */}
+        <div className="flex-1 min-h-0 flex flex-col">
+          <MoveHistory
+            onMoveClick={handleNavigate}
+            onNavFirst={handleNavFirst}
+            onNavPrev={handleNavPrev}
+            onNavNext={handleNavNext}
+            onNavLast={handleNavLast}
+            fillHeight
+          />
+        </div>
+
+        {/* Bottom player info */}
+        <div className="flex items-center gap-2 px-2 py-1.5 rounded-card bg-surface border border-surface2">
+          <div className="w-7 h-7 rounded-full bg-surface2 flex items-center justify-center border border-surface3 overflow-hidden">
+            <span className="material-symbols-outlined text-muted" style={{ fontSize: 16 }}>person</span>
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-xs font-sans font-medium text-on-surface truncate">{bottomName}</div>
+            {bottomElo != null && <div className="text-[10px] font-body text-muted">{bottomElo}</div>}
+          </div>
+          <span className={`w-1.5 h-1.5 rounded-full ${bottomActive ? 'bg-accent' : 'bg-surface2'}`} />
+          <span className={`tabular-nums font-semibold text-[11px] font-mono ${bottomActive ? 'text-accent' : 'text-on-surface'}`}>
+            {formatTime(bottomTime)}
+          </span>
+        </div>
+
+        {/* Action buttons row */}
+        <div className="grid grid-cols-2 gap-1.5">
           <button
             onClick={handleExportPgn}
-            className="flex-1 py-1.5 border border-surface2 rounded text-xs text-muted font-sans
-                       hover:border-accent hover:text-accent active:scale-95 transition-all"
+            className="flex flex-col items-center gap-0.5 py-1.5 border border-surface2 rounded text-[10px] text-muted font-sans hover:border-accent hover:text-accent active:scale-95 transition-all"
           >
-            Copy PGN
+            <span className="material-symbols-outlined" style={{ fontSize: 14 }}>content_copy</span>
+            PGN
           </button>
           <button
             onClick={handleSaveGame}
-            className="flex-1 py-1.5 border border-surface2 rounded text-xs text-muted font-sans
-                       hover:border-accent hover:text-accent active:scale-95 transition-all"
+            className="flex flex-col items-center gap-0.5 py-1.5 border border-surface2 rounded text-[10px] text-muted font-sans hover:border-accent hover:text-accent active:scale-95 transition-all"
           >
-            Save Game
+            <span className="material-symbols-outlined" style={{ fontSize: 14 }}>save</span>
+            Save
           </button>
           <button
             onClick={handleExportFen}
-            className="flex-1 py-1.5 border border-surface2 rounded text-xs text-muted font-sans
-                       hover:border-accent hover:text-accent active:scale-95 transition-all tooltip"
-            data-tip="Copy current position FEN"
+            className="flex flex-col items-center gap-0.5 py-1.5 border border-surface2 rounded text-[10px] text-muted font-sans hover:border-accent hover:text-accent active:scale-95 transition-all"
           >
-            Copy FEN
+            <span className="material-symbols-outlined" style={{ fontSize: 14 }}>edit</span>
+            FEN
           </button>
           <button
             onClick={handleExportFenCollection}
-            className="flex-1 py-1.5 border border-surface2 rounded text-xs text-muted font-sans
-                       hover:border-accent hover:text-accent active:scale-95 transition-all tooltip"
-            data-tip="Copy FEN collection from game"
+            className="flex flex-col items-center gap-0.5 py-1.5 border border-surface2 rounded text-[10px] text-muted font-sans hover:border-accent hover:text-accent active:scale-95 transition-all"
           >
-            FEN Collect
+            <span className="material-symbols-outlined" style={{ fontSize: 14 }}>collections_bookmark</span>
+            Collect
           </button>
+        </div>
+
+        {/* New Game Setup */}
+        <div className="flex flex-col gap-2 border border-surface2 rounded-lg p-3 bg-surface">
+          <span className="text-[10px] font-sans text-muted uppercase tracking-wider">New Game</span>
+          <div className="flex gap-2">
+            <div className="flex flex-col gap-1 flex-1">
+              <span className="text-[10px] text-inactive font-sans">Mode</span>
+              <select
+                className={setupSelectClass}
+                value={setupMode}
+                onChange={(e) => setSetupMode(e.target.value as GameMode)}
+              >
+                <option value="human_vs_ai">vs AI</option>
+                <option value="human_vs_human">vs Human</option>
+                <option value="ai_vs_ai">AI vs AI</option>
+              </select>
+            </div>
+            {setupMode !== 'ai_vs_ai' && (
+              <div className="flex flex-col gap-1 flex-1">
+                <span className="text-[10px] text-inactive font-sans">Play as</span>
+                <select
+                  className={setupSelectClass}
+                  value={setupColor}
+                  onChange={(e) => setSetupColor(e.target.value as typeof setupColor)}
+                >
+                  <option value="white">White</option>
+                  <option value="black">Black</option>
+                  <option value="random">Random</option>
+                </select>
+              </div>
+            )}
+          </div>
           <button
             onClick={handleNewGame}
-            className="flex-1 py-1.5 bg-accent text-bg rounded text-xs font-sans font-semibold
-                       hover:opacity-90 active:scale-95 transition-all tooltip"
-            data-tip="Start a new game"
+            className="w-full py-1.5 bg-accent text-bg rounded-lg text-xs font-sans font-semibold hover:opacity-90 active:scale-95 transition-all"
           >
             New Game
           </button>

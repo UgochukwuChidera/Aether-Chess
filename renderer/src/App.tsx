@@ -43,11 +43,28 @@ export default function App() {
 
   const renderView = () => {
     switch (tab) {
-      case 'play':       return <PlayView onTabChange={setTab} />;
-      case 'analysis':   return <AnalysisView />;
-      case 'settings':   return <SettingsView />;
-      case 'extensions': return <ExtensionsView />;
-       case 'history':    return <HistoryView />;
+      case 'play':
+        return <PlayView onTabChange={setTab} />;
+      case 'analysis':
+        return <AnalysisView />;
+      case 'settings':
+        return (
+          <div className="max-w-lg mx-auto px-6 py-4">
+            <SettingsView />
+          </div>
+        );
+      case 'extensions':
+        return (
+          <div className="max-w-lg mx-auto px-6 py-4">
+            <ExtensionsView />
+          </div>
+        );
+      case 'history':
+        return (
+          <div className="max-w-lg mx-auto px-6 py-4">
+            <HistoryView onTabChange={setTab} />
+          </div>
+        );
     }
   };
 
@@ -58,14 +75,15 @@ export default function App() {
         onSettingsClick={() => setTab('settings')}
       />
 
-      {/* Scrollable main content */}
       <main
-        className="flex-1 overflow-y-auto"
-        style={{ marginTop: TOP_BAR_H, marginBottom: BOTTOM_NAV_H }}
+        className="flex-1"
+        style={{
+          marginTop: TOP_BAR_H,
+          marginBottom: BOTTOM_NAV_H,
+          overflow: tab === 'play' || tab === 'analysis' ? 'hidden' : 'auto',
+        }}
       >
-        <div className="max-w-lg mx-auto px-6 py-4">
-          {renderView()}
-        </div>
+        {renderView()}
       </main>
 
       <BottomNav active={tab} onChange={setTab} />

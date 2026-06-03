@@ -8,12 +8,14 @@ const TOAST_ICONS: Record<Toast['type'], string> = {
   info:    'info',
   success: 'check_circle',
   error:   'error',
+  warning: 'warning',
 };
 
 const TOAST_COLORS: Record<Toast['type'], string> = {
   info:    'border-surface3 text-muted',
   success: 'border-accent text-accent',
   error:   'border-error text-error',
+  warning: 'border-yellow-500 text-yellow-500',
 };
 
 export const ToastStack: React.FC = () => {

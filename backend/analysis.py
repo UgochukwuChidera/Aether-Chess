@@ -7,7 +7,7 @@ from __future__ import annotations
 import math
 import os
 import sys
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import chess
 import chess.engine
@@ -203,12 +203,17 @@ class AccuracyAnalyser:
         accuracy: float,
         blunder_rate: float = 0.0,
         avg_cp_loss: float = 0.0,
+        num_games: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
         Estimate Elo using Glicko-2 model calibrated to:
           - accuracy (0-100)
           - blunder_rate (0.0-1.0)
           - avg_cp_loss (average centipawn loss per move)
+          - num_games: actual game count used for averaging; if provided,
+            the Glicko-2 simulation matches this count so the confidence
+            interval reflects the real sample size. Falls back to an
+            accuracy-based heuristic when None.
 
         Accuracy and avg_cp_loss are treated as performance indicators.
         Calibrated against human data.
@@ -219,7 +224,10 @@ class AccuracyAnalyser:
         adjusted_score = max(0.01, min(0.99, base_acc - cp_penalty - blunder_penalty))
         opponent_rating = 2000.0
         rating = GlickoRating(rating=1500.0, rd=200.0)
-        estimated_games = max(3, int((1.0 - adjusted_score) * 20 + 3))
+        if num_games is not None and num_games >= 1:
+            estimated_games = num_games
+        else:
+            estimated_games = max(3, int((1.0 - adjusted_score) * 20 + 3))
         for _ in range(estimated_games):
             rating.update_single(opponent_rating, 200.0, adjusted_score)
         final_rating = max(400, rating.rating - blunder_penalty)

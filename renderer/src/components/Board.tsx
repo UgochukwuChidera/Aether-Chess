@@ -2,7 +2,7 @@
  * Board.tsx — 8×8 CSS Grid chess board with piece rendering,
  * square highlights, click/promotion handling, and drag-and-drop moves.
  */
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback, useMemo, useRef } from 'react';
 import { useGameStore } from '../stores/gameStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { BOARD_STYLES, PIECE_ICONS, PIECE_GLYPHS, PIECE_EMOJI, PIECE_MODERN } from '../config/pieceConfig';
@@ -78,12 +78,14 @@ export const Board: React.FC<React.PropsWithChildren<Props>> = ({
   // Tracks the square where a drag originated
   const dragFromRef = useRef<string | null>(null);
 
-  const pieces = parseFen(fen);
+  const pieces = useMemo(() => parseFen(fen), [fen]);
 
   // Find king square for check highlight
-  const kingPiece = turn === 'white' ? 'K' : 'k';
-  const kingIndex = pieces.findIndex((p) => p === kingPiece);
-  const kingSquare = kingIndex >= 0 ? indexToAlgebraic(kingIndex) : null;
+  const kingSquare = useMemo(() => {
+    const kingPiece = turn === 'white' ? 'K' : 'k';
+    const kingIndex = pieces.findIndex((p) => p === kingPiece);
+    return kingIndex >= 0 ? indexToAlgebraic(kingIndex) : null;
+  }, [pieces, turn]);
 
   const renderSquare = useCallback(
     (index: number) => {
@@ -328,6 +330,7 @@ export const Board: React.FC<React.PropsWithChildren<Props>> = ({
         gridTemplateColumns: 'repeat(8, 1fr)',
         gridTemplateRows: 'repeat(8, 1fr)',
         aspectRatio: '1 / 1',
+        position: 'relative',
       }}
     >
       {Array.from({ length: 64 }, (_, i) => renderSquare(i))}

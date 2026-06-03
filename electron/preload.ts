@@ -83,6 +83,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   loadSettings: () => ipcRenderer.invoke('settings-load'),
   saveSettings: (data: unknown) => ipcRenderer.invoke('settings-save', data),
 
+  // ── Clipboard ───────────────────────────────────────────────────────────
+  copyToClipboard: (text: string) => ipcRenderer.invoke('clipboard-copy', text),
+
   // ── File system helpers ──────────────────────────────────────────────────
   pickStockfishPath: () => ipcRenderer.invoke('pick-stockfish-path'),
   getStockfishInfo: () => ipcRenderer.invoke('stockfish-info'),
@@ -109,4 +112,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getGameFilePath: (params: { id: string }) => ipcRenderer.invoke('get-game-file-path', params),
   deleteGameHistory: (params: { id: string }) => ipcRenderer.invoke('delete-game-history', params),
   updateGameTags: (params: { id: string; tags: string[] }) => ipcRenderer.invoke('update-game-tags', params),
+  computeAndCacheElo: (params: { id: string; stockfish_path?: string }) =>
+    ipcRenderer.invoke('compute-and-cache-elo', params),
+  getGamesNeedingElo: () => ipcRenderer.invoke('get-games-needing-elo'),
 });

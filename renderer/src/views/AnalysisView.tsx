@@ -1,7 +1,7 @@
 /**
- * AnalysisView.tsx — Board + live analysis panel.
+ * AnalysisView.tsx — Board + live analysis panel in a space-maximizing layout.
  */
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Board } from '../components/Board';
 import { EvalBar } from '../components/EvalBar';
 import { MoveHistory } from '../components/MoveHistory';
@@ -17,6 +17,21 @@ export const AnalysisView: React.FC = () => {
   const runningRef = useRef(false);
   const [accuracyLoading, setAccuracyLoading] = React.useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const boardAreaRef = useRef<HTMLDivElement>(null);
+  const [boardSize, setBoardSize] = useState(0);
+
+  // Maximize board to fill available space
+  useEffect(() => {
+    const el = boardAreaRef.current;
+    if (!el) return;
+    const calc = () => {
+      setBoardSize(Math.max(100, Math.min(el.clientWidth, el.clientHeight)));
+    };
+    calc();
+    const observer = new ResizeObserver(calc);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     window.electronAPI.onAnalysisUpdate((raw: unknown) => {
@@ -36,7 +51,6 @@ export const AnalysisView: React.FC = () => {
   }, []);
 
   // Stop analysis immediately on FEN / settings change; debounce the restart
-  // so rapid navigation through the move list doesn't spawn many Stockfish processes.
   useEffect(() => {
     void window.electronAPI.stopAnalysis().catch(() => {});
     store.setAnalysis({ running: false });
@@ -182,29 +196,52 @@ export const AnalysisView: React.FC = () => {
     return () => document.removeEventListener('keydown', onKey);
   }, [handleNavFirst, handleNavPrev, handleNavNext, handleNavLast]);
 
+  const handleAnalysisSquareClick = useCallback(() => {}, []);
+
+  const threatPV = useMemo(
+    () => store.analysis.pvs[0]?.pv?.slice(1, 5) ?? [],
+    [store.analysis.pvs],
+  );
+
   return (
-      <div className="flex flex-col gap-2 w-full">
-      {settings.showEvalBar && <EvalBar />}
-      <Board
-        onSquareClick={() => {}}
-        showArrowsFromAnalysis={true}
-        analysisPV={store.analysis.pvs[0]?.pv ?? []}
-        analysisAltPVs={store.analysis.pvs.slice(1).map((p) => p.pv)}
-        showThreatPV={store.analysis.pvs[0]?.pv?.slice(1, 5) ?? []}
-      />
-      <MoveHistory
-        onMoveClick={handleNavigate}
-        onNavFirst={handleNavFirst}
-        onNavPrev={handleNavPrev}
-        onNavNext={handleNavNext}
-        onNavLast={handleNavLast}
-      />
-      <AnalysisPanel
-        onStartAnalysis={handleStartAnalysis}
-        onStopAnalysis={handleStopAnalysis}
-        onComputeAccuracy={handleComputeAccuracy}
-        accuracyLoading={accuracyLoading}
-      />
+    <div className="flex flex-row gap-3 h-full w-full px-3 py-2">
+      {/* LEFT COLUMN: Board + Eval bar */}
+      <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+        <div ref={boardAreaRef} className="flex-1 min-h-0 flex items-center justify-center overflow-hidden">
+          {boardSize > 0 && (
+            <div className="relative" style={{ width: boardSize, height: boardSize }}>
+              <Board
+                onSquareClick={handleAnalysisSquareClick}
+                showArrowsFromAnalysis={true}
+                analysisPV={store.analysis.pvs[0]?.pv ?? []}
+                analysisAltPVs={store.analysis.pvs.slice(1).map((p) => p.pv)}
+                showThreatPV={threatPV}
+              />
+            </div>
+          )}
+        </div>
+        {settings.showEvalBar && <EvalBar />}
+      </div>
+
+      {/* RIGHT COLUMN: MoveHistory on top, AnalysisPanel below */}
+      <div className="w-[260px] flex-shrink-0 flex flex-col gap-2">
+        <div className="flex-1 min-h-0 flex flex-col">
+          <MoveHistory
+            onMoveClick={handleNavigate}
+            onNavFirst={handleNavFirst}
+            onNavPrev={handleNavPrev}
+            onNavNext={handleNavNext}
+            onNavLast={handleNavLast}
+            fillHeight
+          />
+        </div>
+        <AnalysisPanel
+          onStartAnalysis={handleStartAnalysis}
+          onStopAnalysis={handleStopAnalysis}
+          onComputeAccuracy={handleComputeAccuracy}
+          accuracyLoading={accuracyLoading}
+        />
+      </div>
     </div>
   );
 };

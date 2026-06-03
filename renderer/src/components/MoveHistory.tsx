@@ -11,6 +11,7 @@ interface Props {
   onNavPrev?: () => void;
   onNavNext?: () => void;
   onNavLast?: () => void;
+  fillHeight?: boolean;
 }
 
 export const MoveHistory: React.FC<Props> = ({
@@ -19,6 +20,7 @@ export const MoveHistory: React.FC<Props> = ({
   onNavPrev,
   onNavNext,
   onNavLast,
+  fillHeight = false,
 }) => {
   const { moveHistory, navIndex } = useGameStore();
   const listRef = useRef<HTMLDivElement>(null);
@@ -52,12 +54,12 @@ export const MoveHistory: React.FC<Props> = ({
   const atEnd   = navIndex < 0;
 
   return (
-    <div className="flex flex-col w-full gap-1">
+    <div className={`flex flex-col w-full gap-1 ${fillHeight ? 'flex-1 min-h-0' : ''}`}>
       {/* Move list */}
       <div
         ref={listRef}
-        className="w-full overflow-y-auto rounded-card bg-surface border border-surface2"
-        style={{ height: 160 }}
+        className={`w-full overflow-y-auto rounded-card bg-surface border border-surface2 ${fillHeight ? 'flex-1 min-h-0' : ''}`}
+        style={fillHeight ? undefined : { height: 160 }}
       >
         {pairs.length === 0 && (
           <div className="flex items-center justify-center h-full text-muted text-xs font-body">

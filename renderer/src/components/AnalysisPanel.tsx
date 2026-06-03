@@ -54,7 +54,7 @@ export const AnalysisPanel: React.FC<Props> = ({
   const topAlternatives = pvs.slice(1);
   const threatLine = top?.pv_san?.slice(1, 5) ?? [];
 
-  const classified = moveHistory.filter((m) => m.classification);
+  const classified = React.useMemo(() => moveHistory.filter((m) => m.classification), [moveHistory]);
   const hasAccuracy = classified.length > 0;
   const [eloEstimate, setEloEstimate] = React.useState<EloEstimate | null>(null);
 
@@ -85,24 +85,24 @@ export const AnalysisPanel: React.FC<Props> = ({
   }, [hasAccuracy, classified]);
 
   return (
-    <div className="flex flex-col gap-3 w-full">
+    <div className="flex flex-col gap-1.5 w-full max-h-[400px] overflow-y-auto border border-surface2 rounded-lg bg-surface p-2">
       {/* Control row */}
-      <div className="flex items-center gap-2">
-        <span className="text-xs font-sans text-muted flex-1">Stockfish Analysis</span>
+      <div className="flex items-center gap-1.5">
+        <span className="text-[10px] font-sans text-muted flex-1">Analysis</span>
         <button
           onClick={onComputeAccuracy}
           disabled={accuracyLoading}
-          className="px-3 py-1 rounded text-xs font-sans border border-surface2 text-muted
-                     hover:border-accent hover:text-accent transition-all active:scale-95
+          className="px-2 py-0.5 rounded text-[10px] font-sans border border-surface2 text-muted
+                     hover:border-accent hover:text-accent transition-all
                      disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {accuracyLoading ? 'Analysing…' : 'CAPS/ACPL'}
+          {accuracyLoading ? '…' : 'CAPS'}
         </button>
         <button
           onClick={running ? onStopAnalysis : onStartAnalysis}
-          className={`px-3 py-1 rounded text-xs font-sans border transition-all active:scale-95
+          className={`px-2 py-0.5 rounded text-[10px] font-sans border transition-all
                       ${running
-                        ? 'border-error text-error hover:bg-[#93000A]'
+                        ? 'border-error text-error'
                         : 'border-surface2 text-muted hover:border-accent hover:text-accent'}`}
         >
           {running ? 'Stop' : 'Analyse'}
@@ -111,7 +111,7 @@ export const AnalysisPanel: React.FC<Props> = ({
 
       {/* PV lines */}
       {pvs.length === 0 && !running && (
-        <p className="text-xs text-muted font-body text-center py-4">
+        <p className="text-[10px] text-muted font-body text-center py-2">
           Press Analyse to start engine evaluation.
         </p>
       )}
@@ -119,45 +119,29 @@ export const AnalysisPanel: React.FC<Props> = ({
         <PVLineRow key={i} pv={pv} rank={i} />
       ))}
 
-      {showAnalysisTopMoves && (
-        <div className="rounded-lg border border-surface2 bg-surface p-2">
-          <div className="text-xs text-muted mb-1">Top Move</div>
-          {top?.pv_san?.[0] ? (
-            <div className="text-sm font-mono text-on-surface">
-              {top.pv_san[0]} <span className="text-xs text-muted ml-2">({formatScore(top.score_cp, top.mate)})</span>
-            </div>
-          ) : (
-            <div className="text-xs text-muted">No top move available yet.</div>
-          )}
+      {/* Top move + alternatives + threats inline */}
+      {showAnalysisTopMoves && top?.pv_san?.[0] && (
+        <div className="flex items-center gap-1 text-[10px] font-mono text-muted">
+          <span className="text-accent">Best:</span>
+          <span>{top.pv_san[0]}</span>
+          <span className="text-muted">({formatScore(top.score_cp, top.mate)})</span>
         </div>
       )}
 
-      {showAnalysisTopAlternatives && (
-        <div className="rounded-lg border border-surface2 bg-surface p-2">
-          <div className="text-xs text-muted mb-1">Top Alternatives</div>
-          {topAlternatives.length > 0 ? (
-            <div className="flex flex-col gap-1">
-              {topAlternatives.map((pv, idx) => (
-                <div key={idx} className="text-xs font-mono text-muted">
-                  {pv.pv_san?.[0] ?? '—'}{' '}
-                  <span className="text-[10px]">({formatScore(pv.score_cp, pv.mate)})</span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-xs text-muted">No alternatives available yet.</div>
-          )}
+      {showAnalysisTopAlternatives && topAlternatives.length > 0 && (
+        <div className="flex flex-wrap gap-x-2 gap-y-0.5">
+          <span className="text-[10px] text-muted">Alt:</span>
+          {topAlternatives.slice(0, 3).map((pv, idx) => (
+            <span key={idx} className="text-[10px] font-mono text-muted">
+              {pv.pv_san?.[0] ?? '—'} ({formatScore(pv.score_cp, pv.mate)})
+            </span>
+          ))}
         </div>
       )}
 
-      {showAnalysisThreats && (
-        <div className="rounded-lg border border-surface2 bg-surface p-2">
-          <div className="text-xs text-muted mb-1">Threats</div>
-          {threatLine.length > 0 ? (
-            <div className="text-xs font-mono text-muted break-all">{threatLine.join(' ')}</div>
-          ) : (
-            <div className="text-xs text-muted">No concrete threat line available yet.</div>
-          )}
+      {showAnalysisThreats && threatLine.length > 0 && (
+        <div className="text-[10px] font-mono text-muted truncate">
+          <span className="text-yellow-400">Threat:</span> {threatLine.join(' ')}
         </div>
       )}
 
@@ -191,52 +175,51 @@ const AccuracyProgressionChart: React.FC<{ classified: { san: string; color: str
     ctx.clearRect(0, 0, W, H);
     if (classified.length < 2) return;
     const maxLoss = Math.max(...classified.map((m) => m.cp_loss ?? 0), 50);
-    const stepX = (W - 20) / (classified.length - 1);
-    ctx.strokeStyle = 'rgba(163,230,53,0.3)';
-    ctx.lineWidth = 1;
+    const stepX = (W - 14) / (classified.length - 1);
+    ctx.strokeStyle = 'rgba(163,230,53,0.25)';
+    ctx.lineWidth = 0.5;
     for (let i = 0; i <= 4; i++) {
-      const y = 10 + (H - 20) * (i / 4);
+      const y = 6 + (H - 12) * (i / 4);
       ctx.beginPath();
-      ctx.moveTo(10, y);
-      ctx.lineTo(W - 10, y);
+      ctx.moveTo(7, y);
+      ctx.lineTo(W - 7, y);
       ctx.stroke();
     }
     ctx.beginPath();
     ctx.strokeStyle = '#A3E635';
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 1.5;
     classified.forEach((m, i) => {
-      const x = 10 + i * stepX;
+      const x = 7 + i * stepX;
       const loss = m.cp_loss ?? 0;
-      const y = 10 + ((maxLoss - loss) / maxLoss) * (H - 20);
+      const y = 6 + ((maxLoss - loss) / maxLoss) * (H - 12);
       if (i === 0) { ctx.moveTo(x, y); } else { ctx.lineTo(x, y); }
     });
     ctx.stroke();
     ctx.fillStyle = '#A3E635';
     classified.forEach((m, i) => {
-      const x = 10 + i * stepX;
+      const x = 7 + i * stepX;
       const loss = m.cp_loss ?? 0;
-      const y = 10 + ((maxLoss - loss) / maxLoss) * (H - 20);
+      const y = 6 + ((maxLoss - loss) / maxLoss) * (H - 12);
       ctx.beginPath();
-      ctx.arc(x, y, 2.5, 0, Math.PI * 2);
+      ctx.arc(x, y, 2, 0, Math.PI * 2);
       ctx.fill();
-      const colorClass = m.classification ?? '';
-      if (colorClass === 'Blunder' || colorClass === 'Mistake') {
-        ctx.fillStyle = '#F87171';
+      if (m.classification === 'Blunder' || m.classification === 'Mistake') {
+        ctx.strokeStyle = '#F87171';
+        ctx.lineWidth = 1.5;
         ctx.beginPath();
-        ctx.arc(x, y, 4, 0, Math.PI * 2);
+        ctx.arc(x, y, 3, 0, Math.PI * 2);
         ctx.stroke();
-        ctx.fillStyle = '#A3E635';
       }
     });
     ctx.fillStyle = '#C2CAB0';
-    ctx.font = '9px Inter, sans-serif';
-    ctx.fillText('Best', 12, 8);
-    ctx.fillText(`${maxLoss.toFixed(0)}cp loss`, 12, H);
+    ctx.font = '8px Inter, sans-serif';
+    ctx.fillText('Best', 8, 6);
+    ctx.fillText(`${maxLoss.toFixed(0)}cp`, 8, H);
   }, [classified]);
   return (
-    <div className="rounded-lg border border-surface2 bg-surface p-2">
-      <div className="text-xs text-muted mb-1">Accuracy Progression (centipawn loss per move)</div>
-      <canvas ref={canvasRef} width={280} height={70} className="w-full" style={{ imageRendering: 'crisp-edges' }} />
+    <div className="rounded border border-surface2 bg-surface p-1.5">
+      <div className="text-[9px] text-muted mb-0.5">CP Loss Progression</div>
+      <canvas ref={canvasRef} width={240} height={44} className="w-full" style={{ imageRendering: 'crisp-edges' }} />
     </div>
   );
 };
@@ -253,22 +236,11 @@ const EloDisplay: React.FC<{ estimate: EloEstimate }> = ({ estimate }) => {
     ? (blacks.filter((m) => ['Best', 'Brilliant', 'Great'].includes(m.classification ?? '')).length / blacks.length) * 100
     : 0;
   return (
-    <div className="rounded-lg border border-surface2 bg-surface p-2">
-      <div className="text-xs text-muted mb-1">Estimated Rating (Glicko-2)</div>
-      <div className="flex items-center gap-4">
-        <div className="text-lg font-mono font-bold text-accent">
-          ~{estimate.estimated_elo}
-        </div>
-        <div className="flex flex-col gap-0.5">
-          <div className="text-[10px] text-muted">
-            CI: {estimate.confidence_interval[0]}–{estimate.confidence_interval[1]}
-          </div>
-          <div className="flex gap-3 text-[10px] text-muted">
-            <span>W: {wAcc.toFixed(0)}%</span>
-            <span>B: {bAcc.toFixed(0)}%</span>
-            <span>RD: {estimate.rd}</span>
-          </div>
-        </div>
+    <div className="rounded border border-surface2 bg-surface p-1.5">
+      <div className="flex items-center gap-2">
+        <span className="text-[11px] font-mono font-bold text-accent">~{estimate.estimated_elo}</span>
+        <span className="text-[9px] text-muted">CI: {estimate.confidence_interval[0]}–{estimate.confidence_interval[1]}</span>
+        <span className="text-[9px] text-muted ml-auto">W:{wAcc.toFixed(0)}% B:{bAcc.toFixed(0)}%</span>
       </div>
     </div>
   );
@@ -280,24 +252,20 @@ const PVLineRow: React.FC<{ pv: PVLine; rank: number }> = ({ pv, rank }) => {
 
   return (
     <div
-      className={`flex items-start gap-2 p-2 rounded-lg bg-surface border
-                  ${rank === 0 ? 'border-surface3' : 'border-surface2'}`}
+      className={`flex items-start gap-1 p-1 rounded ${rank === 0 ? 'bg-surface3/20' : ''}`}
     >
-      {/* Score */}
       <span
-        className={`text-sm font-mono font-semibold flex-shrink-0 w-12 text-right
+        className={`text-[11px] font-mono font-semibold flex-shrink-0 w-10 text-right
                     ${isPositive ? 'text-on-surface' : 'text-muted'}`}
       >
         {scoreLabel}
       </span>
-      {/* Depth */}
-      <span className="text-[10px] font-mono text-muted flex-shrink-0 self-center">
+      <span className="text-[9px] font-mono text-muted flex-shrink-0 self-center w-4">
         d{pv.depth}
       </span>
-      {/* PV moves */}
-      <span className="text-xs font-mono text-muted flex-1 leading-relaxed break-all">
-        {pv.pv_san.slice(0, 8).join(' ')}
-        {pv.pv_san.length > 8 ? ' …' : ''}
+      <span className="text-[10px] font-mono text-muted flex-1 truncate">
+        {pv.pv_san.slice(0, 6).join(' ')}
+        {pv.pv_san.length > 6 ? ' …' : ''}
       </span>
     </div>
   );
@@ -310,19 +278,19 @@ const MoveClassificationTable: React.FC = () => {
   if (classified.length === 0) return null;
 
   return (
-    <div className="flex flex-col gap-1 mt-2">
-      <span className="text-xs font-sans text-muted">Move Classifications</span>
-      <div className="grid grid-cols-2 gap-1 max-h-40 overflow-y-auto">
+    <div className="flex flex-col gap-0.5">
+      <div className="text-[9px] text-muted font-sans">Classifications</div>
+      <div className="flex flex-wrap gap-x-1.5 gap-y-0.5 max-h-20 overflow-y-auto">
         {classified.map((m, i) => (
-          <div key={i} className="flex items-center gap-1.5 text-xs font-mono">
-            <span className="text-muted w-10 truncate">{m.san}</span>
+          <span key={i} className="flex items-center gap-0.5 text-[9px] font-mono">
+            <span className="text-muted">{m.san}</span>
             <span
-              className={`px-1 py-0 rounded border text-[10px] font-sans
+              className={`px-0.5 rounded border text-[8px] font-sans
                           ${CLASSIFICATION_COLORS[m.classification ?? ''] ?? 'text-muted border-muted'}`}
             >
               {m.classification}
             </span>
-          </div>
+          </span>
         ))}
       </div>
     </div>
