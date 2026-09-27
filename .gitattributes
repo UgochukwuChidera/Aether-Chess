@@ -1,0 +1,28 @@
+# Normalize line endings in the repository to LF.
+# The working tree may contain CRLF (e.g. from a Windows checkout); git stores
+# LF and compares using the same normalization, so mixed endings show up as
+# clean instead of as spurious whole-file diffs against upstream.
+* text=auto eol=lf
+
+# Windows batch files must stay CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary assets — never normalize.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.bin binary
+*.onnx binary
+*.zip binary
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
