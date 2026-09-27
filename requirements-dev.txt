@@ -1,0 +1,4 @@
+# Linting / type-checking / test tooling. Kept separate from
+# requirements.txt so packaged builds do not pull in dev-only packages.
+ruff>=0.14
+pyright>=1.1.400

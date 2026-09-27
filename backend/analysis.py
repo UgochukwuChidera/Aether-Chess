@@ -18,10 +18,8 @@ if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
 from aether_chess.analysis.metrics import (
-    classify_move,
-    cp_to_win_pct,
     accuracy_from_losses,
-    estimate_bayesian_elo,
+    classify_move,
 )
 from aether_chess.engines.registry import resolve_engine_path
 
@@ -174,7 +172,7 @@ class AccuracyAnalyser:
             }
 
         try:
-            for fen, uci in zip(fen_list, moves):
+            for fen, uci in zip(fen_list, moves, strict=True):
                 board = chess.Board(fen)
                 is_white = board.turn == chess.WHITE
 

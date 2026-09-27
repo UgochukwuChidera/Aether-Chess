@@ -38,20 +38,20 @@ Stockfish is thinking or a full-game accuracy analysis is running.
 from __future__ import annotations
 
 import atexit
+import io
 import json
 import sys
 import threading
 import traceback
-import io
 from typing import Any, Dict
 
 import chess
 import chess.pgn
+from analysis import AccuracyAnalyser
 
 # Import domain modules (same package when running from source; bundled by
 # PyInstaller they are included via hidden-imports in the .spec file).
 from chess_engine import ChessEngineManager
-from analysis import AccuracyAnalyser
 
 # ── Global state ─────────────────────────────────────────────────────────────
 
@@ -242,14 +242,12 @@ def handle_check_maia3_cache(params: Dict[str, Any]) -> Any:
 def handle_maia3_cache(params: Dict[str, Any]) -> Any:
     import contextlib
     import io
-    import os
 
     model = params.get("model", "maia3-5m")
     cache_dir = params.get("cache_dir")
     force_download = bool(params.get("force_download", False))
     token = params.get("hf_token")
     try:
-        import maia3
         from maia3.cache import main as maia3_cache
     except Exception as exc:
         raise RuntimeError(f"Maia3 is not installed in this environment. Run: python -m pip install -e .\\inspiration [{exc}]") from exc

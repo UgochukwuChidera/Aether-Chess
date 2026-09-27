@@ -17,7 +17,6 @@ import sys
 import tempfile
 import threading
 import unittest
-import uuid
 from pathlib import Path
 
 from aether_chess.engines import registry

@@ -355,7 +355,7 @@ def discover_engines(configured: Optional[str] = None) -> List[EngineCandidate]:
 
     found = [
         _build_candidate(bin_path, source, identity)
-        for (bin_path, source), identity in zip(raw, identities)
+        for (bin_path, source), identity in zip(raw, identities, strict=True)
     ]
     return sorted(found, key=_sort_key)
 

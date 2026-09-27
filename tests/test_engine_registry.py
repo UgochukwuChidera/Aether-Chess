@@ -142,7 +142,7 @@ class EngineRegistryTests(unittest.TestCase):
         The official sf_18 release ships a "universal" binary that is really
         Stockfish 19, so believing the filename would lie to the player.
         """
-        engine = write_engine(self.app_dir, "stockfish-18", "Stockfish 19")
+        write_engine(self.app_dir, "stockfish-18", "Stockfish 19")
 
         found = registry.discover_engines()
 

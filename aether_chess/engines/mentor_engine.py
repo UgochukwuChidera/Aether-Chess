@@ -6,8 +6,8 @@ from __future__ import annotations
 
 import math
 import random
-import time
 import threading
+import time
 from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
@@ -403,20 +403,20 @@ class MentorEngine:
         score = 0
         if tt_move and move == tt_move:
             score += 50000
-        
+
         if board.is_capture(move):
             victim = board.piece_type_at(move.to_square)
             attacker = board.piece_type_at(move.from_square)
             if victim and attacker:
                 score += 20000 + PIECE_VALUES[victim] - PIECE_VALUES[attacker]
             score += max(-5000, min(5000, self.see(board, move) * 10))
-        
+
         if move.promotion:
             score += 10000
-        
+
         if board.gives_check(move):
             score += 500
-        
+
         # Rook shuffling fix: Penalize rook moves that don't improve position
         rook_moving = board.piece_type_at(move.from_square) == chess.ROOK
         if rook_moving:
@@ -429,7 +429,7 @@ class MentorEngine:
             else:
                 if from_rank >= 6 and to_rank < from_rank:
                     score -= 50
-        
+
         # Early opening: prioritize center control
         if board.fullmove_number <= 6:
             to_sq = move.to_square
@@ -439,17 +439,17 @@ class MentorEngine:
                 score += 200
             elif 2 <= file_idx <= 5 and 2 <= rank_idx <= 5:
                 score += 100
-        
+
         # Killers
         killers = self.killers.get(ply, [None, None])
         if killers[0] == move:
             score += 100
         elif killers[1] == move:
             score += 50
-        
+
         # History
         score += self.history.get((board.turn, move.from_square, move.to_square), 0)
-        
+
         return score
 
     def _ordered_moves(self, board: chess.Board, tt_move: Optional[chess.Move], ply: int) -> List[chess.Move]:
@@ -695,7 +695,7 @@ class MentorEngine:
             total = sum(weights)
             r = random.random() * total
             cur = 0.0
-            for (mv, _), w in zip(top, weights):
+            for (mv, _), w in zip(top, weights, strict=True):
                 cur += w
                 if cur >= r:
                     return mv

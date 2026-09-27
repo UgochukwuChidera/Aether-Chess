@@ -16,6 +16,7 @@
     "dist:mac": "npm run build && electron-builder --mac",
     "dist:linux": "npm run build && electron-builder --linux",
     "lint": "eslint renderer/src electron",
+    "lint:python": "ruff check .",
     "test:e2e": "playwright test",
     "test:electron": "tsc -p tsconfig.test.json && node --test --test-reporter=tap dist-test/",
     "test:python": "python -m unittest discover -s tests",

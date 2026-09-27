@@ -4,10 +4,10 @@ Build script for C++ accelerated chess evaluation.
 Usage: python setup.py build_ext --inplace
 Or:    build_msvc.bat
 """
-import os
 import sys
 import sysconfig
-from setuptools import setup, Extension
+
+from setuptools import Extension, setup
 
 python_include = sysconfig.get_path('include')
 

@@ -1,7 +1,7 @@
 """
 C++ accelerated chess evaluation module for AetherChess.
 
-This module wraps the compiled C++ evaluation engine. If the C++ module 
+This module wraps the compiled C++ evaluation engine. If the C++ module
 is not available (not compiled yet), it falls back to pure Python evaluation.
 
 Compile with:
@@ -11,9 +11,8 @@ Or on Windows (MSVC):
     build_msvc.bat
 """
 
-import os
-import sys
 import importlib.util
+import os
 
 _HERE = os.path.dirname(__file__)
 
@@ -25,7 +24,7 @@ def _try_import_cpp():
         return evaluate, evaluate_batch
     except ImportError:
         pass
-    
+
     # Try loading from this directory
     spec = None
     for ext in ['.pyd', '.dll', '.so']:
@@ -33,7 +32,7 @@ def _try_import_cpp():
         if os.path.exists(path):
             spec = importlib.util.spec_from_file_location('cpp_engine', path)
             break
-    
+
     if spec:
         try:
             module = importlib.util.module_from_spec(spec)
@@ -41,7 +40,7 @@ def _try_import_cpp():
             return module.evaluate, getattr(module, 'evaluate_batch', None)
         except Exception:
             pass
-    
+
     return None, None
 
 # Try to load C++ module

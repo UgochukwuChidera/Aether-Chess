@@ -58,11 +58,15 @@ python3 -m venv venv
 source venv/bin/activate        # Windows: venv\Scripts\activate
 pip install --upgrade pip
 pip install -r requirements.txt
+pip install -r requirements-dev.txt   # ruff + pyright, dev only
 ```
 
 `numba` is a **required** dependency: the mentor bot's evaluation kernel is
 JIT-compiled with it, and `backend/chess_engine.py` imports it unconditionally,
 so the backend will not start without it.
+
+`requirements-dev.txt` holds the dev-only tooling (ruff, pyright) so packaged
+builds do not pull it in via `requirements.txt`.
 
 The editor type-checker is configured to read this environment via
 `pyrightconfig.json`; no extra setup is needed once `venv/` exists.
@@ -143,11 +147,37 @@ Neither suite needs a real Stockfish binary: each writes throwaway UCI stubs
 that speak the real handshake. The one test that does use a real engine skips
 itself automatically when none is installed, so the suite is safe to run on CI.
 
-Type checking:
+### Linting and type checking
+
+The two halves of the codebase are linted separately, because they need
+different toolchains:
 
 ```bash
-npx pyright              # uses venv/ via pyrightconfig.json
-npm run lint
+npm run lint            # eslint, TypeScript/TSX (renderer/ + electron/)
+npm run lint:python     # ruff, Python
+npx pyright             # pyright, Python type check (uses venv/)
+```
+
+Ruff is the Python linter. It is configured by `ruff.toml`; `npm run lint` is
+deliberately TypeScript-only so the Node-only CI job does not need a Python
+toolchain. The two linters run in separate CI steps for the same reason.
+
+`ruff.toml` excludes the retired Pygame UI (`aether_chess/app.py`,
+`aether_chess/ui/`) and `notebooks/`, matching `pyrightconfig.json`. It also
+relaxes three rules where the existing style is deliberate:
+
+- `E701`/`E702` in `aether_chess/engines/mentor_engine.py`, whose bit-twiddling
+  helpers and evaluation kernel are `@numba.njit` and are written compactly
+  on purpose.
+- `E402` in `backend/analysis.py` and `backend/chess_engine.py`, which extend
+  `sys.path` and set `HF_HOME` before importing `aether_chess`.
+- `E402` in `tests/`, which import the module under test after arranging
+  `sys.path`.
+
+To fix what ruff can fix automatically:
+
+```bash
+ruff check --fix .
 ```
 
 ---

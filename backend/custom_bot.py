@@ -3,12 +3,13 @@ backend/custom_bot.py — Mentor bot adapter implemented on top of Stockfish.
 """
 from __future__ import annotations
 
+import random
 import threading
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional
 
 import chess
 import chess.engine
-import random
+
 from aether_chess.engines.mentor_engine import MentorEngine, SearchConfig
 
 
@@ -94,12 +95,6 @@ class MentorBotAdapter:
     ) -> Dict[str, Any]:
         """Return a mentor move using Stockfish at scaled strength (1-10)."""
         board = chess.Board(fen)
-        profile = self._strength_profile(
-            strength,
-            time_remaining=time_remaining,
-            time_increment=time_increment,
-            total_moves=total_moves,
-        )
         # Use MentorEngine (pure Python AI) for move generation
         mentor = MentorEngine()
         # Configure search depth based on strength (similar scaling as earlier)

@@ -31,11 +31,10 @@ os.environ.setdefault("HF_HOME", _HF_CACHE)
 os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
 
 from aether_chess.engines.maia3_proxy import Maia3Proxy, Maia3UnavailableError
-from aether_chess.engines.registry import is_executable_file, resolve_engine_path
-from aether_chess.think_profile import get_profile, sample_think_time
-
-from aether_chess.models.game_state import GameState
 from aether_chess.engines.mentor_engine import MentorEngine, SearchConfig
+from aether_chess.engines.registry import is_executable_file, resolve_engine_path
+from aether_chess.models.game_state import GameState
+from aether_chess.think_profile import get_profile, sample_think_time
 
 
 class ChessEngineManager:
@@ -433,7 +432,7 @@ class ChessEngineManager:
                     san = board.san(result.move)
                     ret: Dict[str, Any] = {"move": result.move.uci(), "san": san}
                     if fallback_from:
-                        ret["_fallback_msg"] = f"Maia3 unavailable — using Stockfish"
+                        ret["_fallback_msg"] = "Maia3 unavailable — using Stockfish"
                     return ret
             except Exception as e:
                 print(
@@ -704,9 +703,9 @@ class ChessEngineManager:
             (chess.QUEEN, 950),
             (chess.KING, 20000),
         ]:
-            for sq in board.pieces(pt, chess.WHITE):
+            for _ in board.pieces(pt, chess.WHITE):
                 score += val
-            for sq in board.pieces(pt, chess.BLACK):
+            for _ in board.pieces(pt, chess.BLACK):
                 score -= val
         return score
 
@@ -721,9 +720,9 @@ class ChessEngineManager:
             (chess.QUEEN, 950),
             (chess.KING, 20000),
         ]:
-            for sq in board.pieces(pt, chess.WHITE):
+            for _ in board.pieces(pt, chess.WHITE):
                 score += val
-            for sq in board.pieces(pt, chess.BLACK):
+            for _ in board.pieces(pt, chess.BLACK):
                 score -= val
         return score
 
@@ -744,7 +743,6 @@ class ChessEngineManager:
         self, fen: str, books_dir: str = "resources/books"
     ) -> Dict[str, Any]:
         """Return all book moves with weights for a position."""
-        import glob as globlib
 
         bin_files = globlib.glob(os.path.join(books_dir, "*.bin"))
         if not bin_files:

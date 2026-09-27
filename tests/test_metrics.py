@@ -1,6 +1,11 @@
 import unittest
 
-from aether_chess.analysis.metrics import accuracy_from_losses, classify_move, cp_to_win_pct, estimate_bayesian_elo
+from aether_chess.analysis.metrics import (
+    accuracy_from_losses,
+    classify_move,
+    cp_to_win_pct,
+    estimate_bayesian_elo,
+)
 
 
 class MetricsTests(unittest.TestCase):

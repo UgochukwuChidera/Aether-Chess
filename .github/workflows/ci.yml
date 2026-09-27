@@ -53,6 +53,17 @@ jobs:
       - name: Install Python dependencies
         run: pip install -r requirements.txt
 
+      - name: Install dev tooling
+        # ruff (linter) and pyright (type checker) are dev-only, so they live in
+        # requirements-dev.txt rather than the runtime requirements.
+        run: pip install -r requirements-dev.txt
+
+      - name: Lint Python (ruff)
+        run: ruff check .
+
+      - name: Type-check Python (pyright)
+        run: pyright
+
       - name: Verify no engine binaries are tracked
         # engines/ is gitignored, but a stray `git add -f` of a 100 MB+ binary
         # would be expensive to undo and is easy to miss in review.
