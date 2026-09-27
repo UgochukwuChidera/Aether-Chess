@@ -27,6 +27,12 @@ jobs:
       - name: Lint TypeScript/TSX
         run: npm run lint
 
+      - name: Stockfish discovery tests
+        # Runs first and on its own so a failure points straight at engine
+        # discovery. These tests build their own throwaway UCI stubs, so no
+        # Stockfish binary is needed on the runner (engines/ is gitignored).
+        run: npm run test:electron
+
       - name: Build renderer + Electron
         run: npm run build
 
@@ -46,6 +52,23 @@ jobs:
 
       - name: Install Python dependencies
         run: pip install -r requirements.txt
+
+      - name: Verify no engine binaries are tracked
+        # engines/ is gitignored, but a stray `git add -f` of a 100 MB+ binary
+        # would be expensive to undo and is easy to miss in review.
+        run: |
+          tracked=$(git ls-files engines/ | grep -v '\.gitkeep$' || true)
+          if [ -n "$tracked" ]; then
+            echo "::error::Engine binaries must not be committed:"
+            echo "$tracked"
+            exit 1
+          fi
+
+      - name: Stockfish resolver tests
+        # Runs first and on its own so a failure points straight at engine
+        # discovery. These tests build their own throwaway UCI stubs, so no
+        # Stockfish binary is needed on the runner (engines/ is gitignored).
+        run: python -m unittest tests.test_engine_registry -v
 
       - name: Run unit tests
         run: python -m unittest discover -s tests -v

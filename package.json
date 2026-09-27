@@ -1,7 +1,7 @@
 {
   "name": "aether-chess",
   "version": "1.0.0",
-  "description": "Professional desktop chess application — Electron + Python hybrid",
+  "description": "Professional desktop chess application \u2014 Electron + Python hybrid",
   "main": "dist/electron/main.js",
   "private": true,
   "scripts": {
@@ -16,7 +16,10 @@
     "dist:mac": "npm run build && electron-builder --mac",
     "dist:linux": "npm run build && electron-builder --linux",
     "lint": "eslint renderer/src electron",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:electron": "tsc -p tsconfig.test.json && node --test --test-reporter=tap dist-test/",
+    "test:python": "python -m unittest discover -s tests",
+    "test": "npm run test:electron && npm run test:python"
   },
   "dependencies": {
     "electron-updater": "^6.3.9",
@@ -45,5 +48,9 @@
   },
   "build": {
     "extends": "./build/electron-builder.yml"
+  },
+  "engines": {
+    "node": "20.x",
+    "npm": ">=9"
   }
 }

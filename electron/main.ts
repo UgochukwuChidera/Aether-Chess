@@ -1,17 +1,18 @@
-import {
-  app,
-  BrowserWindow,
-  ipcMain,
-  clipboard,
-  dialog,
-  shell,
-  Menu,
-} from 'electron';
+import { app, BrowserWindow, ipcMain, clipboard, dialog, shell, Menu } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import { PythonShell, Options } from 'python-shell';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
+import {
+  discoverEngines,
+  ensureEngineDirs,
+  ensureExecutable,
+  isAutoPath,
+  isExecutableFile as isExecutablePath,
+  userEnginesDir,
+  appEnginesDir,
+} from './engineRegistry';
 
 type EloCache = {
   white_accuracy: number;
@@ -36,7 +37,6 @@ type GameHistoryMeta = {
 };
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
-const EXECUTABLE_PERMISSION_MASK = 0o111;
 
 // ── Python backend process ───────────────────────────────────────────────────
 
@@ -45,7 +45,11 @@ let pyShell: PythonShell | null = null;
 // Pending promise resolvers keyed by request id
 const pendingRequests = new Map<
   string,
-  { resolve: (v: unknown) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }
+  {
+    resolve: (v: unknown) => void;
+    reject: (e: Error) => void;
+    timer: ReturnType<typeof setTimeout>;
+  }
 >();
 
 // Analysis streaming callbacks: callback_id → BrowserWindow webContents id
@@ -57,9 +61,10 @@ function getPythonPath(): string {
     return path.join(process.resourcesPath, 'backend', `aether_backend${ext}`);
   }
   // In dev mode, prefer the venv Python so project packages are available
-  const venvPython = process.platform === 'win32'
-    ? path.join(__dirname, '..', '..', 'venv', 'Scripts', 'python.exe')
-    : path.join(__dirname, '..', '..', 'venv', 'bin', 'python3');
+  const venvPython =
+    process.platform === 'win32'
+      ? path.join(__dirname, '..', '..', 'venv', 'Scripts', 'python.exe')
+      : path.join(__dirname, '..', '..', 'venv', 'bin', 'python3');
   if (fs.existsSync(venvPython)) return venvPython;
   return process.platform === 'win32' ? 'python' : 'python3';
 }
@@ -87,45 +92,22 @@ function readDefaults(): Record<string, unknown> {
   }
 }
 
-function normalizeSettings(raw: unknown): Record<string, unknown> {
+async function normalizeSettings(raw: unknown): Promise<Record<string, unknown>> {
   const defaults = readDefaults();
-  if (app.isPackaged && (defaults.stockfishPath === 'stockfish' || !defaults.stockfishPath)) {
-    const bundled = getPackagedStockfishPath();
-    if (bundled) defaults.stockfishPath = bundled;
-  }
-  const data = (raw && typeof raw === 'object') ? raw as Record<string, unknown> : {};
+  const data = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
   const merged: Record<string, unknown> = { ...defaults, ...data };
   const defaultTc = (defaults.timeControl as Record<string, unknown> | undefined) ?? {};
   const savedTc = (data.timeControl as Record<string, unknown> | undefined) ?? {};
   merged.timeControl = { ...defaultTc, ...savedTc };
+
+  // An "auto" selection is deliberately left as the bare name rather than
+  // rewritten to whichever binary happens to be installed today. Resolving it
+  // here would freeze the choice into settings and silently stop Auto from
+  // ever picking up a newer engine. The Python backend resolves bare names
+  // itself, so nothing downstream needs a concrete path.
+  const configured = typeof merged.stockfishPath === 'string' ? merged.stockfishPath.trim() : '';
+  if (!configured) merged.stockfishPath = 'stockfish';
   return merged;
-}
-
-function getPackagedStockfishPath(): string | null {
-  const ext = process.platform === 'win32' ? '.exe' : '';
-  const candidates = [
-    path.join(process.resourcesPath, 'backend', `stockfish${ext}`),
-    path.join(process.resourcesPath, `stockfish${ext}`),
-  ];
-  for (const candidate of candidates) {
-    if (fs.existsSync(candidate)) return candidate;
-  }
-  return null;
-}
-
-function isExecutablePath(filePath: string): boolean {
-  try {
-    const stats = fs.statSync(filePath);
-    if (!stats.isFile()) return false;
-    if (process.platform === 'win32') {
-      const ext = path.extname(filePath).toLowerCase();
-      return ['.exe', '.bat', '.cmd'].includes(ext);
-    }
-    return (stats.mode & EXECUTABLE_PERMISSION_MASK) !== 0;
-  } catch (error) {
-    console.warn('[settings] Failed to validate executable path:', filePath, error);
-    return false;
-  }
 }
 
 function startPython(mainWindow: BrowserWindow): void {
@@ -142,9 +124,7 @@ function startPython(mainWindow: BrowserWindow): void {
   };
 
   try {
-    pyShell = app.isPackaged
-      ? new PythonShell(pythonPath, { ...opts, args: [] })
-      : new PythonShell(scriptPath, opts);
+    pyShell = app.isPackaged ? new PythonShell(pythonPath, { ...opts, args: [] }) : new PythonShell(scriptPath, opts);
   } catch (err) {
     console.error('Failed to start Python backend:', err);
     mainWindow.webContents.send('backend-error', String(err));
@@ -281,6 +261,9 @@ function createWindow(): BrowserWindow {
 // ── App lifecycle ────────────────────────────────────────────────────────────
 
 app.whenReady().then(() => {
+  // Create the folders a player drops engine binaries into, so the path we
+  // advertise in the UI always exists.
+  ensureEngineDirs();
   createWindow();
 
   app.on('activate', () => {
@@ -308,7 +291,11 @@ ipcMain.on('window-minimize', (event) => {
 });
 ipcMain.on('window-maximize', (event) => {
   const win = BrowserWindow.fromWebContents(event.sender);
-  if (win?.isMaximized()) { win.unmaximize(); } else { win?.maximize(); }
+  if (win?.isMaximized()) {
+    win.unmaximize();
+  } else {
+    win?.maximize();
+  }
 });
 ipcMain.on('window-close', (event) => {
   BrowserWindow.fromWebContents(event.sender)?.close();
@@ -345,12 +332,9 @@ for (const cmd of CHESS_COMMANDS) {
 }
 
 // Analysis streaming (needs window id for push events)
-ipcMain.handle(
-  'start_analysis',
-  async (event, params: { fen: string; multipv: number; callback_id: string }) => {
-    return sendCommand('start_analysis', params, params.callback_id, event.sender.id);
-  },
-);
+ipcMain.handle('start_analysis', async (event, params: { fen: string; multipv: number; callback_id: string }) => {
+  return sendCommand('start_analysis', params, params.callback_id, event.sender.id);
+});
 
 // Settings persistence
 const settingsPath = path.join(app.getPath('userData'), 'settings.json');
@@ -386,7 +370,13 @@ function loadGameIndex(): {
     const raw = JSON.parse(fs.readFileSync(indexPath, 'utf-8')) as {
       version?: number;
       max_entries?: number;
-      games?: Array<{ id: string; pgn_file: string; meta: GameHistoryMeta & { time_control?: { seconds: number; increment: number; label: string } } }>;
+      games?: Array<{
+        id: string;
+        pgn_file: string;
+        meta: GameHistoryMeta & {
+          time_control?: { seconds: number; increment: number; label: string };
+        };
+      }>;
     };
     return {
       version: raw.version ?? 1,
@@ -401,7 +391,11 @@ function loadGameIndex(): {
   }
 }
 
-function saveGameIndex(data: { version: number; max_entries: number; games: Array<{ id: string; pgn_file: string; meta: GameHistoryMeta }> }): void {
+function saveGameIndex(data: {
+  version: number;
+  max_entries: number;
+  games: Array<{ id: string; pgn_file: string; meta: GameHistoryMeta }>;
+}): void {
   const indexPath = getHistoryIndexPath();
   fs.writeFileSync(indexPath, JSON.stringify(data, null, 2), 'utf-8');
 }
@@ -421,20 +415,20 @@ function pruneGameIndex(data: { max_entries: number; games: Array<{ id: string; 
   data.games.splice(0, overflow);
 }
 
-ipcMain.handle('settings-load', () => {
+ipcMain.handle('settings-load', async () => {
   try {
     if (fs.existsSync(settingsPath)) {
       const raw = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
-      return normalizeSettings(raw);
+      return await normalizeSettings(raw);
     }
   } catch {
     /* ignore */
   }
-  return normalizeSettings(null);
+  return await normalizeSettings(null);
 });
 
-ipcMain.handle('settings-save', (_event, data: unknown) => {
-  const normalized = normalizeSettings(data);
+ipcMain.handle('settings-save', async (_event, data: unknown) => {
+  const normalized = await normalizeSettings(data);
   fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
   fs.writeFileSync(settingsPath, JSON.stringify(normalized, null, 2), 'utf-8');
   return true;
@@ -442,52 +436,75 @@ ipcMain.handle('settings-save', (_event, data: unknown) => {
 
 // File picker for Stockfish path
 ipcMain.handle('pick-stockfish-path', async (event) => {
-  const win = BrowserWindow.fromWebContents(event.sender)
-    ?? BrowserWindow.getAllWindows()[0];
+  const win = BrowserWindow.fromWebContents(event.sender) ?? BrowserWindow.getAllWindows()[0];
   if (!win) return null;
   const result = await dialog.showOpenDialog(win, {
     title: 'Select Stockfish executable',
     properties: ['openFile'],
-    filters: process.platform === 'win32'
-      ? [{ name: 'Executables', extensions: ['exe', 'bat', 'cmd'] }]
-      : [{ name: 'All Files', extensions: [] }],
+    filters:
+      process.platform === 'win32'
+        ? [{ name: 'Executables', extensions: ['exe', 'bat', 'cmd'] }]
+        : [{ name: 'All Files', extensions: [] }],
   });
   if (result.canceled) return null;
   const selected = result.filePaths[0];
   // On Unix, automatically grant execute permission so the binary is usable
   // even when downloaded directly (browsers do not preserve execute bits).
-  if (process.platform !== 'win32') {
-    try {
-      const stats = fs.statSync(selected);
-      if (stats.isFile() && (stats.mode & 0o100) === 0) {
-        fs.chmodSync(selected, stats.mode | 0o111);
-      }
-    } catch (err) {
-      console.warn('[stockfish] Could not chmod executable:', err);
-    }
-  }
+  ensureExecutable(selected);
   return isExecutablePath(selected) ? selected : null;
 });
 
-ipcMain.handle('stockfish-info', () => {
-  const bundledPath = app.isPackaged ? getPackagedStockfishPath() : null;
-  const configuredPath = (() => {
-    try {
-      if (!fs.existsSync(settingsPath)) return null;
-      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8')) as Record<string, unknown>;
-      const p = settings.stockfishPath;
-      return typeof p === 'string' && p.trim() ? p : null;
-    } catch {
-      return null;
-    }
-  })();
+/** Read the persisted stockfishPath, if the user has ever saved settings. */
+function readConfiguredEnginePath(): string | null {
+  try {
+    if (!fs.existsSync(settingsPath)) return null;
+    const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8')) as Record<string, unknown>;
+    const p = settings.stockfishPath;
+    return typeof p === 'string' && p.trim() ? p : null;
+  } catch {
+    return null;
+  }
+}
+
+ipcMain.handle('stockfish-info', async () => {
+  const configuredPath = readConfiguredEnginePath();
+  // Discovery probes each candidate, so it is comparatively slow; the UI calls
+  // this on open and after a change, not per frame.
+  const engines = await discoverEngines(configuredPath);
+  const bundled = engines.find((e) => e.source === 'bundled');
+
+  // Mirror resolveEnginePath's choice from the same discovery pass, so the
+  // highlighted engine and the one the backend receives cannot disagree.
+  const resolvedPath =
+    configuredPath && !isAutoPath(configuredPath)
+      ? isExecutablePath(path.resolve(configuredPath))
+        ? path.resolve(configuredPath)
+        : null
+      : (engines[0]?.path ?? null);
+  const chosen = resolvedPath ? engines.find((e) => e.path === resolvedPath) : undefined;
+  if (chosen) chosen.selected = true;
+
   return {
     configuredPath,
-    configuredExists: configuredPath ? fs.existsSync(configuredPath) : false,
-    bundledPath,
-    bundledExists: bundledPath ? fs.existsSync(bundledPath) : false,
+    configuredExists: configuredPath ? isExecutablePath(configuredPath) : false,
+    bundledPath: bundled?.path ?? null,
+    bundledExists: Boolean(bundled),
+    /** Every engine found, newest version first. */
+    engines,
+    /** What the app would use right now. */
+    resolvedPath,
+    appEnginesDir: appEnginesDir(),
+    userEnginesDir: userEnginesDir(),
     settingsPath,
   };
+});
+
+/** Open the folder a player should drop downloaded binaries into. */
+ipcMain.handle('reveal-engines-dir', async () => {
+  ensureEngineDirs();
+  const target = fs.existsSync(userEnginesDir()) ? userEnginesDir() : appEnginesDir();
+  await shell.openPath(target);
+  return target;
 });
 
 ipcMain.handle('clipboard-copy', (_event, text: string) => {
@@ -500,9 +517,12 @@ ipcMain.handle('open-external-url', async (_event, url: string) => {
   return true;
 });
 
-ipcMain.handle('maia3-cache', async (_event, params: { model?: string; cache_dir?: string; force_download?: boolean; hf_token?: string }) => {
-  return sendCommand('maia3_cache', params ?? {});
-});
+ipcMain.handle(
+  'maia3-cache',
+  async (_event, params: { model?: string; cache_dir?: string; force_download?: boolean; hf_token?: string }) => {
+    return sendCommand('maia3_cache', params ?? {});
+  },
+);
 
 ipcMain.handle('check-maia3-cache', async (_event, params: { model?: string }) => {
   return sendCommand('check_maia3_cache', params ?? {});
@@ -626,29 +646,49 @@ interface AccuracyFromPgnResult {
 ipcMain.handle('compute-and-cache-elo', async (_event, params: { id: string; stockfish_path?: string }) => {
   const id = typeof params?.id === 'string' ? params.id : '';
   console.log('[Elo] compute-and-cache-elo start — id:', id);
-  if (!id) { console.warn('[Elo] Missing id'); return { ok: false, error: 'Missing id' }; }
+  if (!id) {
+    console.warn('[Elo] Missing id');
+    return { ok: false, error: 'Missing id' };
+  }
 
   const index = loadGameIndex();
   const entry = index.games.find((g) => g.id === id);
-  if (!entry) { console.warn('[Elo] Game not found:', id); return { ok: false, error: 'Game not found' }; }
+  if (!entry) {
+    console.warn('[Elo] Game not found:', id);
+    return { ok: false, error: 'Game not found' };
+  }
 
   const pgnPath = path.join(getHistoryDir(), entry.pgn_file);
-  if (!fs.existsSync(pgnPath)) { console.warn('[Elo] PGN file not found:', pgnPath); return { ok: false, error: 'PGN file not found' }; }
+  if (!fs.existsSync(pgnPath)) {
+    console.warn('[Elo] PGN file not found:', pgnPath);
+    return { ok: false, error: 'PGN file not found' };
+  }
   const pgn = fs.readFileSync(pgnPath, 'utf-8');
-  console.log('[Elo]  PGN loaded —', (entry.meta.white ?? '?'), 'vs', (entry.meta.black ?? '?'), '—', entry.meta.moves, 'moves');
+  console.log(
+    '[Elo]  PGN loaded —',
+    entry.meta.white ?? '?',
+    'vs',
+    entry.meta.black ?? '?',
+    '—',
+    entry.meta.moves,
+    'moves',
+  );
 
   let result: AccuracyFromPgnResult;
   try {
-    result = await sendCommand('calculate_accuracy_from_pgn', {
+    result = (await sendCommand('calculate_accuracy_from_pgn', {
       pgn,
       stockfish_path: params?.stockfish_path ?? '',
-    }) as AccuracyFromPgnResult;
+    })) as AccuracyFromPgnResult;
   } catch (err) {
     console.warn('[Elo]  Stockfish analysis threw:', err);
     return { ok: false, error: String(err) };
   }
 
-  if (result.error) { console.warn('[Elo]  Stockfish analysis error:', result.error); return { ok: false, error: result.error }; }
+  if (result.error) {
+    console.warn('[Elo]  Stockfish analysis error:', result.error);
+    return { ok: false, error: result.error };
+  }
 
   const rows = result.moves ?? [];
   const blunders = rows.filter((m) => m.classification === 'Blunder').length;
@@ -656,9 +696,7 @@ ipcMain.handle('compute-and-cache-elo', async (_event, params: { id: string; sto
   const whiteLosses = rows.filter((m) => m.color === 'white').map((m) => m.cp_loss);
   const blackLosses = rows.filter((m) => m.color === 'black').map((m) => m.cp_loss);
   const allLosses = [...whiteLosses, ...blackLosses];
-  const avgCpLoss = allLosses.length > 0
-    ? allLosses.reduce((a, b) => a + b, 0) / allLosses.length
-    : 0;
+  const avgCpLoss = allLosses.length > 0 ? allLosses.reduce((a, b) => a + b, 0) / allLosses.length : 0;
 
   const eloCache = {
     white_accuracy: result.white_accuracy ?? 0,
@@ -667,7 +705,16 @@ ipcMain.handle('compute-and-cache-elo', async (_event, params: { id: string; sto
     avg_cp_loss: Math.round(avgCpLoss * 10) / 10,
     computed_at: new Date().toISOString(),
   };
-  console.log('[Elo]  Result — W:', eloCache.white_accuracy.toFixed(1), 'B:', eloCache.black_accuracy.toFixed(1), 'BR:', eloCache.blunder_rate, 'CPL:', eloCache.avg_cp_loss);
+  console.log(
+    '[Elo]  Result — W:',
+    eloCache.white_accuracy.toFixed(1),
+    'B:',
+    eloCache.black_accuracy.toFixed(1),
+    'BR:',
+    eloCache.blunder_rate,
+    'CPL:',
+    eloCache.avg_cp_loss,
+  );
 
   // Re-load index to avoid race conditions with other writes
   const freshIndex = loadGameIndex();
@@ -694,7 +741,20 @@ ipcMain.handle('get-games-needing-elo', () => {
   }
   needing.sort((a, b) => b.played_at.localeCompare(a.played_at));
   const result = needing.slice(0, 30);
-  console.log('[Elo] get-games-needing-elo —', result.length, 'game(s) without cache (of', index.games.length, 'total)');
-  if (result.length > 0) console.log('[Elo]   First few:', result.slice(0, 3).map((g) => g.id).join(', '));
+  console.log(
+    '[Elo] get-games-needing-elo —',
+    result.length,
+    'game(s) without cache (of',
+    index.games.length,
+    'total)',
+  );
+  if (result.length > 0)
+    console.log(
+      '[Elo]   First few:',
+      result
+        .slice(0, 3)
+        .map((g) => g.id)
+        .join(', '),
+    );
   return result;
 });

@@ -50,6 +50,10 @@ def estimate_bayesian_elo(
 
     r = prior_mean
     prior_var = prior_sd * prior_sd
+    # Seeded before the loop: range(30) always runs, but assigning here makes it
+    # explicit for readers and for type checkers, which treat a variable first
+    # assigned inside a loop as possibly unbound afterwards.
+    hess = -1.0 / prior_var
 
     for _ in range(30):
         grad = -(r - prior_mean) / prior_var

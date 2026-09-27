@@ -1,7 +1,7 @@
 /**
  * SettingsPanel.tsx — Full-page settings view with collapsible sections.
  */
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   useSettingsStore,
   TIME_CONTROLS,
@@ -27,7 +27,9 @@ const Section: React.FC<SectionProps> = ({ title, icon, children }) => {
         onClick={() => setOpen((o) => !o)}
         className="w-full flex items-center gap-2 px-4 py-3 bg-surface hover:bg-surface2 transition-colors"
       >
-        <span className="material-symbols-outlined text-muted" style={{ fontSize: 18 }}>{icon}</span>
+        <span className="material-symbols-outlined text-muted" style={{ fontSize: 18 }}>
+          {icon}
+        </span>
         <span className="flex-1 text-left text-sm font-sans font-semibold text-on-surface">{title}</span>
         <span className="material-symbols-outlined text-inactive" style={{ fontSize: 18 }}>
           {open ? 'expand_less' : 'expand_more'}
@@ -42,7 +44,11 @@ const Label: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <span className="text-xs font-sans text-muted">{children}</span>
 );
 
-const Row: React.FC<{ label: string; children: React.ReactNode; tooltip?: string }> = ({ label, children, tooltip }) => (
+const Row: React.FC<{ label: string; children: React.ReactNode; tooltip?: string }> = ({
+  label,
+  children,
+  tooltip,
+}) => (
   <div className="flex items-center gap-3 group relative">
     <Label>{label}</Label>
     <div className="flex-1 flex justify-end">{children}</div>
@@ -58,6 +64,38 @@ const selectClass =
   'bg-surface border border-surface2 text-on-surface text-xs font-body rounded px-2 py-1.5' +
   ' hover:border-accent focus:border-accent focus:outline-none transition-colors';
 
+/**
+ * Whether a stored engine path means "let the app decide". Must stay in step
+ * with isAutoPath() in the main process, since this decides whether the
+ * dropdown shows Auto as the active choice.
+ */
+const isAutoEnginePath = (value: string): boolean => {
+  const trimmed = value.trim().toLowerCase();
+  if (['', 'auto', 'default', 'stockfish'].includes(trimmed)) return true;
+  // A bare name with no separator is a PATH lookup, not a chosen file.
+  return !trimmed.includes('/') && !trimmed.includes('\\');
+};
+
+const basename = (value: string): string => value.split(/[\\/]/).pop() ?? value;
+
+/** Friendly wording for where an engine was found, instead of the raw enum. */
+const sourceLabel = (source: StockfishEngineSource): string => {
+  switch (source) {
+    case 'path':
+      return 'on PATH';
+    case 'app-engines':
+      return 'in app folder';
+    case 'user-engines':
+      return 'in user folder';
+    case 'bundled':
+      return 'bundled';
+    case 'configured':
+      return 'your choice';
+    default:
+      return source;
+  }
+};
+
 export const SettingsPanel: React.FC = () => {
   const settings = useSettingsStore();
   const [cpuCount, setCpuCount] = useState(4);
@@ -66,21 +104,48 @@ export const SettingsPanel: React.FC = () => {
     configuredExists: boolean;
     bundledPath: string | null;
     bundledExists: boolean;
+    engines: StockfishEngine[];
+    resolvedPath: string | null;
+    appEnginesDir: string;
+    userEnginesDir: string;
     settingsPath: string;
   } | null>(null);
   const [bookMoves, setBookMoves] = useState(0);
   const [loadingBook, setLoadingBook] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [modelCached, setModelCached] = useState<Record<string, boolean>>({});
+  // Discovery starts engines, so it is not instant on first use. Tracked
+  // separately from stockfishInfo so a slow scan reads as "still looking"
+  // rather than "no engine installed".
+  const [scanning, setScanning] = useState(false);
+  const [scanError, setScanError] = useState<string | null>(null);
+
+  const refreshStockfish = useCallback(() => {
+    setScanning(true);
+    return window.electronAPI
+      .getStockfishInfo()
+      .then((info) => {
+        setStockfishInfo(info);
+        setScanError(null);
+      })
+      .catch((err: unknown) => {
+        // Never swallow this: without it a failed scan is indistinguishable
+        // from having no engine installed.
+        console.error('Stockfish discovery failed', err);
+        setScanError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => setScanning(false));
+  }, []);
 
   useEffect(() => {
     window.electronAPI.getCpuCount().then(setCpuCount);
-    window.electronAPI.getStockfishInfo().then(setStockfishInfo).catch(() => {});
-  }, []);
+    void refreshStockfish();
+  }, [refreshStockfish]);
 
   // Check cache status whenever the selected model changes
   useEffect(() => {
-    window.electronAPI.checkMaia3Cache({ model: settings.maia3Model })
+    window.electronAPI
+      .checkMaia3Cache({ model: settings.maia3Model })
       .then((res) => setModelCached((prev) => ({ ...prev, [res.model]: res.cached })))
       .catch(() => {});
   }, [settings.maia3Model]);
@@ -92,7 +157,8 @@ export const SettingsPanel: React.FC = () => {
       return;
     }
     setLoadingBook(true);
-    window.electronAPI.getBookMoves({ fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1' })
+    window.electronAPI
+      .getBookMoves({ fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1' })
       .then((res) => {
         const data = res as { moves?: { uci: string; weight: number }[] };
         setBookMoves(data.moves?.length ?? 0);
@@ -105,7 +171,7 @@ export const SettingsPanel: React.FC = () => {
     try {
       const p = await window.electronAPI.pickStockfishPath();
       if (p) settings.update({ stockfishPath: p });
-      window.electronAPI.getStockfishInfo().then(setStockfishInfo).catch(() => {});
+      void refreshStockfish();
     } catch (err) {
       console.error('Failed to pick Stockfish:', err);
     }
@@ -115,7 +181,26 @@ export const SettingsPanel: React.FC = () => {
     const path = stockfishInfo?.bundledPath;
     if (!path) return;
     settings.update({ stockfishPath: path });
-    window.electronAPI.getStockfishInfo().then(setStockfishInfo).catch(() => {});
+    void refreshStockfish();
+  };
+
+  /** "Auto" defers to the resolver: PATH first, then the app's engines folder. */
+  const handleUseAutoStockfish = () => {
+    settings.update({ stockfishPath: 'stockfish' });
+    void refreshStockfish();
+  };
+
+  const handleSelectDiscovered = (enginePath: string) => {
+    settings.update({ stockfishPath: enginePath });
+    void refreshStockfish();
+  };
+
+  const handleRevealEnginesDir = async () => {
+    try {
+      await window.electronAPI.revealEnginesDir();
+    } catch (err) {
+      console.error('Failed to open engines folder:', err);
+    }
   };
 
   const handleExportSettings = () => {
@@ -171,7 +256,9 @@ export const SettingsPanel: React.FC = () => {
             onChange={(e) => settings.update({ boardStyle: e.target.value as BoardStyle })}
           >
             {(Object.entries(BOARD_STYLES) as [BoardStyle, { label: string }][]).map(([key, cfg]) => (
-              <option key={key} value={key}>{cfg.label}</option>
+              <option key={key} value={key}>
+                {cfg.label}
+              </option>
             ))}
           </select>
         </Row>
@@ -182,7 +269,9 @@ export const SettingsPanel: React.FC = () => {
             onChange={(e) => settings.update({ pieceSet: e.target.value as PieceSet })}
           >
             {(Object.entries(PIECE_SETS) as [PieceSet, { label: string }][]).map(([key, cfg]) => (
-              <option key={key} value={key}>{cfg.label}</option>
+              <option key={key} value={key}>
+                {cfg.label}
+              </option>
             ))}
           </select>
         </Row>
@@ -202,10 +291,7 @@ export const SettingsPanel: React.FC = () => {
 
       {/* ── Engine ──────────────────────────────────────────────────────── */}
       <Section title="Engine" icon="memory">
-        <Row 
-          label="Play engine" 
-          tooltip="Mentor = custom bot. Stockfish = classic engine. Maia3 = neural model."
-        >
+        <Row label="Play engine" tooltip="Mentor = custom bot. Stockfish = classic engine. Maia3 = neural model.">
           <select
             className={selectClass}
             value={settings.playEngine}
@@ -217,8 +303,8 @@ export const SettingsPanel: React.FC = () => {
           </select>
         </Row>
         {settings.playEngine === 'mentor' && (
-          <Row 
-            label="Use custom eval" 
+          <Row
+            label="Use custom eval"
             tooltip="Enable MentorEngine's Stockfish-style evaluation. Disable to use Stockfish eval only."
           >
             <input
@@ -229,10 +315,47 @@ export const SettingsPanel: React.FC = () => {
             />
           </Row>
         )}
+        <Row label="Stockfish engine" tooltip="Which Stockfish build to use">
+          <div className="flex items-center gap-1">
+            <select
+              value={
+                !settings.stockfishPath || isAutoEnginePath(settings.stockfishPath)
+                  ? '__auto__'
+                  : settings.stockfishPath
+              }
+              onChange={(e) => {
+                if (e.target.value === '__auto__') handleUseAutoStockfish();
+                else if (e.target.value === '__browse__') handleStockfishPick();
+                else handleSelectDiscovered(e.target.value);
+              }}
+              className="bg-surface2 border border-surface2 rounded text-xs text-fg px-1 py-1
+                         max-w-[150px] focus:border-accent outline-none
+                         disabled:opacity-50 disabled:cursor-wait"
+              disabled={scanning}
+            >
+              <option value="__auto__">
+                Auto{stockfishInfo?.resolvedPath ? ` (${basename(stockfishInfo.resolvedPath)})` : ''}
+              </option>
+              {stockfishInfo?.engines.map((engine) => (
+                <option key={engine.path} value={engine.path}>
+                  {engine.name}
+                  {engine.source !== 'path' ? ` — ${sourceLabel(engine.source)}` : ''}
+                </option>
+              ))}
+              <option value="__browse__">Browse for a file…</option>
+            </select>
+            {scanning && <span className="text-xs text-muted">Scanning…</span>}
+          </div>
+        </Row>
+        {stockfishInfo && stockfishInfo.engines.length > 1 && (
+          <Row label="Installed versions" tooltip="Every Stockfish build found on this machine">
+            <span className="text-xs text-muted">{stockfishInfo.engines.length} found</span>
+          </Row>
+        )}
         <Row label="Stockfish path" tooltip="Path to Stockfish executable">
           <div className="flex items-center gap-1">
             <span className="text-xs font-mono text-muted truncate max-w-[120px]" title={settings.stockfishPath}>
-              {settings.stockfishPath.split(/[\\/]/).pop() ?? settings.stockfishPath}
+              {basename(settings.stockfishPath)}
             </span>
             <button
               onClick={handleStockfishPick}
@@ -244,9 +367,29 @@ export const SettingsPanel: React.FC = () => {
           </div>
         </Row>
         <Row label="Stockfish status">
-          <span className={`text-xs ${stockfishInfo?.configuredExists ? 'text-accent' : 'text-error'}`}>
-            {stockfishInfo?.configuredExists ? 'Configured path is valid' : 'Configured path not found'}
+          <span className={`text-xs ${scanError || !stockfishInfo?.resolvedPath ? 'text-error' : 'text-accent'}`}>
+            {scanning
+              ? 'Looking for Stockfish builds…'
+              : scanError
+                ? `Could not search for Stockfish: ${scanError}`
+                : stockfishInfo?.resolvedPath
+                  ? `Using ${basename(stockfishInfo.resolvedPath)}`
+                  : 'No Stockfish found — install one or drop a binary in the engines folder'}
           </span>
+        </Row>
+        <Row label="Engines folder" tooltip="Drop a downloaded Stockfish binary here">
+          <div className="flex items-center gap-1">
+            <span className="text-xs font-mono text-muted truncate max-w-[120px]" title={stockfishInfo?.userEnginesDir}>
+              {stockfishInfo?.userEnginesDir.split(/[\\/]/).slice(-2).join('/') ?? 'engines/'}
+            </span>
+            <button
+              onClick={handleRevealEnginesDir}
+              className="px-2 py-1 border border-surface2 rounded text-xs text-muted
+                         hover:border-accent hover:text-accent transition-colors"
+            >
+              Open
+            </button>
+          </div>
         </Row>
         {stockfishInfo?.bundledExists && (
           <Row label="Bundled Stockfish">
@@ -259,26 +402,18 @@ export const SettingsPanel: React.FC = () => {
             </button>
           </Row>
         )}
-        {!stockfishInfo?.bundledExists && (
-          <Row label="Download Stockfish">
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => window.electronAPI.openExternalUrl('https://stockfishchess.org/download/')}
-                className="px-2 py-1 border border-surface2 rounded text-xs text-muted
-                           hover:border-accent hover:text-accent transition-colors"
-              >
-                Open official download page
-              </button>
-              <button
-                onClick={() => window.electronAPI.openExternalUrl('https://stockfishchess.org/download/')}
-                className="px-2 py-1 border border-surface2 rounded text-xs text-muted
-                           hover:border-accent hover:text-accent transition-colors"
-              >
-                One-click download (coming soon)
-              </button>
-            </div>
-          </Row>
-        )}
+        <Row label="Download Stockfish">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => window.electronAPI.openExternalUrl('https://stockfishchess.org/download/')}
+              className="px-2 py-1 border border-surface2 rounded text-xs text-muted
+                         hover:border-accent hover:text-accent transition-colors"
+            >
+              Open official download page
+            </button>
+            <span className="text-[11px] text-muted">then drop the file in the engines folder above</span>
+          </div>
+        </Row>
         {settings.playEngine === 'maia3' && (
           <Row label="Maia3 path" tooltip="Optional: custom maia3-uci executable path">
             <div className="flex items-center gap-1">
@@ -304,7 +439,10 @@ export const SettingsPanel: React.FC = () => {
         )}
         <Row label={`Threads (1–${cpuCount})`} tooltip="CPU threads for Stockfish. More = faster but more CPU usage.">
           <input
-            type="range" min={1} max={cpuCount} step={1}
+            type="range"
+            min={1}
+            max={cpuCount}
+            step={1}
             value={settings.threads}
             onChange={(e) => settings.update({ threads: Number(e.target.value) })}
             className="w-28 accent-[#A3E635]"
@@ -318,35 +456,47 @@ export const SettingsPanel: React.FC = () => {
             onChange={(e) => settings.update({ hashMb: Number(e.target.value) })}
           >
             {[16, 32, 64, 128, 256, 512, 1024, 2048].map((v) => (
-              <option key={v} value={v}>{v} MB</option>
+              <option key={v} value={v}>
+                {v} MB
+              </option>
             ))}
           </select>
         </Row>
         <p className="text-[10px] text-muted -mt-2 px-0.5">
-          Hash = Stockfish transposition table — a RAM cache of analysed positions.
-          Larger cache = deeper searches &amp; faster re-analysis, at the cost of memory.
+          Hash = Stockfish transposition table — a RAM cache of analysed positions. Larger cache = deeper searches &amp;
+          faster re-analysis, at the cost of memory.
           <br />
-          <span className="font-semibold">Presets:</span>{' '}
-          low-end 64 MB / 1 thread · mid-range 256 MB / 2 threads · high-end 512 MB / 4+ threads.
-          Max allowed: {MAX_HASH_MB} MB.
+          <span className="font-semibold">Presets:</span> low-end 64 MB / 1 thread · mid-range 256 MB / 2 threads ·
+          high-end 512 MB / 4+ threads. Max allowed: {MAX_HASH_MB} MB.
           {settings.hashMb > 512 && (
             <span className="text-yellow-400"> ⚠ Large cache — ensure you have enough free RAM.</span>
           )}
         </p>
-        <Row label="Multi-PV lines" tooltip="Number of principal variations to show. More lines = more info but slower.">
+        <Row
+          label="Multi-PV lines"
+          tooltip="Number of principal variations to show. More lines = more info but slower."
+        >
           <select
             className={selectClass}
             value={settings.multipv}
             onChange={(e) => settings.update({ multipv: Number(e.target.value) })}
           >
             {[1, 2, 3, 4, 5].map((v) => (
-              <option key={v} value={v}>{v}</option>
+              <option key={v} value={v}>
+                {v}
+              </option>
             ))}
           </select>
         </Row>
-        <Row label="Bot difficulty" tooltip="AI strength 1 (Beginner) to 10 (Grandmaster). Affects search time and depth.">
+        <Row
+          label="Bot difficulty"
+          tooltip="AI strength 1 (Beginner) to 10 (Grandmaster). Affects search time and depth."
+        >
           <input
-            type="range" min={1} max={10} step={1}
+            type="range"
+            min={1}
+            max={10}
+            step={1}
             value={settings.botStrength}
             onChange={(e) => settings.update({ botStrength: Number(e.target.value) })}
             className="w-28 accent-[#A3E635]"
@@ -362,7 +512,9 @@ export const SettingsPanel: React.FC = () => {
                 onChange={(e) => settings.update({ maia3Model: e.target.value })}
               >
                 {['maia3-5m', 'maia3-23m', 'maia3-79m'].map((v) => (
-                  <option key={v} value={v}>{v}</option>
+                  <option key={v} value={v}>
+                    {v}
+                  </option>
                 ))}
               </select>
             </Row>
@@ -376,50 +528,56 @@ export const SettingsPanel: React.FC = () => {
                 <option value="cuda">CUDA</option>
               </select>
             </Row>
-            <Row label="Maia3 cache" tooltip="Download model weights to project_dir/model_cache/ (check console for progress)">
+            <Row
+              label="Maia3 cache"
+              tooltip="Download model weights to project_dir/model_cache/ (check console for progress)"
+            >
               <div className="flex items-center gap-2">
-              <button
-                disabled={downloading}
-                onClick={async () => {
-                  setDownloading(true);
-                  const toast = useGameStore.getState().pushToast;
-                  toast(`Downloading ${settings.maia3Model}...`, 'info');
-                  try {
-                    const result = await Promise.race([
-                      window.electronAPI.maia3Cache({ model: settings.maia3Model }),
-                      new Promise<never>((_, reject) =>
-                        setTimeout(() => reject(new Error('Download timed out after 5 min')), 300_000)
-                      ),
-                    ]) as { ok?: boolean };
-                    if (result?.ok) {
-                      setModelCached((prev) => ({ ...prev, [settings.maia3Model]: true }));
-                      toast(`Downloaded ${settings.maia3Model} successfully`, 'success');
+                <button
+                  disabled={downloading}
+                  onClick={async () => {
+                    setDownloading(true);
+                    const toast = useGameStore.getState().pushToast;
+                    toast(`Downloading ${settings.maia3Model}...`, 'info');
+                    try {
+                      const result = (await Promise.race([
+                        window.electronAPI.maia3Cache({ model: settings.maia3Model }),
+                        new Promise<never>((_, reject) =>
+                          setTimeout(() => reject(new Error('Download timed out after 5 min')), 300_000),
+                        ),
+                      ])) as { ok?: boolean };
+                      if (result?.ok) {
+                        setModelCached((prev) => ({ ...prev, [settings.maia3Model]: true }));
+                        toast(`Downloaded ${settings.maia3Model} successfully`, 'success');
+                      }
+                    } catch (err) {
+                      const msg = err instanceof Error ? err.message : String(err);
+                      toast(`Download failed: ${msg}`, 'error');
+                      console.error('Failed to cache Maia3 model:', err);
+                    } finally {
+                      setDownloading(false);
                     }
-                  } catch (err) {
-                    const msg = err instanceof Error ? err.message : String(err);
-                    toast(`Download failed: ${msg}`, 'error');
-                    console.error('Failed to cache Maia3 model:', err);
-                  } finally {
-                    setDownloading(false);
-                  }
-                }}
-                className={`px-2 py-1 border rounded text-xs transition-colors ${
-                  downloading
-                    ? 'border-accent text-accent bg-accent/10 cursor-wait'
-                    : 'border-surface2 text-muted hover:border-accent hover:text-accent'
-                }`}
-              >
-                {downloading
-                  ? `Downloading ${settings.maia3Model}...`
-                  : modelCached[settings.maia3Model]
-                    ? `Cached ${settings.maia3Model}`
-                    : `Download ${settings.maia3Model}`}
-              </button>
+                  }}
+                  className={`px-2 py-1 border rounded text-xs transition-colors ${
+                    downloading
+                      ? 'border-accent text-accent bg-accent/10 cursor-wait'
+                      : 'border-surface2 text-muted hover:border-accent hover:text-accent'
+                  }`}
+                >
+                  {downloading
+                    ? `Downloading ${settings.maia3Model}...`
+                    : modelCached[settings.maia3Model]
+                      ? `Cached ${settings.maia3Model}`
+                      : `Download ${settings.maia3Model}`}
+                </button>
               </div>
             </Row>
             <Row label="Elo rating" tooltip="Maia3 skill level from 0 (weak) to 5000 (strong). Default 1500.">
               <input
-                type="range" min={0} max={3000} step={100}
+                type="range"
+                min={0}
+                max={3000}
+                step={100}
                 value={settings.maia3Elo}
                 onChange={(e) => settings.update({ maia3Elo: Number(e.target.value) })}
                 className="w-28 accent-[#A3E635]"
@@ -428,7 +586,10 @@ export const SettingsPanel: React.FC = () => {
             </Row>
           </>
         )}
-        <Row label="Think profile" tooltip="Controls move-to-move think-time distribution. Budget-aware — won't exceed clock.">
+        <Row
+          label="Think profile"
+          tooltip="Controls move-to-move think-time distribution. Budget-aware — won't exceed clock."
+        >
           <select
             className={selectClass}
             value={settings.thinkProfile}
@@ -478,7 +639,9 @@ export const SettingsPanel: React.FC = () => {
             onChange={(e) => settings.update({ openingBookDepth: Number(e.target.value) })}
           >
             {[10, 14, 18, 20, 24, 28, 30, 40].map((v) => (
-              <option key={v} value={v}>{v} plies ({Math.floor(v/2)} moves)</option>
+              <option key={v} value={v}>
+                {v} plies ({Math.floor(v / 2)} moves)
+              </option>
             ))}
           </select>
         </Row>
@@ -504,7 +667,9 @@ export const SettingsPanel: React.FC = () => {
             }}
           >
             {TIME_CONTROLS.map((tc) => (
-              <option key={tc.label} value={tc.label}>{tc.label}</option>
+              <option key={tc.label} value={tc.label}>
+                {tc.label}
+              </option>
             ))}
           </select>
         </Row>
@@ -543,7 +708,10 @@ export const SettingsPanel: React.FC = () => {
         {settings.soundEnabled && (
           <Row label="Volume">
             <input
-              type="range" min={0} max={1} step={0.05}
+              type="range"
+              min={0}
+              max={1}
+              step={0.05}
               value={settings.soundVolume}
               onChange={(e) => settings.update({ soundVolume: Number(e.target.value) })}
               className="w-28 accent-[#A3E635]"

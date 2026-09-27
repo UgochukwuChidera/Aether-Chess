@@ -1,3 +1,7 @@
+# numba ships incomplete type information: `numba.types` is documented public
+# API but is absent from the package's export list, so Pyright flags every
+# `numba.types.*` signature as a private import. Suppressed for this file only.
+# pyright: reportPrivateImportUsage=false
 from __future__ import annotations
 
 import math

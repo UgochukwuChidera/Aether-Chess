@@ -23,6 +23,13 @@ extraResources:
       - "**/*.bin"
   - from: resources/icons
     to: icons
+  # Player-droppable Stockfish folder. Ships empty by default so the path the
+  # resolver reads (process.resourcesPath/engines) actually exists in a
+  # packaged build; a packager can place a binary here and it will be detected.
+  - from: engines
+    to: engines
+    filter:
+      - "**/*"
   # PyInstaller output (set BACKEND_BUILD_DIR in CI)
   - from: build/backend-dist
     to: backend

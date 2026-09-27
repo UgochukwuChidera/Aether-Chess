@@ -10,5 +10,5 @@
     "resolveJsonModule": true
   },
   "include": ["electron/**/*"],
-  "exclude": ["node_modules", "renderer", "backend", "dist"]
+  "exclude": ["node_modules", "renderer", "backend", "dist", "dist-test", "electron/**/*.test.ts"]
 }

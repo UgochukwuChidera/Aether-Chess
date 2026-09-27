@@ -21,21 +21,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     stockfish_path?: string;
     threads?: number;
     hash_mb?: number;
-  }) =>
-    ipcRenderer.invoke('get_engine_move', params),
+  }) => ipcRenderer.invoke('get_engine_move', params),
   getBotMove: (params: {
     fen: string;
     strength?: number;
     stockfish_path?: string;
     threads?: number;
     hash_mb?: number;
-  }) =>
-    ipcRenderer.invoke('get_bot_move', params),
-  getEval: (params: {
-    fen: string;
-    use_mentor_eval?: boolean;
-  }) =>
-    ipcRenderer.invoke('get_eval', params),
+  }) => ipcRenderer.invoke('get_bot_move', params),
+  getEval: (params: { fen: string; use_mentor_eval?: boolean }) => ipcRenderer.invoke('get_eval', params),
   exportPgn: () => ipcRenderer.invoke('export_pgn'),
   importPgn: (params: { pgn: string }) => ipcRenderer.invoke('import_pgn', params),
   exportFen: () => ipcRenderer.invoke('export_fen'),
@@ -45,13 +39,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('calculate_accuracy_from_history', params),
   calculateAccuracyFromPgn: (params: { pgn: string; stockfish_path?: string }) =>
     ipcRenderer.invoke('calculate_accuracy_from_pgn', params),
-  estimateElo: (params: { accuracy: number; blunder_rate: number }) =>
-    ipcRenderer.invoke('estimate_elo', params),
+  estimateElo: (params: { accuracy: number; blunder_rate: number }) => ipcRenderer.invoke('estimate_elo', params),
   getBookMoves: (params: { fen: string }) => ipcRenderer.invoke('get_book_moves', params),
   maia3Cache: (params: { model?: string; cache_dir?: string; force_download?: boolean; hf_token?: string }) =>
     ipcRenderer.invoke('maia3-cache', params),
-  checkMaia3Cache: (params: { model?: string }) =>
-    ipcRenderer.invoke('check-maia3-cache', params),
+  checkMaia3Cache: (params: { model?: string }) => ipcRenderer.invoke('check-maia3-cache', params),
 
   // ── Analysis streaming ───────────────────────────────────────────────────
   startAnalysis: (params: {
@@ -61,8 +53,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     stockfish_path?: string;
     threads?: number;
     hash_mb?: number;
-  }) =>
-    ipcRenderer.invoke('start_analysis', params),
+  }) => ipcRenderer.invoke('start_analysis', params),
   stopAnalysis: () => ipcRenderer.invoke('stop_analysis'),
   onAnalysisUpdate: (callback: (data: unknown) => void) => {
     ipcRenderer.on('analysis-update', (_event, data) => callback(data));
@@ -89,6 +80,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // ── File system helpers ──────────────────────────────────────────────────
   pickStockfishPath: () => ipcRenderer.invoke('pick-stockfish-path'),
   getStockfishInfo: () => ipcRenderer.invoke('stockfish-info'),
+  revealEnginesDir: () => ipcRenderer.invoke('reveal-engines-dir'),
   openExternalUrl: (url: string) => ipcRenderer.invoke('open-external-url', url),
   getBooksDir: () => ipcRenderer.invoke('get-books-dir'),
   revealInFolder: (filePath: string) => ipcRenderer.invoke('reveal-in-folder', filePath),

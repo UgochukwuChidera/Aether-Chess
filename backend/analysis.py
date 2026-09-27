@@ -23,6 +23,7 @@ from aether_chess.analysis.metrics import (
     accuracy_from_losses,
     estimate_bayesian_elo,
 )
+from aether_chess.engines.registry import resolve_engine_path
 
 _ANALYSIS_DEPTH = 18
 
@@ -30,8 +31,12 @@ _ANALYSIS_DEPTH = 18
 def _score_position(engine: chess.engine.SimpleEngine, board: chess.Board) -> float:
     """Return centipawn score for *board* from the current side's perspective."""
     info = engine.analyse(board, chess.engine.Limit(depth=_ANALYSIS_DEPTH))
-    score = info["score"].white()
-    cp = score.score(mate_score=10_000)
+    # "score" is not a required key on python-chess's InfoDict: an engine can
+    # legally answer without one, which would otherwise raise KeyError here.
+    raw = info.get("score")
+    if raw is None:
+        return 0.0
+    cp = raw.white().score(mate_score=10_000)
     return float(cp) if cp is not None else 0.0
 
 
@@ -57,7 +62,7 @@ class GlickoRating:
         self.vol = vol
 
     def _g(self, phi: float) -> float:
-        return 1.0 / math.sqrt(1.0 + 3.0 * (phi ** 2) / (math.pi ** 2))
+        return 1.0 / math.sqrt(1.0 + 3.0 * (phi**2) / (math.pi**2))
 
     def _E(self, mu: float, mu_j: float, phi: float) -> float:
         g = self._g(phi)
@@ -81,19 +86,19 @@ class GlickoRating:
         g_j = self._g(phi_j)
         E_j = self._E(mu, mu_j, phi_j)
         s_j = result
-        tmp = (q ** 2) * (g_j ** 2) * E_j * (1.0 - E_j)
-        Phi = math.sqrt(1.0 / ((1.0 / (phi ** 2)) + tmp))
-        tmp2 = (q ** 2) * (g_j ** 2) * (s_j - E_j)
-        delta = (Phi ** 2) * tmp2
-        a = math.log(self.vol ** 2)
+        tmp = (q**2) * (g_j**2) * E_j * (1.0 - E_j)
+        Phi = math.sqrt(1.0 / ((1.0 / (phi**2)) + tmp))
+        tmp2 = (q**2) * (g_j**2) * (s_j - E_j)
+        delta = (Phi**2) * tmp2
+        a = math.log(self.vol**2)
         def f(x: float) -> float:
             ex = math.exp(x)
-            num = ex * (delta ** 2 - phi ** 2 - tmp * ex)
-            denom = 2.0 * ((phi ** 2) + tmp * ex) ** 2
+            num = ex * (delta**2 - phi**2 - tmp * ex)
+            denom = 2.0 * ((phi**2) + tmp * ex) ** 2
             return num / denom - (x - a)
         A = a
-        if delta ** 2 > phi ** 2 + tmp * math.exp(a):
-            B = math.log(delta ** 2 - phi ** 2)
+        if delta**2 > phi**2 + tmp * math.exp(a):
+            B = math.log(delta**2 - phi**2)
         else:
             k = 1
             while f(a + k * self.TAU) < 0:
@@ -110,8 +115,8 @@ class GlickoRating:
                 fA = fA / 2.0
             B, fB = C, fC
         new_vol = math.exp(A / 2.0)
-        new_phi = math.sqrt(1.0 / ((1.0 / (phi ** 2)) + tmp))
-        new_mu = mu + (q ** 2) * (g_j ** 2) * (s_j - E_j) / (1.0 / (phi ** 2) + tmp)
+        new_phi = math.sqrt(1.0 / ((1.0 / (phi**2)) + tmp))
+        new_mu = mu + (q**2) * (g_j**2) * (s_j - E_j) / (1.0 / (phi**2) + tmp)
         self.rating = 173.7178 * new_mu + 1500.0
         self.rd = max(self.RD_MIN, min(self.RD_MAX, 173.7178 * new_phi))
         self.vol = max(0.001, min(0.1, new_vol))
@@ -147,10 +152,26 @@ class AccuracyAnalyser:
         white_losses: List[float] = []
         black_losses: List[float] = []
 
+        # "stockfish" (or empty) means auto-detect: the newest Stockfish
+        # found across PATH, the app's engines folder and the user folder.
+        resolved = resolve_engine_path(stockfish_path) or ""
+        if not resolved:
+            return {
+                "error": "No Stockfish found. Install it or drop a binary in the engines folder.",
+                "moves": [],
+                "white_accuracy": 0,
+                "black_accuracy": 0,
+            }
+
         try:
-            engine = chess.engine.SimpleEngine.popen_uci(stockfish_path)
+            engine = chess.engine.SimpleEngine.popen_uci(resolved)
         except Exception as exc:
-            return {"error": f"Could not start Stockfish: {exc}", "moves": [], "white_accuracy": 0, "black_accuracy": 0}
+            return {
+                "error": f"Could not start Stockfish: {exc}",
+                "moves": [],
+                "white_accuracy": 0,
+                "black_accuracy": 0,
+            }
 
         try:
             for fen, uci in zip(fen_list, moves):
@@ -176,11 +197,11 @@ class AccuracyAnalyser:
 
                 classification = classify_move(loss)
                 results.append({
-                    "uci": uci,
-                    "fen": fen,
-                    "color": "white" if is_white else "black",
-                    "cp_loss": round(loss, 1),
-                    "classification": classification,
+                        "uci": uci,
+                        "fen": fen,
+                        "color": "white" if is_white else "black",
+                        "cp_loss": round(loss, 1),
+                        "classification": classification,
                 })
         finally:
             engine.quit()

@@ -4,6 +4,19 @@
 export {};
 
 declare global {
+  /** Where a discovered engine executable was found. */
+  type StockfishEngineSource = 'configured' | 'path' | 'app-engines' | 'user-engines' | 'bundled';
+
+  /** A single engine executable found on this machine. */
+  type StockfishEngine = {
+    path: string;
+    name: string;
+    version: number[];
+    versionLabel: string;
+    source: StockfishEngineSource;
+    selected: boolean;
+  };
+
   interface Window {
     electronAPI: {
       // Window controls
@@ -59,10 +72,7 @@ declare global {
         time_increment?: number;
         total_moves?: number;
       }) => Promise<unknown>;
-      getEval: (params: {
-        fen: string;
-        use_mentor_eval?: boolean;
-      }) => Promise<unknown>;
+      getEval: (params: { fen: string; use_mentor_eval?: boolean }) => Promise<unknown>;
       exportPgn: () => Promise<unknown>;
       importPgn: (params: { pgn: string }) => Promise<unknown>;
       exportFen: () => Promise<unknown>;
@@ -72,7 +82,12 @@ declare global {
         engine_type?: 'stockfish' | 'mentor' | 'maia3';
       }) => Promise<unknown>;
       calculateAccuracyFromPgn: (params: { pgn: string; stockfish_path?: string }) => Promise<unknown>;
-      estimateElo: (params: { accuracy: number; blunder_rate: number; avg_cp_loss?: number; num_games?: number }) => Promise<unknown>;
+      estimateElo: (params: {
+        accuracy: number;
+        blunder_rate: number;
+        avg_cp_loss?: number;
+        num_games?: number;
+      }) => Promise<unknown>;
       getBookMoves: (params: { fen: string }) => Promise<unknown>;
       maia3Cache: (params: {
         model?: string;
@@ -116,8 +131,13 @@ declare global {
         configuredExists: boolean;
         bundledPath: string | null;
         bundledExists: boolean;
+        engines: StockfishEngine[];
+        resolvedPath: string | null;
+        appEnginesDir: string;
+        userEnginesDir: string;
         settingsPath: string;
       }>;
+      revealEnginesDir: () => Promise<string>;
       openExternalUrl: (url: string) => Promise<boolean>;
       getBooksDir: () => Promise<string>;
       revealInFolder: (filePath: string) => Promise<boolean>;

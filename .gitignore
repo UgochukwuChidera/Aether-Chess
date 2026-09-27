@@ -34,3 +34,17 @@ Thumbs.db
 # Local data
 inspiration/
 model_cache/
+
+# Stockfish binaries the player drops in (100 MB+ each, never commit these)
+# Ignore the *contents* of engines/, not the directory itself: a directory
+# cannot be re-included once excluded, so 'engines/' would also block the
+# .gitkeep below and force a separate negation that un-ignores the binaries.
+engines/*
+*.stockfish
+
+# TypeScript test build output
+dist-test/
+
+# The engines folder ships (empty) with packaged builds so the path the
+# resolver reads actually exists. Keep the folder, not its binaries.
+!engines/.gitkeep

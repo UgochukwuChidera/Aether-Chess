@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.electron.json",
+  "compilerOptions": {
+    "outDir": "dist-test",
+    "rootDir": "electron",
+    "noEmit": false
+  },
+  "include": ["electron/**/*"],
+  "exclude": ["node_modules", "renderer", "backend", "dist", "dist-test"]
+}

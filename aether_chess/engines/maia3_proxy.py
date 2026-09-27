@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 import chess
+import chess.engine  # noqa: F401  (used via `chess.engine.*` below)
 
 from aether_chess.think_profile import get_profile, sample_think_time
 

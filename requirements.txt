@@ -1,6 +1,12 @@
 # Core chess logic
 python-chess>=1.999
 
+# JIT compilation for the mentor bot's evaluation kernel.
+# Imported unconditionally by backend/chess_engine.py, so it is a hard
+# dependency: without it the backend fails to start at all.
+# 0.61 is the floor that covers Python 3.12 (CI) through 3.14.
+numba>=0.61
+
 # Optional: ONNX runtime for neural-net evaluation in the mentor bot
 onnxruntime>=1.20
 
