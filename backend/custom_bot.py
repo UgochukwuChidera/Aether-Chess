@@ -1,6 +1,7 @@
 """
 backend/custom_bot.py — Mentor bot adapter implemented on top of Stockfish.
 """
+
 from __future__ import annotations
 
 import random
@@ -97,12 +98,22 @@ class MentorBotAdapter:
         board = chess.Board(fen)
         # Use MentorEngine (pure Python AI) for move generation
         mentor = MentorEngine()
-        # Configure search depth based on strength (similar scaling as earlier)
+        # Search budget comes from the shared strength profile so the clock is
+        # respected: it scales time_limit off time_remaining/time_increment
+        # when they are supplied, and falls back to a strength-derived budget
+        # otherwise. This call was previously made and the result discarded,
+        # leaving the engine on a flat time_limit_sec that ignored the clock.
+        profile = self._strength_profile(
+            strength,
+            time_remaining=time_remaining,
+            time_increment=time_increment,
+            total_moves=total_moves,
+        )
         level = max(1, min(10, int(strength)))
         mentor.config = SearchConfig(
-            max_depth=4 + level * 2,  # 6-24 plies
+            max_depth=profile["depth"],
             max_nodes=200_000 + level * 200_000,
-            time_limit_sec=0.3 + level * 0.2,
+            time_limit_sec=profile["time_limit"],
             difficulty=min(1.0, 0.5 + level * 0.05),
             tt_max_entries=200_000 + level * 50_000,
             threads=1,
@@ -112,4 +123,3 @@ class MentorBotAdapter:
             # Fallback: random legal move
             move = random.choice(list(board.legal_moves))
         return {"move": move.uci(), "san": board.san(move)}
-

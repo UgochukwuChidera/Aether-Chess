@@ -31,75 +31,467 @@ PIECE_VALUES = {
 
 # Improved piece-square tables - encourage AGGRESSIVE play and center control
 PAWN_TABLE = [
-     0,  0,  0,  0,  0,  0,  0,  0,
-     5,  5,  5,  0,  0,  5,  5,  5,
-     5,  5, 10, 20, 20, 10,  5,  5,
-     5, 10, 20, 25, 25, 20, 10,  5,
-    10, 15, 20, 30, 30, 20, 15, 10,
-    15, 20, 25, 35, 35, 25, 20, 15,
-    30, 30, 30, 30, 30, 30, 30, 30,
-     0,  0,  0,  0,  0,  0,  0,  0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    5,
+    5,
+    5,
+    0,
+    0,
+    5,
+    5,
+    5,
+    5,
+    5,
+    10,
+    20,
+    20,
+    10,
+    5,
+    5,
+    5,
+    10,
+    20,
+    25,
+    25,
+    20,
+    10,
+    5,
+    10,
+    15,
+    20,
+    30,
+    30,
+    20,
+    15,
+    10,
+    15,
+    20,
+    25,
+    35,
+    35,
+    25,
+    20,
+    15,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
 ]
 KNIGHT_TABLE = [
-    -50,-40,-30,-20,-20,-30,-40,-50,
-    -40,-20, 10, 15, 15, 10,-20,-40,  # Better center
-    -30, 10, 20, 25, 25, 20, 10,-30,
-    -25, 15, 25, 30, 30, 25, 15,-25,
-    -25, 15, 25, 30, 30, 25, 15,-25,
-    -30, 10, 20, 25, 25, 20, 10,-30,
-    -40,-20, 10, 15, 15, 10,-20,-40,
-    -50,-40,-30,-20,-20,-30,-40,-50,
+    -50,
+    -40,
+    -30,
+    -20,
+    -20,
+    -30,
+    -40,
+    -50,
+    -40,
+    -20,
+    10,
+    15,
+    15,
+    10,
+    -20,
+    -40,  # Better center
+    -30,
+    10,
+    20,
+    25,
+    25,
+    20,
+    10,
+    -30,
+    -25,
+    15,
+    25,
+    30,
+    30,
+    25,
+    15,
+    -25,
+    -25,
+    15,
+    25,
+    30,
+    30,
+    25,
+    15,
+    -25,
+    -30,
+    10,
+    20,
+    25,
+    25,
+    20,
+    10,
+    -30,
+    -40,
+    -20,
+    10,
+    15,
+    15,
+    10,
+    -20,
+    -40,
+    -50,
+    -40,
+    -30,
+    -20,
+    -20,
+    -30,
+    -40,
+    -50,
 ]
 BISHOP_TABLE = [
-    -20,-10,-10, -5, -5,-10,-10,-20,
-    -10,  0,  0,  0,  0,  0,  0,-10,
-    -10,  0,  5, 10, 10,  5,  0,-10,
-    -10,  5, 10, 15, 15, 10,  5,-10,
-    -10,  0, 10, 15, 15, 10,  0,-10,
-    -10,  0,  5, 10, 10,  5,  0,-10,
-    -20,-10,  0,  5,  5,  0,-10,-20,
-    -20,-10,-10, -5, -5,-10,-10,-20,
+    -20,
+    -10,
+    -10,
+    -5,
+    -5,
+    -10,
+    -10,
+    -20,
+    -10,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    -10,
+    -10,
+    0,
+    5,
+    10,
+    10,
+    5,
+    0,
+    -10,
+    -10,
+    5,
+    10,
+    15,
+    15,
+    10,
+    5,
+    -10,
+    -10,
+    0,
+    10,
+    15,
+    15,
+    10,
+    0,
+    -10,
+    -10,
+    0,
+    5,
+    10,
+    10,
+    5,
+    0,
+    -10,
+    -20,
+    -10,
+    0,
+    5,
+    5,
+    0,
+    -10,
+    -20,
+    -20,
+    -10,
+    -10,
+    -5,
+    -5,
+    -10,
+    -10,
+    -20,
 ]
 # Rook tables - reward edge files. Rooks belong on back rank in opening.
 ROOK_TABLE = [
-     0,  0,  0,  5,  5,  0,  0,  0,
-     0,  0,  0,  0,  0,  0,  0,  0,
-     0,  0,  0,  0,  0,  0,  0,  0,
-     0,  0,  0,  0,  0,  0,  0,  0,
-     0,  0,  0,  0,  0,  0,  0,  0,
-    10, 10, 10, 10, 10, 10, 10, 10,
-    20, 20, 20, 20, 20, 20, 20, 20,
-     0,  0,  0,  0,  0,  0,  0,  0,
+    0,
+    0,
+    0,
+    5,
+    5,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    10,
+    10,
+    10,
+    10,
+    10,
+    10,
+    10,
+    10,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    20,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
 ]
 QUEEN_TABLE = [
-    -20,-10,-10, -5, -5,-10,-10,-20,
-    -10,  0,  5,  5,  5,  5,  0,-10,
-    -10,  5,  5, 10, 10,  5,  5,-10,
-     -5,  5, 10, 10, 10, 10,  5, -5,
-      0,  5, 10, 10, 10, 10,  5, -5,
-    -10,  5,  5,  5,  5,  5,  0,-10,
-    -10,  0,  0,  0,  0,  0,  0,-10,
-    -20,-10,-10, -5, -5,-10,-10,-20,
+    -20,
+    -10,
+    -10,
+    -5,
+    -5,
+    -10,
+    -10,
+    -20,
+    -10,
+    0,
+    5,
+    5,
+    5,
+    5,
+    0,
+    -10,
+    -10,
+    5,
+    5,
+    10,
+    10,
+    5,
+    5,
+    -10,
+    -5,
+    5,
+    10,
+    10,
+    10,
+    10,
+    5,
+    -5,
+    0,
+    5,
+    10,
+    10,
+    10,
+    10,
+    5,
+    -5,
+    -10,
+    5,
+    5,
+    5,
+    5,
+    5,
+    0,
+    -10,
+    -10,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    -10,
+    -20,
+    -10,
+    -10,
+    -5,
+    -5,
+    -10,
+    -10,
+    -20,
 ]
 KING_MID_TABLE = [
-    20, 30, 10,  0,  0, 10, 30, 20,
-    20, 20,  0,  0,  0,  0, 20, 20,
-   -10,-20,-20,-20,-20,-20,-20,-10,
-   -20,-30,-30,-40,-40,-30,-30,-20,
-   -30,-40,-40,-50,-50,-40,-40,-30,
-   -30,-40,-40,-50,-50,-40,-40,-30,
-   -30,-40,-40,-50,-50,-40,-40,-30,
-   -30,-40,-40,-50,-50,-40,-40,-30,
+    20,
+    30,
+    10,
+    0,
+    0,
+    10,
+    30,
+    20,
+    20,
+    20,
+    0,
+    0,
+    0,
+    0,
+    20,
+    20,
+    -10,
+    -20,
+    -20,
+    -20,
+    -20,
+    -20,
+    -20,
+    -10,
+    -20,
+    -30,
+    -30,
+    -40,
+    -40,
+    -30,
+    -30,
+    -20,
+    -30,
+    -40,
+    -40,
+    -50,
+    -50,
+    -40,
+    -40,
+    -30,
+    -30,
+    -40,
+    -40,
+    -50,
+    -50,
+    -40,
+    -40,
+    -30,
+    -30,
+    -40,
+    -40,
+    -50,
+    -50,
+    -40,
+    -40,
+    -30,
+    -30,
+    -40,
+    -40,
+    -50,
+    -50,
+    -40,
+    -40,
+    -30,
 ]
 KING_END_TABLE = [
-    -50,-30,-30,-30,-30,-30,-30,-50,
-    -30,-20,  0,  5,  5,  0,-20,-30,
-    -30,  5, 20, 30, 30, 20,  5,-30,
-    -30,  5, 30, 40, 40, 30,  5,-30,
-    -30,  5, 30, 40, 40, 30,  5,-30,
-    -30,  5, 20, 30, 30, 20,  5,-30,
-    -30,-20,  0,  0,  0,  0,-20,-30,
-    -50,-30,-30,-30,-30,-30,-30,-50,
+    -50,
+    -30,
+    -30,
+    -30,
+    -30,
+    -30,
+    -30,
+    -50,
+    -30,
+    -20,
+    0,
+    5,
+    5,
+    0,
+    -20,
+    -30,
+    -30,
+    5,
+    20,
+    30,
+    30,
+    20,
+    5,
+    -30,
+    -30,
+    5,
+    30,
+    40,
+    40,
+    30,
+    5,
+    -30,
+    -30,
+    5,
+    30,
+    40,
+    40,
+    30,
+    5,
+    -30,
+    -30,
+    5,
+    20,
+    30,
+    30,
+    20,
+    5,
+    -30,
+    -30,
+    -20,
+    0,
+    0,
+    0,
+    0,
+    -20,
+    -30,
+    -50,
+    -30,
+    -30,
+    -30,
+    -30,
+    -30,
+    -30,
+    -50,
 ]
 
 PST = {
@@ -113,22 +505,41 @@ PST = {
 # ── Numba JIT accelerated evaluation ─────────────────────────────────────
 _FILE_MASKS = [0x0101010101010101 << f for f in range(8)]
 
+
 @numba.njit(numba.types.int64(numba.types.uint64))
 def _bitscan(bb):
     r = 0
-    if bb & 0xFFFFFFFF: pass
-    else: r |= 32; bb >>= 32
-    if bb & 0xFFFF: pass
-    else: r |= 16; bb >>= 16
-    if bb & 0xFF: pass
-    else: r |= 8; bb >>= 8
-    if bb & 0xF: pass
-    else: r |= 4; bb >>= 4
-    if bb & 0x3: pass
-    else: r |= 2; bb >>= 2
-    if bb & 0x1: pass
-    else: r |= 1
+    if bb & 0xFFFFFFFF:
+        pass
+    else:
+        r |= 32
+        bb >>= 32
+    if bb & 0xFFFF:
+        pass
+    else:
+        r |= 16
+        bb >>= 16
+    if bb & 0xFF:
+        pass
+    else:
+        r |= 8
+        bb >>= 8
+    if bb & 0xF:
+        pass
+    else:
+        r |= 4
+        bb >>= 4
+    if bb & 0x3:
+        pass
+    else:
+        r |= 2
+        bb >>= 2
+    if bb & 0x1:
+        pass
+    else:
+        r |= 1
     return r
+
 
 @numba.njit(numba.types.int64(numba.types.uint64))
 def _popcount(x):
@@ -138,26 +549,503 @@ def _popcount(x):
         c += 1
     return c
 
-@numba.njit(numba.types.int64(
-    numba.types.uint64, numba.types.uint64, numba.types.uint64,
-    numba.types.uint64, numba.types.uint64, numba.types.uint64,
-    numba.types.uint64, numba.types.uint64, numba.types.uint64,
-    numba.types.uint64, numba.types.uint64, numba.types.uint64,
-    numba.types.int64,
-), cache=True)
+
+@numba.njit(
+    numba.types.int64(
+        numba.types.uint64,
+        numba.types.uint64,
+        numba.types.uint64,
+        numba.types.uint64,
+        numba.types.uint64,
+        numba.types.uint64,
+        numba.types.uint64,
+        numba.types.uint64,
+        numba.types.uint64,
+        numba.types.uint64,
+        numba.types.uint64,
+        numba.types.uint64,
+        numba.types.int64,
+    ),
+    cache=True,
+)
 def _eval_numba(
-    w_pawns, w_knights, w_bishops, w_rooks, w_queens, w_king,
-    b_pawns, b_knights, b_bishops, b_rooks, b_queens, b_king,
+    w_pawns,
+    w_knights,
+    w_bishops,
+    w_rooks,
+    w_queens,
+    w_king,
+    b_pawns,
+    b_knights,
+    b_bishops,
+    b_rooks,
+    b_queens,
+    b_king,
     turn,
 ):
     """JIT-compiled eval from uint64 bitboards. turn: 0=white, 1=black."""
-    pst_pawn   = [0,0,0,0,0,0,0,0, 5,5,5,0,0,5,5,5, 5,5,10,20,20,10,5,5, 5,10,20,25,25,20,10,5, 10,15,20,30,30,20,15,10, 15,20,25,35,35,25,20,15, 30,30,30,30,30,30,30,30, 0,0,0,0,0,0,0,0]
-    pst_knight = [-50,-40,-30,-20,-20,-30,-40,-50, -40,-20,10,15,15,10,-20,-40, -30,10,20,25,25,20,10,-30, -25,15,25,30,30,25,15,-25, -25,15,25,30,30,25,15,-25, -30,10,20,25,25,20,10,-30, -40,-20,10,15,15,10,-20,-40, -50,-40,-30,-20,-20,-30,-40,-50]
-    pst_bishop = [-20,-10,-10,-5,-5,-10,-10,-20, -10,0,0,0,0,0,0,-10, -10,0,5,10,10,5,0,-10, -10,5,10,15,15,10,5,-10, -10,0,10,15,15,10,0,-10, -10,0,5,10,10,5,0,-10, -20,-10,0,5,5,0,-10,-20, -20,-10,-10,-5,-5,-10,-10,-20]
-    pst_rook   = [0,0,0,5,5,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 10,10,10,10,10,10,10,10, 20,20,20,20,20,20,20,20, 0,0,0,0,0,0,0,0]
-    pst_queen  = [-20,-10,-10,-5,-5,-10,-10,-20, -10,0,5,5,5,5,0,-10, -10,5,5,10,10,5,5,-10, -5,5,10,10,10,10,5,-5, 0,5,10,10,10,10,5,-5, -10,5,5,5,5,5,0,-10, -10,0,0,0,0,0,0,-10, -20,-10,-10,-5,-5,-10,-10,-20]
-    pst_king_mid = [20,30,10,0,0,10,30,20, 20,20,0,0,0,0,20,20, -10,-20,-20,-20,-20,-20,-20,-10, -20,-30,-30,-40,-40,-30,-30,-20, -30,-40,-40,-50,-50,-40,-40,-30, -30,-40,-40,-50,-50,-40,-40,-30, -30,-40,-40,-50,-50,-40,-40,-30, -30,-40,-40,-50,-50,-40,-40,-30]
-    pst_king_end = [-50,-30,-30,-30,-30,-30,-30,-50, -30,-20,0,5,5,0,-20,-30, -30,5,20,30,30,20,5,-30, -30,5,30,40,40,30,5,-30, -30,5,30,40,40,30,5,-30, -30,5,20,30,30,20,5,-30, -30,-20,0,0,0,0,-20,-30, -50,-30,-30,-30,-30,-30,-30,-50]
+    pst_pawn = [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        5,
+        5,
+        5,
+        0,
+        0,
+        5,
+        5,
+        5,
+        5,
+        5,
+        10,
+        20,
+        20,
+        10,
+        5,
+        5,
+        5,
+        10,
+        20,
+        25,
+        25,
+        20,
+        10,
+        5,
+        10,
+        15,
+        20,
+        30,
+        30,
+        20,
+        15,
+        10,
+        15,
+        20,
+        25,
+        35,
+        35,
+        25,
+        20,
+        15,
+        30,
+        30,
+        30,
+        30,
+        30,
+        30,
+        30,
+        30,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+    ]
+    pst_knight = [
+        -50,
+        -40,
+        -30,
+        -20,
+        -20,
+        -30,
+        -40,
+        -50,
+        -40,
+        -20,
+        10,
+        15,
+        15,
+        10,
+        -20,
+        -40,
+        -30,
+        10,
+        20,
+        25,
+        25,
+        20,
+        10,
+        -30,
+        -25,
+        15,
+        25,
+        30,
+        30,
+        25,
+        15,
+        -25,
+        -25,
+        15,
+        25,
+        30,
+        30,
+        25,
+        15,
+        -25,
+        -30,
+        10,
+        20,
+        25,
+        25,
+        20,
+        10,
+        -30,
+        -40,
+        -20,
+        10,
+        15,
+        15,
+        10,
+        -20,
+        -40,
+        -50,
+        -40,
+        -30,
+        -20,
+        -20,
+        -30,
+        -40,
+        -50,
+    ]
+    pst_bishop = [
+        -20,
+        -10,
+        -10,
+        -5,
+        -5,
+        -10,
+        -10,
+        -20,
+        -10,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        -10,
+        -10,
+        0,
+        5,
+        10,
+        10,
+        5,
+        0,
+        -10,
+        -10,
+        5,
+        10,
+        15,
+        15,
+        10,
+        5,
+        -10,
+        -10,
+        0,
+        10,
+        15,
+        15,
+        10,
+        0,
+        -10,
+        -10,
+        0,
+        5,
+        10,
+        10,
+        5,
+        0,
+        -10,
+        -20,
+        -10,
+        0,
+        5,
+        5,
+        0,
+        -10,
+        -20,
+        -20,
+        -10,
+        -10,
+        -5,
+        -5,
+        -10,
+        -10,
+        -20,
+    ]
+    pst_rook = [
+        0,
+        0,
+        0,
+        5,
+        5,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        20,
+        20,
+        20,
+        20,
+        20,
+        20,
+        20,
+        20,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+    ]
+    pst_queen = [
+        -20,
+        -10,
+        -10,
+        -5,
+        -5,
+        -10,
+        -10,
+        -20,
+        -10,
+        0,
+        5,
+        5,
+        5,
+        5,
+        0,
+        -10,
+        -10,
+        5,
+        5,
+        10,
+        10,
+        5,
+        5,
+        -10,
+        -5,
+        5,
+        10,
+        10,
+        10,
+        10,
+        5,
+        -5,
+        0,
+        5,
+        10,
+        10,
+        10,
+        10,
+        5,
+        -5,
+        -10,
+        5,
+        5,
+        5,
+        5,
+        5,
+        0,
+        -10,
+        -10,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        -10,
+        -20,
+        -10,
+        -10,
+        -5,
+        -5,
+        -10,
+        -10,
+        -20,
+    ]
+    pst_king_mid = [
+        20,
+        30,
+        10,
+        0,
+        0,
+        10,
+        30,
+        20,
+        20,
+        20,
+        0,
+        0,
+        0,
+        0,
+        20,
+        20,
+        -10,
+        -20,
+        -20,
+        -20,
+        -20,
+        -20,
+        -20,
+        -10,
+        -20,
+        -30,
+        -30,
+        -40,
+        -40,
+        -30,
+        -30,
+        -20,
+        -30,
+        -40,
+        -40,
+        -50,
+        -50,
+        -40,
+        -40,
+        -30,
+        -30,
+        -40,
+        -40,
+        -50,
+        -50,
+        -40,
+        -40,
+        -30,
+        -30,
+        -40,
+        -40,
+        -50,
+        -50,
+        -40,
+        -40,
+        -30,
+        -30,
+        -40,
+        -40,
+        -50,
+        -50,
+        -40,
+        -40,
+        -30,
+    ]
+    pst_king_end = [
+        -50,
+        -30,
+        -30,
+        -30,
+        -30,
+        -30,
+        -30,
+        -50,
+        -30,
+        -20,
+        0,
+        5,
+        5,
+        0,
+        -20,
+        -30,
+        -30,
+        5,
+        20,
+        30,
+        30,
+        20,
+        5,
+        -30,
+        -30,
+        5,
+        30,
+        40,
+        40,
+        30,
+        5,
+        -30,
+        -30,
+        5,
+        30,
+        40,
+        40,
+        30,
+        5,
+        -30,
+        -30,
+        5,
+        20,
+        30,
+        30,
+        20,
+        5,
+        -30,
+        -30,
+        -20,
+        0,
+        0,
+        0,
+        0,
+        -20,
+        -30,
+        -50,
+        -30,
+        -30,
+        -30,
+        -30,
+        -30,
+        -30,
+        -50,
+    ]
 
     pst_all = (pst_pawn, pst_knight, pst_bishop, pst_rook, pst_queen)
     piece_vals = (100, 350, 350, 550, 950, 20000)
@@ -198,8 +1086,10 @@ def _eval_numba(
         eg_score -= 20000 + pst_king_end[bs ^ 56]
 
     phase = 256 - total_pieces * 16
-    if phase < 0: phase = 0
-    if phase > 256: phase = 256
+    if phase < 0:
+        phase = 0
+    if phase > 256:
+        phase = 256
     score = (mg_score * (256 - phase) + eg_score * phase) // 256
 
     if w_queens or b_queens:
@@ -232,13 +1122,15 @@ def _eval_numba(
             sq = _bitscan(lsb)
             bb &= bb - u1
             f = sq & 7
-            if (f == 0 or file_cnt[f-1] == 0) and (f == 7 or file_cnt[f+1] == 0):
+            if (f == 0 or file_cnt[f - 1] == 0) and (f == 7 or file_cnt[f + 1] == 0):
                 score -= sign * 15
             if file_cnt[f] > 1:
                 score -= sign * 10
 
-    if _popcount(w_bishops) >= 2: score += 50
-    if _popcount(b_bishops) >= 2: score -= 50
+    if _popcount(w_bishops) >= 2:
+        score += 50
+    if _popcount(b_bishops) >= 2:
+        score -= 50
 
     for color in (0, 1):
         sign = 1 if color == 0 else -1
@@ -249,14 +1141,21 @@ def _eval_numba(
             sq = _bitscan(lsb)
             rooks &= rooks - u1
             f = sq & 7
-            r = sq >> 3
+            # Mirror the square for black so `r` is always that colour's own
+            # rank index. Without this the 7th-rank bonus is awarded to a black
+            # rook standing on white's 7th instead of its own: `sq >> 3` is
+            # white-relative, and black's 7th is rank index 1, not 6. Same
+            # trick the piece-square loop above uses via `sq ^ 56`.
+            r = ((sq ^ 56) if color == 1 else sq) >> 3
             bonus = 0
             fm = np.uint64(0x0101010101010101 << f)
             w_on = fm & w_pawns
             b_on = fm & b_pawns
             if not w_on and not b_on:
                 bonus += 70
-            elif (color == 0 and not w_on and b_on) or (color == 1 and not b_on and w_on):
+            elif (color == 0 and not w_on and b_on) or (
+                color == 1 and not b_on and w_on
+            ):
                 bonus += 35
             if r == 6:
                 bonus += 50
@@ -270,7 +1169,7 @@ def _eval_numba(
                     bonus -= 40
             score += sign * bonus
 
-    return (score if turn == 0 else -score)
+    return score if turn == 0 else -score
 
 
 _HAS_NUMBA = True
@@ -295,7 +1194,10 @@ class SearchConfig:
 
 class TTEntry:
     __slots__ = ("depth", "value", "flag", "best_move")
-    def __init__(self, depth: int, value: int, flag: str, best_move: Optional[chess.Move]):
+
+    def __init__(
+        self, depth: int, value: int, flag: str, best_move: Optional[chess.Move]
+    ):
         self.depth = depth
         self.value = value
         self.flag = flag
@@ -316,8 +1218,11 @@ class MentorEngine:
 
     # ------------------------ Evaluation (numba JIT accelerated) ------------------------
     def _phase(self, board: chess.Board) -> int:
-        total = (board.occupied_co[chess.WHITE].bit_count() +
-                 board.occupied_co[chess.BLACK].bit_count() - 2)
+        total = (
+            board.occupied_co[chess.WHITE].bit_count()
+            + board.occupied_co[chess.BLACK].bit_count()
+            - 2
+        )
         return max(0, min(256, 256 - total * 16))
 
     def evaluate(self, board: chess.Board) -> int:
@@ -399,7 +1304,13 @@ class MentorEngine:
             gain -= 50 * (attackers - defenders)
         return gain
 
-    def _move_score(self, board: chess.Board, move: chess.Move, tt_move: Optional[chess.Move], ply: int) -> int:
+    def _move_score(
+        self,
+        board: chess.Board,
+        move: chess.Move,
+        tt_move: Optional[chess.Move],
+        ply: int,
+    ) -> int:
         score = 0
         if tt_move and move == tt_move:
             score += 50000
@@ -452,7 +1363,9 @@ class MentorEngine:
 
         return score
 
-    def _ordered_moves(self, board: chess.Board, tt_move: Optional[chess.Move], ply: int) -> List[chess.Move]:
+    def _ordered_moves(
+        self, board: chess.Board, tt_move: Optional[chess.Move], ply: int
+    ) -> List[chess.Move]:
         moves = list(board.legal_moves)
         moves.sort(key=lambda m: self._move_score(board, m, tt_move, ply), reverse=True)
         return moves
@@ -466,7 +1379,9 @@ class MentorEngine:
         return moves
 
     # ------------------------ TT Helpers ------------------------
-    def _store_tt(self, key: int, depth: int, value: int, flag: str, move: Optional[chess.Move]):
+    def _store_tt(
+        self, key: int, depth: int, value: int, flag: str, move: Optional[chess.Move]
+    ):
         with self.tt_lock:
             existing = self.tt.get(key)
             # Keep the deepest result for a position; shallower rewrites are ignored
@@ -478,7 +1393,9 @@ class MentorEngine:
             self.tt[key] = TTEntry(depth, value, flag, move)
             self.tt.move_to_end(key)
 
-    def _probe_tt(self, key: int, depth: int, alpha: int, beta: int) -> Tuple[Optional[int], Optional[chess.Move]]:
+    def _probe_tt(
+        self, key: int, depth: int, alpha: int, beta: int
+    ) -> Tuple[Optional[int], Optional[chess.Move]]:
         entry = self.tt.get(key)
         if entry and entry.depth >= depth:
             if entry.flag == "EXACT":
@@ -504,7 +1421,9 @@ class MentorEngine:
         with self.nodes_lock:
             self.nodes += 1
 
-    def _quiescence(self, board: chess.Board, alpha: int, beta: int, depth: int = 0) -> int:
+    def _quiescence(
+        self, board: chess.Board, alpha: int, beta: int, depth: int = 0
+    ) -> int:
         self._inc_nodes()
         if self._out_of_resources():
             return self.evaluate(board)
@@ -533,8 +1452,15 @@ class MentorEngine:
             alpha = max(alpha, score)
         return alpha
 
-    def _search(self, board: chess.Board, depth: int, alpha: int, beta: int,
-                ply: int = 0, allow_null: bool = True) -> int:
+    def _search(
+        self,
+        board: chess.Board,
+        depth: int,
+        alpha: int,
+        beta: int,
+        ply: int = 0,
+        allow_null: bool = True,
+    ) -> int:
         self._inc_nodes()
         if self._out_of_resources():
             return self.evaluate(board)
@@ -590,13 +1516,25 @@ class MentorEngine:
 
             extension = 1 if gives_check else 0
             if i == 0:
-                score = -self._search(board, depth - 1 + extension, -beta, -alpha, ply + 1)
+                score = -self._search(
+                    board, depth - 1 + extension, -beta, -alpha, ply + 1
+                )
             else:
-                score = -self._search(board, depth - 1 - reduction + extension, -alpha - 1, -alpha, ply + 1)
+                score = -self._search(
+                    board,
+                    depth - 1 - reduction + extension,
+                    -alpha - 1,
+                    -alpha,
+                    ply + 1,
+                )
                 if score > alpha and reduction != 0:
-                    score = -self._search(board, depth - 1 + extension, -beta, -alpha, ply + 1)
+                    score = -self._search(
+                        board, depth - 1 + extension, -beta, -alpha, ply + 1
+                    )
                 elif score > alpha and score < beta:
-                    score = -self._search(board, depth - 1 + extension, -beta, -alpha, ply + 1)
+                    score = -self._search(
+                        board, depth - 1 + extension, -beta, -alpha, ply + 1
+                    )
             board.pop()
 
             if score > best_score:
@@ -609,7 +1547,10 @@ class MentorEngine:
                     if move != killers[0]:
                         self.killers[ply] = [move, killers[0]]
                     self.history[(board.turn, move.from_square, move.to_square)] = (
-                        self.history.get((board.turn, move.from_square, move.to_square), 0) + depth * depth
+                        self.history.get(
+                            (board.turn, move.from_square, move.to_square), 0
+                        )
+                        + depth * depth
                     )
                 break
 
@@ -657,7 +1598,9 @@ class MentorEngine:
                 moves = self._ordered_moves(board, tt_move, 0)
                 for move in moves:
                     board.push(move)
-                    score = -self._search(board, depth - 1, -search_beta, -search_alpha, 1)
+                    score = -self._search(
+                        board, depth - 1, -search_beta, -search_alpha, 1
+                    )
                     board.pop()
                     if score > local_best_score:
                         local_best_score = score
