@@ -55,7 +55,7 @@ complete and the gate includes the new suites.
   `@testing-library/jest-dom`. Do not remove any existing dependency.
 - **Done when:** `npm install` succeeds and `node_modules/vitest` exists.
 
-### P0-T02 — Create `vitest.config.ts`
+### P0-T02 — Create `vitest.config.ts` ✅ DONE
 
 - **Files:** `vitest.config.ts` (new)
 - **Change:** `environment: 'jsdom'`; `include: ['renderer/src/**/*.test.{ts,tsx}']`;
