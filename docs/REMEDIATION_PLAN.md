@@ -110,7 +110,7 @@ complete and the gate includes the new suites.
 - **Done when:** `npm run lint` passes and the count of suppressions is justifiable
   line-by-line.
 
-### P0-T08 — Create `playwright.config.ts`
+### P0-T08 — Create `playwright.config.ts` ✅ DONE
 
 - **Files:** `playwright.config.ts` (new)
 - **Change:** `testDir: './e2e'`, `timeout: 60_000`, `workers: 1` (Electron windows and
