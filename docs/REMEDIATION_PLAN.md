@@ -323,7 +323,7 @@ backend/` returns only `aether_chess/engines/maia3_proxy.py:187` (see P2-T10).
 - **Done when:** `rg _uci_lock backend/` returns a declaration plus every use site, and
   the docstring matches the implementation.
 
-### P1-T05 — History navigation has no return-to-live transition
+### P1-T05 — History navigation has no return-to-live transition ✅ DONE
 
 Regression from P1-T03 (found live in `npm run dev`: every move after browsing
 history rejected as bare `Illegal move`). P1-T03 rejects `make_move` whenever

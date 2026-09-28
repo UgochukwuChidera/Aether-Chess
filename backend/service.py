@@ -227,10 +227,10 @@ def handle_new_game(params: Dict[str, Any]) -> Any:
 
 
 def handle_make_move(params: Dict[str, Any]) -> Any:
-    move_uci = str(params["move"])
+    move_uci = str(params['move'])
     success, info = engine_mgr.make_move(move_uci)
     if not success:
-        raise ValueError(f"Illegal move: {move_uci}")
+        raise ValueError(info.get('reason') or f'Illegal move: {move_uci}')
     return info
 
 

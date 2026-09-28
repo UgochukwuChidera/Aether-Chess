@@ -49,7 +49,11 @@ class ChessEngineManager:
     def __init__(self) -> None:
         self.game_state = GameState()
         self._full_history: List[chess.Move] = []
-        self._nav_index: int = -1
+        # None == live position. Any int is a viewing window into
+        # `_full_history` (P1-T05): -1 shows startpos, 0..len-1 a ply.
+        # The IPC snapshot still emits -1 for live, so the renderer is
+        # untouched — only this module sees None.
+        self._nav_index: Optional[int] = None
         self.settings: Dict[str, Any] = {
             "mode": "human_vs_ai",
             "engine_type": "mentor",
@@ -117,7 +121,7 @@ class ChessEngineManager:
         self.game_state.reset()
         self.board = self.game_state.board
         self._full_history = []
-        self._nav_index = -1
+        self._nav_index = None
         self.settings.update(
             mode=mode,
             engine_type=engine_type,
@@ -149,7 +153,7 @@ class ChessEngineManager:
 
     def make_move(self, move_uci: str) -> tuple[bool, Dict[str, Any]]:
         """Push a UCI move. Returns (success, state_snapshot)."""
-        if self._nav_index >= 0:
+        if self._nav_index is not None:
             return False, {'reason': 'Return to the live position before moving'}
         try:
             move = chess.Move.from_uci(move_uci)
@@ -170,16 +174,16 @@ class ChessEngineManager:
         san = self.board.san(move)
         self.game_state.push(move)
         self._full_history = list(self.board.move_stack)
-        self._nav_index = -1
+        self._nav_index = None
 
         return True, self._state_snapshot(last_san=san)
 
     def undo_move(self) -> Dict[str, Any]:
-        if self._nav_index >= 0:
+        if self._nav_index is not None:
             self._restore_live_board()
         self.game_state.pop()
         self._full_history = list(self.board.move_stack)
-        self._nav_index = -1
+        self._nav_index = None
         return self._state_snapshot()
 
     def _board_from_full_history(self) -> chess.Board:
@@ -208,13 +212,25 @@ class ChessEngineManager:
             self.board.push(move)
 
     def navigate_to(self, index: int) -> Dict[str, Any]:
-        """Navigate move history without modifying it."""
+        """Navigate move history without modifying it.
+
+        Navigating to the last ply (or past it) is the return-to-live
+        transition: the board already shows the live FEN, and the
+        position now counts as live, so the next move is accepted.
+        Every UI go-to-end path (End, Last, arrow, click-last-move)
+        lands here via `navigateToMove`.
+        """
         moves = self._full_history
         target = max(-1, min(index, len(moves) - 1))
         self.board.reset()
         for m in moves[: target + 1]:
             self.board.push(m)
-        self._nav_index = target
+        if target >= len(moves) - 1:
+            # At (or past) the last ply — including an empty game — this
+            # is the live position, not a viewing window.
+            self._nav_index = None
+        else:
+            self._nav_index = target
         return self._state_snapshot()
 
     # ── State helpers ─────────────────────────────────────────────────────────
@@ -240,10 +256,13 @@ class ChessEngineManager:
         is_over = board.is_game_over()
         outcome = board.outcome()
 
-        if 0 <= self._nav_index < len(self._full_history):
+        if (
+            self._nav_index is not None
+            and 0 <= self._nav_index < len(self._full_history)
+        ):
             last_uci: Optional[str] = self._full_history[self._nav_index].uci()
         elif (
-            self._nav_index < 0
+            self._nav_index is None
             and self._full_history
             and len(self.board.move_stack) > 0
         ):
@@ -259,7 +278,7 @@ class ChessEngineManager:
             "full_move_history": [m.uci() for m in self._full_history],
             "last_move_san": last_san,
             "last_move_uci": last_uci,
-            "nav_index": self._nav_index,
+            "nav_index": -1 if self._nav_index is None else self._nav_index,
             "game_over": is_over,
             "result": outcome.result() if outcome else None,
             "termination": outcome.termination.name if outcome else None,
@@ -783,7 +802,7 @@ class ChessEngineManager:
         self.game_state.load_pgn(pgn_text)
         self.board = self.game_state.board
         self._full_history = list(self.board.move_stack)
-        self._nav_index = -1
+        self._nav_index = None
 
     def close(self) -> None:
         """Clean up all engine resources."""
