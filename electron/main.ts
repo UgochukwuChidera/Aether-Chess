@@ -225,6 +225,9 @@ function sendCommand(
 
     if (callbackId && windowId !== undefined) {
       analysisCallbacks.set(callbackId, windowId);
+      console.log(
+        `[Analysis] start_analysis: ${analysisCallbacks.size} active analysis subscription(s)`,
+      );
     }
 
     // Long-running commands (e.g. full-game accuracy analysis) get 5 minutes;
@@ -278,6 +281,24 @@ function createWindow(): BrowserWindow {
   win.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
     return { action: "deny" };
+  });
+
+  // P2-T04: a window can own several analysis entries (callback_id →
+  // webContents id); drop all of them when it closes so a stale entry can
+  // never route to a recycled window id. The id is captured now because
+  // the window object is half-torn-down inside the closed handler.
+  const ownerWcId = win.webContents.id;
+  win.on("closed", () => {
+    let dropped = 0;
+    for (const [callbackId, wcId] of analysisCallbacks) {
+      if (wcId === ownerWcId) {
+        analysisCallbacks.delete(callbackId);
+        dropped += 1;
+      }
+    }
+    console.log(
+      `[Analysis] window closed: dropped ${dropped} analysis subscription(s), ${analysisCallbacks.size} active`,
+    );
   });
 
   return win;
@@ -348,7 +369,10 @@ const CHESS_COMMANDS = [
   "calculate_accuracy_from_pgn",
   "estimate_elo",
   "get_book_moves",
-  "stop_analysis",
+  // NOTE: no "stop_analysis" here — it has a dedicated handler below that
+  // deletes the analysisCallbacks entry. ipcMain serves the FIRST handler
+  // registered per channel, so listing it here would shadow the dedicated
+  // one with the generic forwarder and the map would never drain.
 ] as const;
 
 for (const cmd of CHESS_COMMANDS) {
@@ -370,6 +394,31 @@ ipcMain.handle(
       params.callback_id,
       event.sender.id,
     );
+  },
+);
+
+// P2-T04: starting an analysis registers one map entry per callback_id;
+// stopping must delete it, or the map grows for process lifetime. The
+// renderer sends no callback_id on stop, so fall back to purging every
+// entry owned by the sending window. This channel is NOT in CHESS_COMMANDS
+// above (ipcMain keeps the first handler per channel — the generic
+// forwarder would shadow this one).
+ipcMain.handle(
+  "stop_analysis",
+  async (event, params: Record<string, unknown> = {}) => {
+    const callbackId = params.callback_id;
+    if (typeof callbackId === "string") {
+      analysisCallbacks.delete(callbackId);
+    } else {
+      const senderId = event.sender.id;
+      for (const [key, wcId] of analysisCallbacks) {
+        if (wcId === senderId) analysisCallbacks.delete(key);
+      }
+    }
+    console.log(
+      `[Analysis] stop_analysis: ${analysisCallbacks.size} active analysis subscription(s)`,
+    );
+    return sendCommand("stop_analysis", params);
   },
 );
 

@@ -412,7 +412,7 @@ Separately, `removeAnalysisListeners` uses `removeAllListeners("analysis-update"
   process log and exactly one toast per backend failure.
 - **Done when:** listener count is constant across mounts.
 
-### P2-T04 — `analysisCallbacks` grows without bound
+### P2-T04 — `analysisCallbacks` grows without bound ✅ DONE
 
 **Defect.** `electron/main.ts:64` declares the map, `:162` reads it, `:225` writes it.
 There is **no `.delete` anywhere.** One entry per `start_analysis`, retained for process
