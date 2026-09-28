@@ -264,7 +264,7 @@ until the 5-minute IPC timeout. A download takes minutes, so the collision windo
 - **Done when:** the test fails on the current code and passes after, and `rg redirect_std
 backend/` returns only `aether_chess/engines/maia3_proxy.py:187` (see P2-T10).
 
-### P1-T03 — Stop history navigation from corrupting the game
+### P1-T03 — Stop history navigation from corrupting the game ✅ DONE
 
 **Defect.** `backend/chess_engine.py` — `navigate_to` (`:181-189`) replays moves onto
 `self.board`, which **is** `self.game_state.board` (assigned at `:68`). Two consequences:

@@ -49,12 +49,12 @@ class GameState:
     def to_fen(self) -> str:
         return self.board.fen()
 
-    def to_pgn(self, event: str = "Aether Chess Game") -> str:
+    def to_pgn(self, event: str = "Aether Chess Game", moves: Optional[List[chess.Move]] = None) -> str:
         game = chess.pgn.Game()
         game.headers["Event"] = event
         node = game
         replay_board = chess.Board()
-        for move in self.board.move_stack:
+        for move in self.board.move_stack if moves is None else moves:
             if move in replay_board.legal_moves:
                 node = node.add_variation(move)
                 replay_board.push(move)

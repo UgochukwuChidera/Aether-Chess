@@ -149,6 +149,8 @@ class ChessEngineManager:
 
     def make_move(self, move_uci: str) -> tuple[bool, Dict[str, Any]]:
         """Push a UCI move. Returns (success, state_snapshot)."""
+        if self._nav_index >= 0:
+            return False, {'reason': 'Return to the live position before moving'}
         try:
             move = chess.Move.from_uci(move_uci)
         except ValueError:
@@ -173,10 +175,37 @@ class ChessEngineManager:
         return True, self._state_snapshot(last_san=san)
 
     def undo_move(self) -> Dict[str, Any]:
+        if self._nav_index >= 0:
+            self._restore_live_board()
         self.game_state.pop()
         self._full_history = list(self.board.move_stack)
         self._nav_index = -1
         return self._state_snapshot()
+
+    def _board_from_full_history(self) -> chess.Board:
+        """Replay the authoritative history onto a fresh board.
+
+        Same pattern as `history_fens_and_moves` and `move_history_san`:
+        `_full_history` is the game, `board.move_stack` may be a truncated
+        viewing window left behind by `navigate_to`.
+        """
+        board = chess.Board()
+        for move in self._full_history:
+            if move in board.legal_moves:
+                board.push(move)
+        return board
+
+    def _restore_live_board(self) -> None:
+        """Replay `_full_history` onto the shared board in place.
+
+        The board is `game_state.board` by alias, so it is mutated, never
+        rebound. Popping the truncated viewing board would snapshot the
+        truncation into `_full_history` and discard the game tail.
+        """
+        live = self._board_from_full_history()
+        self.board.reset()
+        for move in live.move_stack:
+            self.board.push(move)
 
     def navigate_to(self, index: int) -> Dict[str, Any]:
         """Navigate move history without modifying it."""
@@ -748,7 +777,7 @@ class ChessEngineManager:
     # ── PGN management ───────────────────────────────────────────────────────
 
     def export_pgn(self) -> str:
-        return self.game_state.to_pgn()
+        return self.game_state.to_pgn(moves=self._board_from_full_history().move_stack)
 
     def import_pgn(self, pgn_text: str) -> None:
         self.game_state.load_pgn(pgn_text)
