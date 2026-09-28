@@ -323,6 +323,35 @@ backend/` returns only `aether_chess/engines/maia3_proxy.py:187` (see P2-T10).
 - **Done when:** `rg _uci_lock backend/` returns a declaration plus every use site, and
   the docstring matches the implementation.
 
+### P1-T05 — History navigation has no return-to-live transition
+
+Regression from P1-T03 (found live in `npm run dev`: every move after browsing
+history rejected as bare `Illegal move`). P1-T03 rejects `make_move` whenever
+`_nav_index >= 0`, but `navigate_to(len - 1)` — every UI "go to end" path (`End`,
+`Last`, `→`, click-last-move) — replays the live FEN while storing
+`_nav_index = len - 1`. The board looks live (same FEN, last move highlighted,
+`MoveHistory` cannot display the difference) while all moves are rejected; the
+service discards the guard `reason`, so the log is byte-identical to a genuinely
+illegal move. Second hole, same root: `navigate_to(-1)` shows the startpos FEN
+while storing the live sentinel, so a startpos-legal move is accepted and
+silently replaces history — the tail-discard P1-T03 meant to kill.
+
+- **Change 1:** replace the int sentinel with `Optional`: `None` == live.
+  `navigate_to` with `index >= len(moves) - 1` restores the live board and sets
+  `None`. `new_game` / `import_pgn` / `undo_move` / successful `make_move` clear
+  to `None`. Keep the IPC snapshot shape (`-1` == live) so the renderer is
+  untouched.
+- **Change 2:** `handle_make_move` (`service.py`) surfaces `info.reason` instead
+  of the bare `Illegal move`, so guard trips are distinguishable in logs.
+- **Change 3 (only if needed):** a renderer `commitMove` auto-return-to-live.
+  Prefer the backend clamp alone; record the decision.
+- **Test:** extend `tests/test_chess_engine_navigation.py` — navigate-to-end
+  then move accepted with history intact; `navigate(-1)` then startpos-legal
+  move rejected with history intact; guard reason surfaces via the service
+  handler.
+- **Done when:** browse-then-return-then-move works from the UI paths above;
+  both holes' tests fail before and pass after.
+
 ---
 
 # Phase 2 — High severity
