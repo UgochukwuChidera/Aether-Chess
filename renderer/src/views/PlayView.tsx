@@ -124,10 +124,10 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
   }, []);
 
   useEffect(() => {
-    handleNewGame();
+    if (!settings.loaded) return;
+    void handleNewGame();
     return () => { aiLoopRef.current = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- owned by P2-T01: mount effect becomes [settings.loaded]-gated with its race-fix test there
-  }, []);
+  }, [settings.loaded]);
 
   useEffect(() => {
     window.electronAPI.onAnalysisUpdate((raw: unknown) => {

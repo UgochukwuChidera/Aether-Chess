@@ -327,7 +327,7 @@ backend/` returns only `aether_chess/engines/maia3_proxy.py:187` (see P2-T10).
 
 # Phase 2 — High severity
 
-### P2-T01 — Settings load race
+### P2-T01 — Settings load race ✅ DONE
 
 **Defect.** `renderer/src/App.tsx:25-27` starts an async `settings.loadFromBackend()`.
 `renderer/src/views/PlayView.tsx:126-129` runs `handleNewGame()` in a mount effect with

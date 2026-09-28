@@ -101,6 +101,7 @@ function resetStoresForAiVsAi(): void {
     toasts: [],
   });
   useSettingsStore.setState({
+    loaded: true, // P2-T01 gate: these tests model post-load state, so the game starts on mount
     useOpeningBook: true,
     openingBookDepth: 20,
     showEvalBar: false,
@@ -187,6 +188,70 @@ describe("P1-T01 makeAiMove state ownership", () => {
       expect(counter.count()).toBe(3);
     } finally {
       counter.restore();
+      unmount();
+    }
+  }, 15000);
+});
+
+/**
+ * P2-T01: settings load race.
+ *
+ * Fail-first contract: PlayView mounts (child effects run before App's
+ * loadFromBackend resolves) and the mount effect calls handleNewGame from the
+ * first-render settings snapshot, so newGame goes out with the DEFAULT
+ * playEngine even though the backend has maia3 cached. The test below asserts
+ * the FIXED behaviour (the game starts only after settings.loaded, with the
+ * loaded playEngine) and therefore FAILS on the pre-fix code (newGame called
+ * once with stockfish).
+ */
+describe("P2-T01 settings load race", () => {
+  it("newGame uses the loaded playEngine (maia3), exactly once", async () => {
+    const newGameCalls: Array<Record<string, unknown>> = [];
+    const backend = createFakeBackend();
+    backend.api.newGame = async (params?: Record<string, unknown>) => {
+      if (params) newGameCalls.push(params);
+      return moveResult(INITIAL_FEN, [], false);
+    };
+    backend.api.loadSettings = async () => ({
+      playEngine: "maia3",
+    });
+    window.electronAPI = backend.api as unknown as Window["electronAPI"];
+
+    // First-render snapshot: defaults, settings not yet loaded.
+    useGameStore.getState().resetGame();
+    useGameStore.setState({
+      mode: "human_vs_human",
+      humanColor: "white",
+      flipped: false,
+      engineBusy: false,
+      toasts: [],
+    });
+    useSettingsStore.setState({
+      playEngine: "stockfish",
+      loaded: false,
+      useOpeningBook: false,
+      showEvalBar: false,
+      soundEnabled: false,
+      autoSaveGameHistory: false,
+      botStrength: 5,
+      thinkProfile: "rapid",
+      timeControl: { seconds: 0, increment: 0, label: "Unlimited" },
+    });
+
+    const { unmount } = render(<PlayView onTabChange={() => undefined} />);
+    try {
+      // Simulate App.tsx startup completing after mount (child effects first).
+      await useSettingsStore.getState().loadFromBackend();
+      await waitFor(
+        () => {
+          expect(newGameCalls.length).toBeGreaterThan(0);
+        },
+        { timeout: 4000, interval: 50 },
+      );
+      // Loaded settings win: exactly one game, started as maia3.
+      expect(newGameCalls.length).toBe(1);
+      expect(newGameCalls[0]?.["engine_type"]).toBe("maia3");
+    } finally {
       unmount();
     }
   }, 15000);
