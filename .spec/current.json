@@ -1,8 +1,8 @@
 {
   "$schemaNote": "Coordinator-owned phase ledger for the AetherChess remediation. Shape follows the pre-flight-protocol skill: status, phase, workItems, decisions, session.os. Sub-agent outcomes live in commit bodies + coordinator chat (subagent depth limit forbids nested .spec/agents writes). workItem statuses: completed | active | todo. P1-T01 is flagged next:true.",
   "status": "executing",
-  "phase": "phase-1",
-  "phaseLabel": "Phase 1 — Criticals (ready to start)",
+  "phase": "phase-2",
+  "phaseLabel": "Phase 2 — High severity (next up)",
   "phases": [
     {
       "id": "phase-0",
@@ -13,13 +13,13 @@
     {
       "id": "phase-1",
       "label": "Phase 1 — Criticals",
-      "status": "todo",
-      "note": "Next. P1-T01..P1-T04, strict order."
+      "status": "completed",
+      "note": "P1-T01..P1-T04 committed. Python suite 122→130."
     },
     {
       "id": "phase-2",
       "label": "Phase 2 — High severity",
-      "status": "todo",
+      "status": "active",
       "note": "P2-T01..P2-T21 (P2-T20 cancelled/no-action, P2-T21 added from P0-T12 finding)."
     },
     {
@@ -46,7 +46,11 @@
     "authority": "docs/VERIFICATION_REGISTER.md outranks docs/REMEDIATION_PLAN.md where they disagree (register §5 adjudication)."
   },
   "gate": {
-    "baseline": "python 122 passed · ruff clean · pyright 0 errors · electron 21 passed · lint clean · build succeeds",
+    "baseline": "python 130 passed · ruff clean · pyright 0 errors · electron 21 passed · lint clean · build succeeds",
+    "phaseExits": {
+      "phase-0": "python 122 passed",
+      "phase-1": "python 130 passed"
+    },
     "addedInPhase0": "test:renderer 1 passed · typecheck:renderer 0 errors · test:e2e 1 passed (hermetic, stdlib fixture)",
     "commands": [
       "venv/bin/python -m unittest discover -s tests",
@@ -177,36 +181,40 @@
       "id": "P1-T01",
       "title": "Give makeAiMove exactly one state owner",
       "phase": "phase-1",
-      "status": "todo",
-      "next": true,
-      "note": "FIRST behavior-changing item; test-first non-negotiable. PlayView.test.tsx."
+      "status": "completed",
+      "commit": "4c1f85883e4c41e027f8e9c3f1cabb23db1b95ea",
+      "note": "playAndApply single owner; callers de-duplicated; 6 logs removed. PlayView.test.tsx (book advance + 2 plies). No testability exports; suppressions byte-identical."
     },
     {
       "id": "P1-T02",
       "title": "Stop hijacking process-wide stdout",
       "phase": "phase-1",
-      "status": "todo",
-      "note": "ThreadLocalStream proxy. tests/test_service_io.py."
+      "status": "completed",
+      "commit": "8ef90c30d8831322744749743288ac9c9ac5a353",
+      "note": "ThreadLocalStream proxy; per-thread capture; redirect_std gone from service.py."
     },
     {
       "id": "P1-T03",
       "title": "Stop history navigation corrupting the game",
       "phase": "phase-1",
-      "status": "todo",
-      "note": "PGN from _full_history; reject make_move while navigating. tests/test_chess_engine_navigation.py."
+      "status": "completed",
+      "commit": "c1c1dde9c7068a3df771dff87790572c03e092b3",
+      "note": "PGN from _full_history via temp board; make_move rejected while navigating; undo restores live first. service.py untouched (rides illegal-move toast path)."
     },
     {
       "id": "P1-T04",
       "title": "Establish a real concurrency boundary",
       "phase": "phase-1",
-      "status": "todo",
-      "note": "_uci_lock + ThreadPoolExecutor(8) + docstring rewrite. tests/test_service_concurrency.py."
+      "status": "completed",
+      "commit": "94dfb277885a4479a8bb5adffd1dcba78f0f59f5",
+      "note": "_uci_lock + pool(8); lock order board-outer/uci-inner, snapshot-then-release (no nesting); docstring rewritten to match."
     },
     {
       "id": "P2-T01",
       "title": "Settings load race",
       "phase": "phase-2",
       "status": "todo",
+      "next": true,
       "note": "Gate on settings.loaded. Removes its P0-T07 suppression."
     },
     {
