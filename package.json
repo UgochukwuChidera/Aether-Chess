@@ -21,6 +21,7 @@
     "test:e2e:real": "playwright test --grep @real",
     "test:e2e:build": "npm run build && playwright test",
     "test:renderer": "vitest run",
+    "typecheck:renderer": "tsc -p tsconfig.json --noEmit",
     "test:electron": "tsc -p tsconfig.test.json && node --test --test-reporter=tap dist-test/",
     "test:python": "python -m unittest discover -s tests",
     "test": "npm run test:electron && npm run test:renderer && npm run test:python"

@@ -80,7 +80,7 @@ complete and the gate includes the new suites.
   purpose; do not migrate it.
 - **Done when:** `npm run test:renderer` and `npm run test:electron` both pass.
 
-### P0-T05 — Add `typecheck:renderer`
+### P0-T05 — Add `typecheck:renderer` ✅ DONE
 
 - **Files:** `package.json` (scripts)
 - **Change:** `"typecheck:renderer": "tsc -p tsconfig.json --noEmit"`.
