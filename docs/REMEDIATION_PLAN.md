@@ -121,7 +121,7 @@ complete and the gate includes the new suites.
 - **Done when:** `npx playwright test --list` enumerates specs without attempting a
   browser download.
 
-### P0-T09 — Add the backend-script override for hermetic tests
+### P0-T09 — Add the backend-script override for hermetic tests ✅ DONE
 
 - **Files:** `electron/main.ts:81-85`
 - **Change:** in `getBackendScript()`, read `process.env.AETHER_BACKEND_SCRIPT` first and

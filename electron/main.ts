@@ -78,6 +78,8 @@ function getPythonPath(): string {
 }
 
 function getBackendScript(): string {
+  const override = process.env.AETHER_BACKEND_SCRIPT;
+  if (override && fs.existsSync(override)) return override;
   if (app.isPackaged) {
     return ""; // PyInstaller executable — no script needed
   }
