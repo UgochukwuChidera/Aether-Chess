@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import os
 import sys
 import time
 from dataclasses import dataclass
@@ -39,25 +40,56 @@ class Maia3Proxy:
         self._engine = None
         self._engine_key: Optional[tuple] = None
 
-    def _ensure_engine(self, req: Maia3Request):
-        key = (
-            req.model, req.device, req.maia3_path, req.cache_dir,
-            req.temperature, req.top_p, req.elo,
-        )
-        if self._engine is not None:
-            if self._engine_key == key:
-                return self._engine
+    def is_available(self, maia3_path: Optional[str] = None) -> bool:
+        """Cheap check that Maia3 *could* run. Never loads the model.
 
+        Starting the engine can take minutes because it loads weights, so this
+        only verifies the cheap preconditions: torch and the maia3 package
+        import, and any explicit path exists. It does not prove inference will
+        succeed -- that is what Maia3UnavailableError from play() is for.
+        """
+        if maia3_path and not os.path.exists(maia3_path):
+            return False
+        try:
+            import torch  # noqa: F401
+        except Exception:
+            return False
+        try:
+            import maia3  # noqa: F401
+        except Exception:
+            return False
+        return True
+
+    def close(self) -> None:
+        """Release the UCI subprocess. Safe to call more than once."""
         if self._engine is not None:
             try:
                 self._engine.quit()
             except Exception:
                 pass
             self._engine = None
+            self._engine_key = None
+
+    def _ensure_engine(self, req: Maia3Request):
+        key = (
+            req.model,
+            req.device,
+            req.maia3_path,
+            req.cache_dir,
+            req.temperature,
+            req.top_p,
+            req.elo,
+        )
+        if self._engine is not None:
+            if self._engine_key == key:
+                return self._engine
+
+        self.close()
 
         try:
             try:
                 import torch
+
                 _ = torch.empty(1)
             except Exception as exc:
                 raise Maia3UnavailableError(
@@ -72,6 +104,7 @@ class Maia3Proxy:
                 ) from exc
 
             import chess.engine
+
             if req.maia3_path:
                 cmd = [req.maia3_path]
             else:
@@ -87,6 +120,7 @@ class Maia3Proxy:
             # freeze the backend forever. Failure here means a clear error
             # instead of a silent crash during play().
             import concurrent.futures
+
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
                 fut = pool.submit(self._engine.ping)
                 fut.result(timeout=300.0)
@@ -94,8 +128,12 @@ class Maia3Proxy:
             return self._engine
         except Exception as exc:
             import traceback
+
             tb = traceback.format_exc()
-            print(f"[DEBUG maia3_proxy] _ensure_engine error: type={type(exc).__name__}, msg=[{exc}]", file=sys.stderr)
+            print(
+                f"[DEBUG maia3_proxy] _ensure_engine error: type={type(exc).__name__}, msg=[{exc}]",
+                file=sys.stderr,
+            )
             print(f"[DEBUG maia3_proxy] Traceback:\n{tb}", file=sys.stderr)
             raise Maia3UnavailableError(f"[{type(exc).__name__}] {exc}") from exc
 
@@ -150,8 +188,12 @@ class Maia3Proxy:
                 result = engine.play(board, limit)
         except Exception as exc:
             import traceback
+
             tb = traceback.format_exc()
-            print(f"[DEBUG maia3_proxy] play() exception: type={type(exc).__name__}, msg=[{exc}]", file=sys.stderr)
+            print(
+                f"[DEBUG maia3_proxy] play() exception: type={type(exc).__name__}, msg=[{exc}]",
+                file=sys.stderr,
+            )
             print(f"[DEBUG maia3_proxy] Traceback:\n{tb}", file=sys.stderr)
             msg = str(exc)
             if "c10.dll" in msg or "torch" in msg:

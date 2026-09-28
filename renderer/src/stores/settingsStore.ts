@@ -8,7 +8,31 @@ import type { BoardStyle, PieceSet } from '../config/pieceConfig';
 export type { BoardStyle, PieceSet } from '../config/pieceConfig';
 
 export type Theme = 'dark' | 'light' | 'high-contrast';
-export type PlayEngine = 'mentor' | 'stockfish' | 'maia3';
+/**
+ * The id of the bot that plays the opponent side, e.g. "mentor", "maia3",
+ * "stockfish", or a discovered build such as "stockfish-19".
+ *
+ * This is a bot id rather than a closed union because the list of bots comes
+ * from the backend at runtime, so a newly discovered Stockfish build or a new
+ * bot becomes selectable without a frontend change. "mentor", "stockfish" and
+ * "maia3" remain the built-in ids.
+ */
+export type PlayEngine = string;
+
+/**
+ * A readable label for a bot id, e.g. "stockfish-19" -> "Stockfish 19".
+ *
+ * Deriving the name from the id rather than matching a known list means a
+ * discovered build is labelled correctly, and an unrecognised id is shown as
+ * itself instead of being mislabelled as a different engine.
+ */
+export function botDisplayName(botId: string): string {
+  if (!botId) return 'Unknown';
+  return botId
+    .split('-')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
 
 // ── Memory/engine hard limits ────────────────────────────────────────────────
 /** Maximum transposition-table size that can be saved through the settings. */

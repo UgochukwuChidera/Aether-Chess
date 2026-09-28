@@ -10,8 +10,8 @@ numba>=0.61
 # Optional: ONNX runtime for neural-net evaluation in the mentor bot
 onnxruntime>=1.20
 
-# ── Legacy Pygame UI (kept for reference; not used by Electron app) ──────────
-# pygame>=2.6
+# Optional: PDF report export. Imported lazily by
+# aether_chess/analysis/reporting.py, which raises a clear error if absent.
 # fpdf2>=2.8
 
 # Development / testing

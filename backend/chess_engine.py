@@ -30,11 +30,16 @@ os.makedirs(_HF_CACHE, exist_ok=True)
 os.environ.setdefault("HF_HOME", _HF_CACHE)
 os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
 
-from aether_chess.engines.maia3_proxy import Maia3Proxy, Maia3UnavailableError
+from aether_chess.bots import (
+    AUTO_BOT_ID,
+    BotManager,
+    BotMove,
+    BotUnavailableError,
+    MoveRequest,
+)
+from aether_chess.engines.maia3_proxy import Maia3Proxy
 from aether_chess.engines.mentor_engine import MentorEngine, SearchConfig
-from aether_chess.engines.registry import is_executable_file, resolve_engine_path
 from aether_chess.models.game_state import GameState
-from aether_chess.think_profile import get_profile, sample_think_time
 
 
 class ChessEngineManager:
@@ -64,10 +69,9 @@ class ChessEngineManager:
         # Custom MentorEngine (pure Python chess AI - no Stockfish needed!)
         self._mentor_engine: Optional[MentorEngine] = None
 
-        # UCI engine (Stockfish) - only used for engine_type=stockfish
-        self._uci_engine: Optional[chess.engine.SimpleEngine] = None
-        self._uci_path: str = "stockfish"
-        self._uci_lock = threading.Lock()
+        # Central bot manager. Every engine is reached through it, so the
+        # move path no longer keeps its own Stockfish process.
+        self._manager: Optional[BotManager] = None
 
         # Shared Analysis Engine (Stockfish)
         self._analysis_engine: Optional[chess.engine.SimpleEngine] = None
@@ -243,36 +247,6 @@ class ChessEngineManager:
 
     # ── SINGLE SHARED ENGINE ACCESS ──────────────────────────────────────────
 
-    def _ensure_uci(self, stockfish_path: str) -> chess.engine.SimpleEngine:
-        """Return the shared Stockfish SimpleEngine (reused for all operations)."""
-        if self._uci_engine is not None and stockfish_path == self._uci_path:
-            try:
-                # ping() sends `isready` and waits for `readyok`, so it raises
-                # EngineTerminatedError once the process is gone. The obvious
-                # is_alive() does not exist on SimpleEngine, which made this
-                # check throw every time and silently defeated engine reuse.
-                self._uci_engine.ping()
-                return self._uci_engine
-            except Exception:
-                pass
-        self._close_uci()
-        try:
-            self._uci_engine = chess.engine.SimpleEngine.popen_uci(stockfish_path)
-            self._uci_path = stockfish_path
-            return self._uci_engine
-        except Exception as e:
-            print(f"[ERROR] Failed to start Stockfish: {e}", file=sys.stderr)
-            raise
-
-    def _close_uci(self) -> None:
-        """Shut down the shared Stockfish process."""
-        if self._uci_engine is not None:
-            try:
-                self._uci_engine.quit()
-            except Exception:
-                pass
-            self._uci_engine = None
-
     def _ensure_analysis_uci(self, stockfish_path: str) -> chess.engine.SimpleEngine:
         """Return the shared analysis Stockfish SimpleEngine (reused for analysis)."""
         if (
@@ -336,6 +310,41 @@ class ChessEngineManager:
 
     # ── Engine move (direct Stockfish, full strength) ─────────────────────────
 
+    def _bot_manager(self) -> BotManager:
+        """The shared BotManager, created on first use.
+
+        Bots are registered lazily so that importing this module stays cheap and
+        so that a Stockfish binary installed after startup is still picked up.
+        """
+        if self._manager is None:
+            self._manager = BotManager(default_bot_id="mentor")
+            self._manager.register_default_bots(
+                stockfish_path=self.settings.get("stockfish_path") or None
+            )
+        return self._manager
+
+    def list_bots(self) -> List[Dict[str, Any]]:
+        """Every known bot with its capabilities and availability.
+
+        This is the single list the UI renders, so adding a bot needs no
+        frontend change.
+        """
+        return self._bot_manager().describe()
+
+    def _resolve_bot_id(self, engine_type: Optional[str]) -> str:
+        """Map the legacy engine_type values onto bot ids.
+
+        The renderer still sends "stockfish"/"maia3"/"mentor", and those stay
+        valid. "stockfish" is the canonical bot, which resolves a binary per move
+        and honours a per-request path, so a specifically configured build is
+        used as given. A versioned id such as "stockfish-19" selects one exact
+        discovered build. "auto" lets the manager pick the best available.
+        """
+        choice = engine_type or self.settings.get("engine_type") or "mentor"
+        if choice in ("stockfish", "auto", "uci"):
+            return AUTO_BOT_ID if choice == "auto" else "stockfish"
+        return choice
+
     def get_engine_move(
         self,
         fen: str,
@@ -352,108 +361,83 @@ class ChessEngineManager:
         think_profile: Optional[str] = None,
         time_remaining: Optional[float] = None,
         time_increment: Optional[float] = None,
+        total_moves: Optional[int] = None,
+        strength: Optional[int] = None,
     ) -> Dict[str, Any]:
-        """Get move from selected engine. Falls back to mentor with logged reason."""
-        engine_choice = engine_type or self.settings.get("engine_type", "stockfish")
-        profile_name = think_profile or self.settings.get("think_profile", "human_like")
-        profile = get_profile(profile_name)
-        board = chess.Board(fen)
-        fallback_from: Optional[str] = None
+        """Get a move from the selected bot, normalized to the standard shape.
 
-        if engine_choice == "maia3":
-            try:
-                result = self.get_maia3_move(
-                    fen=fen,
-                    model=maia3_model or self.settings.get("maia3_model", "maia3-5m"),
-                    device=maia3_device or self.settings.get("maia3_device", "cpu"),
-                    maia3_path=maia3_path or self.settings.get("maia3_path") or None,
-                    cache_dir=self.settings.get("maia3_cache_dir")
-                    or os.environ.get("HF_HOME"),
-                    elo=(
-                        maia3_elo
-                        if maia3_elo is not None
-                        else self.settings.get("maia3_elo", 1500)
-                    ),
-                    think_profile=profile_name,
-                    time_remaining=time_remaining,
-                    time_increment=time_increment,
-                )
-                if result and result.get("move"):
-                    return result
-            except Maia3UnavailableError as e:
-                print(f"[ERROR] Maia3 unavailable: {e}, falling back", file=sys.stderr)
-            except Exception as e:
-                print(f"[ERROR] Maia3 failed: {e}, falling back", file=sys.stderr)
-            fallback_from = "maia3"
+        Every bot is reached through the BotManager, so this method no longer
+        knows what Stockfish, Mentor or Maia3 do -- only that each returns the
+        same result. Fallback, think-time budgeting and score normalization all
+        live in the manager.
+        """
+        manager = self._bot_manager()
+        bot_id = self._resolve_bot_id(engine_type)
 
-        if engine_choice == "mentor":
-            target = sample_think_time(
-                profile,
-                board=board,
-                time_remaining=time_remaining,
-                time_increment=time_increment,
-            )
-            return self.get_mentor_move(
-                fen=fen, strength=self.settings.get("strength", 7), time_override=target
-            )
-
-        # Stockfish path — "stockfish" (or empty) means auto-detect, which
-        # picks the newest build found across PATH, the app's engines folder
-        # and the per-user folder.
-        sp = stockfish_path or self.settings.get("stockfish_path", "stockfish")
-        sp = resolve_engine_path(sp) or ""
-        if sp and is_executable_file(sp):
-            try:
-                target = sample_think_time(
-                    profile,
-                    board=board,
-                    time_remaining=time_remaining,
-                    time_increment=time_increment,
-                )
-                with self._uci_lock:
-                    engine = self._ensure_uci(sp)
-                    self._configure_uci(
-                        engine,
-                        (
-                            threads
-                            if threads is not None
-                            else self.settings.get("threads")
-                        ),
-                        (
-                            hash_mb
-                            if hash_mb is not None
-                            else self.settings.get("hash_mb")
-                        ),
-                        skill_level=None,
-                    )
-                    limit = chess.engine.Limit(time=target, depth=depth)
-                    result = engine.play(board, limit)
-                if result and result.move:
-                    san = board.san(result.move)
-                    ret: Dict[str, Any] = {"move": result.move.uci(), "san": san}
-                    if fallback_from:
-                        ret["_fallback_msg"] = "Maia3 unavailable — using Stockfish"
-                    return ret
-            except Exception as e:
-                print(
-                    f"[ERROR] Stockfish failed: {e}, falling back to mentor",
-                    file=sys.stderr,
-                )
-                self._close_uci()
-        else:
-            print(
-                f"[ERROR] Stockfish binary not found at: {sp}, falling back to mentor",
-                file=sys.stderr,
-            )
-
-        # Fallback to mentor engine
-        print("[WARN] Using mentor engine as fallback", file=sys.stderr)
-        result = self.get_mentor_move(
-            fen=fen, strength=self.settings.get("strength", 7)
+        request = MoveRequest(
+            fen=fen,
+            # time_limit stays out of the budget on purpose: the think profile
+            # and clock decide how long a human-like bot thinks, which is the
+            # behaviour the renderer relies on. It remains in the signature
+            # because the IPC contract still carries it.
+            time_remaining=time_remaining,
+            time_increment=time_increment,
+            total_moves=total_moves,
+            strength=int(
+                strength if strength is not None else self.settings.get("strength", 7)
+            ),
+            think_profile=think_profile
+            or self.settings.get("think_profile", "human_like"),
+            depth=depth,
+            options={
+                # The per-request path overrides whatever the manager was built
+                # with, so an explicitly configured engine is the one that plays.
+                "engine_path": stockfish_path or self.settings.get("stockfish_path"),
+                "threads": (
+                    threads if threads is not None else self.settings.get("threads")
+                ),
+                "hash_mb": (
+                    hash_mb if hash_mb is not None else self.settings.get("hash_mb")
+                ),
+                "maia3_path": maia3_path or self.settings.get("maia3_path") or None,
+                "model": maia3_model or self.settings.get("maia3_model", "maia3-5m"),
+                "device": maia3_device or self.settings.get("maia3_device", "cpu"),
+                "elo": (
+                    maia3_elo
+                    if maia3_elo is not None
+                    else self.settings.get("maia3_elo", 1500)
+                ),
+                "cache_dir": self.settings.get("maia3_cache_dir")
+                or os.environ.get("HF_HOME"),
+                "apply_skill_level": True,
+            },
         )
-        result["_fallback"] = True
-        if fallback_from:
-            result["_fallback_msg"] = "Maia3 unavailable — using Mentor"
+
+        # Resolve first: "auto" legitimately becomes a concrete bot id, and
+        # comparing the raw request against the answer would report that normal
+        # choice as a fallback.
+        requested = manager.resolve_bot_id(bot_id)
+        try:
+            move = manager.play(request, requested)
+        except BotUnavailableError as exc:
+            print(f"[ERROR] No bot could move ({exc})", file=sys.stderr)
+            # Still the standard shape. A caller that reads move/bot_id/note
+            # does not need a second code path for "no bot at all", which is how
+            # the two shapes drifted apart in the first place.
+            empty = BotMove(
+                uci=None, san=None, bot_id=requested, note=f"no bot available: {exc}"
+            )
+            result = empty.to_dict()
+            result["_fallback"] = True
+            result["_fallback_msg"] = empty.note
+            return result
+
+        result = move.to_dict()
+        # The renderer reads these two legacy keys, so they are kept on the way
+        # out while remaining absent for a normal, unfallback move.
+        if requested != move.bot_id:
+            result["_fallback"] = True
+            result["_fallback_msg"] = move.note or f"{requested} unavailable"
         return result
 
     def get_maia3_move(
@@ -613,7 +597,7 @@ class ChessEngineManager:
                             if self._analysis_stop.is_set():
                                 break
                             pvs = []
-                            for pv_info in (info if isinstance(info, list) else [info]):
+                            for pv_info in info if isinstance(info, list) else [info]:
                                 pv = pv_info.get("pv", [])
                                 score = pv_info.get("score")
                                 depth_v = pv_info.get("depth", 0)
@@ -783,7 +767,9 @@ class ChessEngineManager:
     def close(self) -> None:
         """Clean up all engine resources."""
         self.stop_analysis()
-        self._close_uci()
+        if self._manager is not None:
+            self._manager.close()
+            self._manager = None
         self._close_analysis_uci()
 
 

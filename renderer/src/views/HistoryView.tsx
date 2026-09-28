@@ -3,7 +3,7 @@
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useGameStore, type BackendMoveResult } from '../stores/gameStore';
-import { useSettingsStore } from '../stores/settingsStore';
+import { useSettingsStore, botDisplayName } from '../stores/settingsStore';
 import type { Tab } from '../components/BottomNav';
 
 type EloCache = {
@@ -385,11 +385,7 @@ export const HistoryView: React.FC<Props> = ({ onTabChange }) => {
         black_wins: '0-1',
         draw: '1/2-1/2',
       };
-      const engineName = settings.playEngine === 'stockfish'
-        ? 'Stockfish'
-        : settings.playEngine === 'maia3'
-          ? 'Maia3'
-          : 'Mentor';
+      const engineName = botDisplayName(settings.playEngine);
       const whiteName = store.mode === 'human_vs_ai'
         ? (store.humanColor === 'white' ? 'You' : engineName)
         : store.mode === 'ai_vs_ai'

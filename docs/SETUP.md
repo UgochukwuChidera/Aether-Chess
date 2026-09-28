@@ -162,9 +162,8 @@ Ruff is the Python linter. It is configured by `ruff.toml`; `npm run lint` is
 deliberately TypeScript-only so the Node-only CI job does not need a Python
 toolchain. The two linters run in separate CI steps for the same reason.
 
-`ruff.toml` excludes the retired Pygame UI (`aether_chess/app.py`,
-`aether_chess/ui/`) and `notebooks/`, matching `pyrightconfig.json`. It also
-relaxes three rules where the existing style is deliberate:
+`ruff.toml` excludes `notebooks/`. It also relaxes three rules where the
+existing style is deliberate:
 
 - `E701`/`E702` in `aether_chess/engines/mentor_engine.py`, whose bit-twiddling
   helpers and evaluation kernel are `@numba.njit` and are written compactly

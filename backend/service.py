@@ -35,6 +35,7 @@ Stockfish is thinking or a full-game accuracy analysis is running.
   • All stdout writes are serialised under _stdout_lock to prevent
     interleaved JSON across concurrent threads.
 """
+
 from __future__ import annotations
 
 import atexit
@@ -73,6 +74,7 @@ atexit.register(_cleanup)
 
 # ── IO helpers ────────────────────────────────────────────────────────────────
 
+
 def _send(obj: Dict[str, Any]) -> None:
     """Write a JSON object to stdout (one line) and flush — thread-safe."""
     line = json.dumps(obj) + "\n"
@@ -91,12 +93,15 @@ def _err(request_id: str, message: str) -> None:
 
 # ── Command handlers ──────────────────────────────────────────────────────────
 
+
 def handle_new_game(params: Dict[str, Any]) -> Any:
     mode = params.get("mode", "human_vs_ai")
     engine_type = params.get("engine_type", "stockfish")
     human_color = params.get("human_color", "white")
     strength = int(params.get("strength", 7))
-    time_control = params.get("time_control", None)  # {"seconds": int, "increment": int}
+    time_control = params.get(
+        "time_control", None
+    )  # {"seconds": int, "increment": int}
     stockfish_path = params.get("stockfish_path")
     maia3_path = params.get("maia3_path")
     maia3_model = params.get("maia3_model")
@@ -142,13 +147,15 @@ def handle_get_legal_moves(params: Dict[str, Any]) -> Any:
         board = engine_mgr.board
     moves = []
     for m in board.legal_moves:
-        moves.append({
-            "uci": m.uci(),
-            "san": board.san(m),
-            "from": chess.square_name(m.from_square),
-            "to": chess.square_name(m.to_square),
-            "promotion": chess.piece_name(m.promotion) if m.promotion else None,
-        })
+        moves.append(
+            {
+                "uci": m.uci(),
+                "san": board.san(m),
+                "from": chess.square_name(m.from_square),
+                "to": chess.square_name(m.to_square),
+                "promotion": chess.piece_name(m.promotion) if m.promotion else None,
+            }
+        )
     return {"moves": moves}
 
 
@@ -177,6 +184,8 @@ def handle_get_engine_move(params: Dict[str, Any]) -> Any:
     think_profile = params.get("think_profile")
     time_remaining = params.get("time_remaining")
     time_increment = params.get("time_increment")
+    total_moves = params.get("total_moves")
+    strength = params.get("strength")
     return engine_mgr.get_engine_move(
         fen,
         time_limit=time_limit,
@@ -192,28 +201,41 @@ def handle_get_engine_move(params: Dict[str, Any]) -> Any:
         think_profile=think_profile,
         time_remaining=time_remaining,
         time_increment=time_increment,
+        total_moves=total_moves,
+        strength=strength,
     )
 
 
 def handle_get_bot_move(params: Dict[str, Any]) -> Any:
+    """The mentor-bot entry point the renderer still calls.
+
+    It now goes through the same dispatcher as every other bot instead of
+    reaching into MentorEngine directly, so there is one move path with one
+    result shape rather than two that could drift.
+    """
     fen = params.get("fen") or engine_mgr.fen()
     strength = int(params.get("strength", engine_mgr.settings.get("strength", 7)))
-    stockfish_path = params.get("stockfish_path", engine_mgr.settings.get("stockfish_path", "stockfish"))
-    threads = params.get("threads", engine_mgr.settings.get("threads"))
-    hash_mb = params.get("hash_mb", engine_mgr.settings.get("hash_mb"))
-    time_remaining = params.get("time_remaining")
-    time_increment = params.get("time_increment")
-    total_moves = params.get("total_moves")
-    return engine_mgr.get_mentor_move(
+    return engine_mgr.get_engine_move(
         fen,
+        engine_type=params.get("engine_type", "mentor"),
+        stockfish_path=params.get("stockfish_path"),
+        threads=params.get("threads"),
+        hash_mb=params.get("hash_mb"),
         strength=strength,
-        stockfish_path=stockfish_path,
-        threads=threads,
-        hash_mb=hash_mb,
-        time_remaining=time_remaining,
-        time_increment=time_increment,
-        total_moves=total_moves,
+        think_profile=params.get("think_profile"),
+        time_remaining=params.get("time_remaining"),
+        time_increment=params.get("time_increment"),
+        total_moves=params.get("total_moves"),
     )
+
+
+def handle_list_bots(_params: Dict[str, Any]) -> Any:
+    """The bots this install can actually run, with availability.
+
+    The UI renders this list instead of hard-coding engine names, so a newly
+    discovered Stockfish build or a new bot shows up without frontend changes.
+    """
+    return {"bots": engine_mgr.list_bots()}
 
 
 def handle_check_maia3_cache(params: Dict[str, Any]) -> Any:
@@ -250,7 +272,9 @@ def handle_maia3_cache(params: Dict[str, Any]) -> Any:
     try:
         from maia3.cache import main as maia3_cache
     except Exception as exc:
-        raise RuntimeError(f"Maia3 is not installed in this environment. Run: python -m pip install -e .\\inspiration [{exc}]") from exc
+        raise RuntimeError(
+            f"Maia3 is not installed in this environment. Run: python -m pip install -e .\\inspiration [{exc}]"
+        ) from exc
 
     args = ["--model", str(model)]
     if cache_dir:
@@ -296,12 +320,16 @@ def handle_calculate_accuracy(params: Dict[str, Any]) -> Any:
     # All data from params — no board lock needed.
     fen_list: list[str] = params["fen_list"]
     moves: list[str] = params["moves"]
-    stockfish_path: str = params.get("stockfish_path", engine_mgr.settings.get("stockfish_path", "stockfish"))
+    stockfish_path: str = params.get(
+        "stockfish_path", engine_mgr.settings.get("stockfish_path", "stockfish")
+    )
     return accuracy_analyser.calculate(fen_list, moves, stockfish_path=stockfish_path)
 
 
 def handle_calculate_accuracy_from_history(params: Dict[str, Any]) -> Any:
-    stockfish_path: str = params.get("stockfish_path", engine_mgr.settings.get("stockfish_path", "stockfish"))
+    stockfish_path: str = params.get(
+        "stockfish_path", engine_mgr.settings.get("stockfish_path", "stockfish")
+    )
     # Snapshot history under the board lock (fast), then release before heavy computation.
     with _board_lock:
         fen_list, moves = engine_mgr.history_fens_and_moves()
@@ -310,15 +338,27 @@ def handle_calculate_accuracy_from_history(params: Dict[str, Any]) -> Any:
 
 def handle_calculate_accuracy_from_pgn(params: Dict[str, Any]) -> Any:
     pgn_text = str(params.get("pgn", ""))
-    stockfish_path: str = params.get("stockfish_path", engine_mgr.settings.get("stockfish_path", "stockfish"))
+    stockfish_path: str = params.get(
+        "stockfish_path", engine_mgr.settings.get("stockfish_path", "stockfish")
+    )
     if not pgn_text.strip():
         print("[Elo] PGN empty", file=sys.stderr)
-        return {"error": "Missing PGN", "moves": [], "white_accuracy": 0, "black_accuracy": 0}
+        return {
+            "error": "Missing PGN",
+            "moves": [],
+            "white_accuracy": 0,
+            "black_accuracy": 0,
+        }
 
     game = chess.pgn.read_game(io.StringIO(pgn_text))
     if game is None:
         print("[Elo] PGN invalid", file=sys.stderr)
-        return {"error": "Invalid PGN", "moves": [], "white_accuracy": 0, "black_accuracy": 0}
+        return {
+            "error": "Invalid PGN",
+            "moves": [],
+            "white_accuracy": 0,
+            "black_accuracy": 0,
+        }
 
     board = game.board()
     fen_list: list[str] = []
@@ -327,12 +367,18 @@ def handle_calculate_accuracy_from_pgn(params: Dict[str, Any]) -> Any:
         fen_list.append(board.fen())
         moves.append(move.uci())
         board.push(move)
-    print(f"[Elo] Analysing {len(moves)} moves with Stockfish (path: {stockfish_path}) …", file=sys.stderr)
+    print(
+        f"[Elo] Analysing {len(moves)} moves with Stockfish (path: {stockfish_path}) …",
+        file=sys.stderr,
+    )
     result = accuracy_analyser.calculate(fen_list, moves, stockfish_path=stockfish_path)
     if result.get("error"):
         print(f"[Elo]  Error: {result['error']}", file=sys.stderr)
     else:
-        print(f"[Elo]  Done — W:{result.get('white_accuracy', '?')} B:{result.get('black_accuracy', '?')}", file=sys.stderr)
+        print(
+            f"[Elo]  Done — W:{result.get('white_accuracy', '?')} B:{result.get('black_accuracy', '?')}",
+            file=sys.stderr,
+        )
     return result
 
 
@@ -343,11 +389,20 @@ def handle_estimate_elo(params: Dict[str, Any]) -> Any:
     num_games = params.get("num_games")
     if num_games is not None:
         num_games = int(num_games)
-    print(f"[Elo] estimate_elo — acc:{accuracy:.1f} blunder:{blunder_rate:.3f} cpl:{avg_cp_loss:.1f} games:{num_games}", file=sys.stderr)
-    result = accuracy_analyser.estimate_elo(
-        accuracy, blunder_rate, avg_cp_loss, num_games=num_games,
+    print(
+        f"[Elo] estimate_elo — acc:{accuracy:.1f} blunder:{blunder_rate:.3f} cpl:{avg_cp_loss:.1f} games:{num_games}",
+        file=sys.stderr,
     )
-    print(f"[Elo]  → {result.get('estimated_elo', '?')}  CI:{result.get('confidence_interval', '?')}", file=sys.stderr)
+    result = accuracy_analyser.estimate_elo(
+        accuracy,
+        blunder_rate,
+        avg_cp_loss,
+        num_games=num_games,
+    )
+    print(
+        f"[Elo]  → {result.get('estimated_elo', '?')}  CI:{result.get('confidence_interval', '?')}",
+        file=sys.stderr,
+    )
     return result
 
 
@@ -370,7 +425,9 @@ def handle_start_analysis(params: Dict[str, Any]) -> Any:
     fen = params.get("fen") or engine_mgr.fen()
     multipv = int(params.get("multipv", 3))
     callback_id = str(params["callback_id"])
-    stockfish_path = params.get("stockfish_path", engine_mgr.settings.get("stockfish_path", "stockfish"))
+    stockfish_path = params.get(
+        "stockfish_path", engine_mgr.settings.get("stockfish_path", "stockfish")
+    )
     threads = params.get("threads")
     hash_mb = params.get("hash_mb")
     engine_mgr.start_analysis(
@@ -393,37 +450,49 @@ def handle_stop_analysis(_params: Dict[str, Any]) -> Any:
 # ── Dispatch table ────────────────────────────────────────────────────────────
 
 HANDLERS: Dict[str, Any] = {
-    "new_game":           handle_new_game,
-    "make_move":          handle_make_move,
-    "get_legal_moves":    handle_get_legal_moves,
-    "undo_move":          handle_undo_move,
-    "navigate_to_move":   handle_navigate_to_move,
-    "get_engine_move":    handle_get_engine_move,
-    "get_bot_move":       handle_get_bot_move,
-    "get_eval":          handle_get_eval,
-    "export_pgn":         handle_export_pgn,
-    "import_pgn":         handle_import_pgn,
-    "export_fen":         handle_export_fen,
+    "new_game": handle_new_game,
+    "make_move": handle_make_move,
+    "get_legal_moves": handle_get_legal_moves,
+    "undo_move": handle_undo_move,
+    "navigate_to_move": handle_navigate_to_move,
+    "get_engine_move": handle_get_engine_move,
+    "get_bot_move": handle_get_bot_move,
+    "list_bots": handle_list_bots,
+    "get_eval": handle_get_eval,
+    "export_pgn": handle_export_pgn,
+    "import_pgn": handle_import_pgn,
+    "export_fen": handle_export_fen,
     "calculate_accuracy": handle_calculate_accuracy,
     "calculate_accuracy_from_history": handle_calculate_accuracy_from_history,
     "calculate_accuracy_from_pgn": handle_calculate_accuracy_from_pgn,
-    "estimate_elo":       handle_estimate_elo,
-    "get_book_moves":     handle_get_book_moves,
-    "start_analysis":     handle_start_analysis,
-    "stop_analysis":      handle_stop_analysis,
-    "maia3_cache":         handle_maia3_cache,
-    "check_maia3_cache":   handle_check_maia3_cache,
+    "estimate_elo": handle_estimate_elo,
+    "get_book_moves": handle_get_book_moves,
+    "start_analysis": handle_start_analysis,
+    "stop_analysis": handle_stop_analysis,
+    "maia3_cache": handle_maia3_cache,
+    "check_maia3_cache": handle_check_maia3_cache,
 }
 
 # Commands that mutate board state — must hold _board_lock
-_BOARD_MUTATION_CMDS = frozenset({
-    "new_game", "make_move", "undo_move", "navigate_to_move", "import_pgn",
-})
+_BOARD_MUTATION_CMDS = frozenset(
+    {
+        "new_game",
+        "make_move",
+        "undo_move",
+        "navigate_to_move",
+        "import_pgn",
+    }
+)
 
 # Commands that read board state — also hold _board_lock (fast, safe)
-_BOARD_READ_CMDS = frozenset({
-    "get_legal_moves", "export_pgn", "export_fen", "get_book_moves",
-})
+_BOARD_READ_CMDS = frozenset(
+    {
+        "get_legal_moves",
+        "export_pgn",
+        "export_fen",
+        "get_book_moves",
+    }
+)
 
 # Commands that operate on a FEN from params + need no board lock:
 #   get_engine_move, get_bot_move, calculate_accuracy,
@@ -432,6 +501,7 @@ _BOARD_READ_CMDS = frozenset({
 
 
 # ── Per-request dispatcher (runs in its own daemon thread) ───────────────────
+
 
 def _process_request(request_id: str, command: str, params: Dict[str, Any]) -> None:
     """Execute one JSON-RPC request and send the response.
@@ -464,6 +534,7 @@ def _process_request(request_id: str, command: str, params: Dict[str, Any]) -> N
 
 
 # ── Main loop ─────────────────────────────────────────────────────────────────
+
 
 def main() -> None:
     # Force UTF-8 on Windows

@@ -9,7 +9,7 @@ import { GameControls } from '../components/GameControls';
 import { GameOverModal } from '../components/GameOverModal';
 import { PromotionDialog } from '../components/PromotionDialog';
 import { useGameStore, type BackendMoveResult, type PVLine, type GameMode, type Color } from '../stores/gameStore';
-import { useSettingsStore } from '../stores/settingsStore';
+import { useSettingsStore, botDisplayName } from '../stores/settingsStore';
 import { Sound } from '../utils/sound';
 import type { Tab } from '../components/BottomNav';
 
@@ -106,9 +106,11 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
     const s = Math.max(1, Math.min(10, strength));
     return 5 + s;
   };
-  const botEloForStrength = (strength: number, engine: 'stockfish' | 'mentor' | 'maia3'): number => {
+  const botEloForStrength = (strength: number, engine: string): number => {
     const s = Math.max(1, Math.min(10, strength));
-    if (engine === 'stockfish') return Math.round(900 + s * 180);
+    // Matched by id prefix, so a discovered build such as "stockfish-19" is
+    // rated on the Stockfish curve instead of falling through to Mentor.
+    if (engine.startsWith('stockfish')) return Math.round(900 + s * 180);
     if (engine === 'maia3') return Math.round(1000 + s * 150);
     return Math.round(850 + s * 170);
   };
@@ -204,11 +206,7 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
       draw: '1/2-1/2',
     };
 
-    const engineName = settings.playEngine === 'stockfish'
-      ? 'Stockfish'
-      : settings.playEngine === 'maia3'
-        ? 'Maia3'
-        : 'Mentor';
+    const engineName = botDisplayName(settings.playEngine);
 
     const whiteName = store.mode === 'human_vs_ai'
       ? (store.humanColor === 'white' ? 'You' : engineName)
@@ -326,42 +324,26 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
     };
     const ms = profileTimeouts[cfg.thinkProfile] ?? 180_000;
     
-    let enginePromise: Promise<{ move: string | null }>;
-    if (cfg.playEngine === 'stockfish') {
-      enginePromise = window.electronAPI.getEngineMove({
-        fen,
-        depth: stockfishDepthForStrength(cfg.botStrength),
-        stockfish_path: cfg.stockfishPath,
-        threads: cfg.threads,
-        hash_mb: cfg.hashMb,
-        engine_type: 'stockfish',
-        think_profile: cfg.thinkProfile,
-        time_remaining: timeRemaining ?? undefined,
-        time_increment: cfg.timeControl.increment ?? undefined,
-      }) as Promise<{ move: string | null }>;
-    } else if (cfg.playEngine === 'maia3') {
-      enginePromise = window.electronAPI.getEngineMove({
-        fen,
-        engine_type: 'maia3',
-        maia3_model: cfg.maia3Model,
-        maia3_device: cfg.maia3Device,
-        maia3_elo: cfg.maia3Elo,
-        think_profile: cfg.thinkProfile,
-        time_remaining: timeRemaining ?? undefined,
-        time_increment: cfg.timeControl.increment ?? undefined,
-      }) as Promise<{ move: string | null }>;
-    } else {
-      enginePromise = window.electronAPI.getBotMove({
-        fen,
-        strength: cfg.botStrength,
-        stockfish_path: cfg.stockfishPath,
-        threads: cfg.threads,
-        hash_mb: cfg.hashMb,
-        time_remaining: timeRemaining ?? undefined,
-        time_increment: cfg.timeControl.increment ?? undefined,
-        total_moves: totalMoves,
-      }) as Promise<{ move: string | null }>;
-    }
+    // One call for every bot. The backend resolves the id in engine_type and
+    // ignores the parameters that do not apply to the bot it picked, so a newly
+    // added bot needs no branch here. Only the response is narrowed, because
+    // the move is all this function needs.
+    const enginePromise = window.electronAPI.getEngineMove({
+      fen,
+      engine_type: cfg.playEngine,
+      depth: stockfishDepthForStrength(cfg.botStrength),
+      strength: cfg.botStrength,
+      stockfish_path: cfg.stockfishPath,
+      threads: cfg.threads,
+      hash_mb: cfg.hashMb,
+      maia3_model: cfg.maia3Model,
+      maia3_device: cfg.maia3Device,
+      maia3_elo: cfg.maia3Elo,
+      think_profile: cfg.thinkProfile,
+      time_remaining: timeRemaining ?? undefined,
+      time_increment: cfg.timeControl.increment ?? undefined,
+      total_moves: totalMoves,
+    }) as Promise<{ move: string | null }>;
     
     // Simple timeout wrapper using Promise.race
     return new Promise<{ move: string | null }>((resolve) => {
@@ -393,7 +375,7 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
   if (!reply || !reply.move) {
     console.warn('[AI] No move returned, using fallback');
     const toast = useGameStore.getState().pushToast;
-    toast(`${requestedEngine === 'stockfish' ? 'Stockfish' : requestedEngine === 'maia3' ? 'Maia3' : 'Mentor'} failed — using fallback move`, 'error');
+    toast(`${botDisplayName(requestedEngine)} failed — using fallback move`, 'error');
     // Fallback: return a legal move as last resort
     const legal = await window.electronAPI.getLegalMoves({ fen }) as { moves?: { uci: string }[] };
     const moves = legal?.moves;
@@ -753,11 +735,7 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
         black_wins: '0-1',
         draw: '1/2-1/2',
       };
-      const engineName = settings.playEngine === 'stockfish'
-        ? 'Stockfish'
-        : settings.playEngine === 'maia3'
-          ? 'Maia3'
-          : 'Mentor';
+      const engineName = botDisplayName(settings.playEngine);
       const whiteName = store.mode === 'human_vs_ai'
         ? (store.humanColor === 'white' ? 'You' : engineName)
         : store.mode === 'ai_vs_ai'
@@ -826,7 +804,7 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
   };
 
   // ── Player card labels — adapt to current game mode ───────────────────────
-  const engineName = settings.playEngine === 'stockfish' ? 'Stockfish' : settings.playEngine === 'maia3' ? 'Maia3' : 'Mentor';
+  const engineName = botDisplayName(settings.playEngine);
   const engineElo = botEloForStrength(settings.botStrength, settings.playEngine);
 
   let topThinking = false;

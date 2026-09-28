@@ -1,25 +1,16 @@
 {
-  "include": [
-    "aether_chess",
-    "backend",
-    "tests"
-  ],
+  "include": ["aether_chess", "backend", "tests"],
   "exclude": [
     "**/node_modules",
     "**/venv",
     "**/__pycache__",
     "dist",
     "build",
-    ".git",
-    "aether_chess/ui",
-    "aether_chess/app.py"
+    ".git"
   ],
   "venvPath": ".",
   "venv": "venv",
-  "extraPaths": [
-    ".",
-    "typings"
-  ],
+  "extraPaths": [".", "typings"],
   "pythonVersion": "3.12",
   "reportMissingTypeStubs": false,
   "reportMissingModuleSource": false

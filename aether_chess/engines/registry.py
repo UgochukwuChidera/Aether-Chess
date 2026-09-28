@@ -14,7 +14,8 @@ Every candidate is asked to identify itself over UCI, which is what lets
 several Stockfish versions coexist and be reported individually instead of one
 silently winning. This mirrors ``electron/engineRegistry.ts``; the Electron
 layer resolves first and passes an absolute path down, so this module is the
-fallback that keeps the backend usable on its own (PyInstaller, ``run.py``).
+fallback that keeps the backend usable on its own, such as the PyInstaller
+bundle of ``backend/service.py``.
 """
 
 from __future__ import annotations

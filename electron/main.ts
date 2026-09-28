@@ -1,9 +1,17 @@
-import { app, BrowserWindow, ipcMain, clipboard, dialog, shell, Menu } from 'electron';
-import { autoUpdater } from 'electron-updater';
-import { PythonShell, Options } from 'python-shell';
-import * as path from 'path';
-import * as fs from 'fs';
-import * as os from 'os';
+import {
+  app,
+  BrowserWindow,
+  ipcMain,
+  clipboard,
+  dialog,
+  shell,
+  Menu,
+} from "electron";
+import { autoUpdater } from "electron-updater";
+import { PythonShell, Options } from "python-shell";
+import * as path from "path";
+import * as fs from "fs";
+import * as os from "os";
 import {
   discoverEngines,
   ensureEngineDirs,
@@ -12,7 +20,7 @@ import {
   isExecutableFile as isExecutablePath,
   userEnginesDir,
   appEnginesDir,
-} from './engineRegistry';
+} from "./engineRegistry";
 
 type EloCache = {
   white_accuracy: number;
@@ -36,7 +44,7 @@ type GameHistoryMeta = {
   elo_cache?: EloCache;
 };
 
-const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+const isDev = process.env.NODE_ENV === "development" || !app.isPackaged;
 
 // ── Python backend process ───────────────────────────────────────────────────
 
@@ -57,47 +65,59 @@ const analysisCallbacks = new Map<string, number>();
 
 function getPythonPath(): string {
   if (app.isPackaged) {
-    const ext = process.platform === 'win32' ? '.exe' : '';
-    return path.join(process.resourcesPath, 'backend', `aether_backend${ext}`);
+    const ext = process.platform === "win32" ? ".exe" : "";
+    return path.join(process.resourcesPath, "backend", `aether_backend${ext}`);
   }
   // In dev mode, prefer the venv Python so project packages are available
   const venvPython =
-    process.platform === 'win32'
-      ? path.join(__dirname, '..', '..', 'venv', 'Scripts', 'python.exe')
-      : path.join(__dirname, '..', '..', 'venv', 'bin', 'python3');
+    process.platform === "win32"
+      ? path.join(__dirname, "..", "..", "venv", "Scripts", "python.exe")
+      : path.join(__dirname, "..", "..", "venv", "bin", "python3");
   if (fs.existsSync(venvPython)) return venvPython;
-  return process.platform === 'win32' ? 'python' : 'python3';
+  return process.platform === "win32" ? "python" : "python3";
 }
 
 function getBackendScript(): string {
   if (app.isPackaged) {
-    return ''; // PyInstaller executable — no script needed
+    return ""; // PyInstaller executable — no script needed
   }
-  return path.join(__dirname, '..', '..', 'backend', 'service.py');
+  return path.join(__dirname, "..", "..", "backend", "service.py");
 }
 
 function getDefaultsPath(): string {
   return app.isPackaged
-    ? path.join(process.resourcesPath, 'config', 'settings.defaults.json')
-    : path.join(__dirname, '..', '..', 'resources', 'config', 'settings.defaults.json');
+    ? path.join(process.resourcesPath, "config", "settings.defaults.json")
+    : path.join(
+        __dirname,
+        "..",
+        "..",
+        "resources",
+        "config",
+        "settings.defaults.json",
+      );
 }
 
 function readDefaults(): Record<string, unknown> {
   try {
     const p = getDefaultsPath();
     if (!fs.existsSync(p)) return {};
-    return JSON.parse(fs.readFileSync(p, 'utf-8')) as Record<string, unknown>;
+    return JSON.parse(fs.readFileSync(p, "utf-8")) as Record<string, unknown>;
   } catch {
     return {};
   }
 }
 
-async function normalizeSettings(raw: unknown): Promise<Record<string, unknown>> {
+async function normalizeSettings(
+  raw: unknown,
+): Promise<Record<string, unknown>> {
   const defaults = readDefaults();
-  const data = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  const data =
+    raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
   const merged: Record<string, unknown> = { ...defaults, ...data };
-  const defaultTc = (defaults.timeControl as Record<string, unknown> | undefined) ?? {};
-  const savedTc = (data.timeControl as Record<string, unknown> | undefined) ?? {};
+  const defaultTc =
+    (defaults.timeControl as Record<string, unknown> | undefined) ?? {};
+  const savedTc =
+    (data.timeControl as Record<string, unknown> | undefined) ?? {};
   merged.timeControl = { ...defaultTc, ...savedTc };
 
   // An "auto" selection is deliberately left as the bare name rather than
@@ -105,8 +125,9 @@ async function normalizeSettings(raw: unknown): Promise<Record<string, unknown>>
   // here would freeze the choice into settings and silently stop Auto from
   // ever picking up a newer engine. The Python backend resolves bare names
   // itself, so nothing downstream needs a concrete path.
-  const configured = typeof merged.stockfishPath === 'string' ? merged.stockfishPath.trim() : '';
-  if (!configured) merged.stockfishPath = 'stockfish';
+  const configured =
+    typeof merged.stockfishPath === "string" ? merged.stockfishPath.trim() : "";
+  if (!configured) merged.stockfishPath = "stockfish";
   return merged;
 }
 
@@ -115,30 +136,32 @@ function startPython(mainWindow: BrowserWindow): void {
   const scriptPath = getBackendScript();
 
   const opts: Options = {
-    mode: 'json',
+    mode: "json",
     pythonPath,
     stderrParser: (line: string) => {
-      console.error('[Python stderr]', line);
+      console.error("[Python stderr]", line);
       return line;
     },
   };
 
   try {
-    pyShell = app.isPackaged ? new PythonShell(pythonPath, { ...opts, args: [] }) : new PythonShell(scriptPath, opts);
+    pyShell = app.isPackaged
+      ? new PythonShell(pythonPath, { ...opts, args: [] })
+      : new PythonShell(scriptPath, opts);
   } catch (err) {
-    console.error('Failed to start Python backend:', err);
-    mainWindow.webContents.send('backend-error', String(err));
+    console.error("Failed to start Python backend:", err);
+    mainWindow.webContents.send("backend-error", String(err));
     return;
   }
 
-  pyShell.on('message', (message: unknown) => {
+  pyShell.on("message", (message: unknown) => {
     const msg = message as Record<string, unknown>;
 
     // Analysis streaming event
-    if (msg.type === 'analysis_update' && typeof msg.callback_id === 'string') {
+    if (msg.type === "analysis_update" && typeof msg.callback_id === "string") {
       const wcId = analysisCallbacks.get(msg.callback_id);
       if (wcId !== undefined) {
-        BrowserWindow.fromId(wcId)?.webContents.send('analysis-update', msg);
+        BrowserWindow.fromId(wcId)?.webContents.send("analysis-update", msg);
       }
       return;
     }
@@ -158,30 +181,30 @@ function startPython(mainWindow: BrowserWindow): void {
     }
   });
 
-  pyShell.on('error', (err: Error) => {
-    console.error('[Python error]', err);
+  pyShell.on("error", (err: Error) => {
+    console.error("[Python error]", err);
     if (!mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('backend-error', err.message);
+      mainWindow.webContents.send("backend-error", err.message);
     }
   });
 
-  pyShell.on('close', () => {
-    console.warn('[Python] backend process closed');
+  pyShell.on("close", () => {
+    console.warn("[Python] backend process closed");
     pyShell = null;
     if (!mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('backend-closed');
+      mainWindow.webContents.send("backend-closed");
     }
   });
 }
 
 // Commands that can take a very long time (accuracy over a full game, etc.)
 const LONG_RUNNING_COMMANDS = new Set([
-  'calculate_accuracy',
-  'calculate_accuracy_from_history',
-  'calculate_accuracy_from_pgn',
-  'get_engine_move',
-  'get_bot_move',
-  'maia3_cache',
+  "calculate_accuracy",
+  "calculate_accuracy_from_history",
+  "calculate_accuracy_from_pgn",
+  "get_engine_move",
+  "get_bot_move",
+  "maia3_cache",
 ]);
 
 function sendCommand(
@@ -192,7 +215,7 @@ function sendCommand(
 ): Promise<unknown> {
   return new Promise((resolve, reject) => {
     if (!pyShell) {
-      reject(new Error('Python backend not running'));
+      reject(new Error("Python backend not running"));
       return;
     }
 
@@ -225,14 +248,14 @@ function createWindow(): BrowserWindow {
     minWidth: 800,
     minHeight: 600,
     frame: false,
-    backgroundColor: '#0A0A0A',
+    backgroundColor: "#0A0A0A",
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
     },
-    titleBarStyle: 'hidden',
+    titleBarStyle: "hidden",
     show: false,
   });
 
@@ -240,19 +263,19 @@ function createWindow(): BrowserWindow {
   Menu.setApplicationMenu(null);
 
   const rendererURL = isDev
-    ? 'http://localhost:5173'
-    : `file://${path.join(__dirname, '..', 'renderer', 'index.html')}`;
+    ? "http://localhost:5173"
+    : `file://${path.join(__dirname, "..", "renderer", "index.html")}`;
 
   win.loadURL(rendererURL);
 
-  win.once('ready-to-show', () => {
+  win.once("ready-to-show", () => {
     win.show();
     startPython(win);
   });
 
   win.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
-    return { action: 'deny' };
+    return { action: "deny" };
   });
 
   return win;
@@ -266,7 +289,7 @@ app.whenReady().then(() => {
   ensureEngineDirs();
   createWindow();
 
-  app.on('activate', () => {
+  app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 
@@ -275,21 +298,21 @@ app.whenReady().then(() => {
   }
 });
 
-app.on('window-all-closed', () => {
+app.on("window-all-closed", () => {
   if (pyShell) {
     pyShell.kill();
     pyShell = null;
   }
-  if (process.platform !== 'darwin') app.quit();
+  if (process.platform !== "darwin") app.quit();
 });
 
 // ── IPC handlers ─────────────────────────────────────────────────────────────
 
 // Window controls
-ipcMain.on('window-minimize', (event) => {
+ipcMain.on("window-minimize", (event) => {
   BrowserWindow.fromWebContents(event.sender)?.minimize();
 });
-ipcMain.on('window-maximize', (event) => {
+ipcMain.on("window-maximize", (event) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (win?.isMaximized()) {
     win.unmaximize();
@@ -297,32 +320,33 @@ ipcMain.on('window-maximize', (event) => {
     win?.maximize();
   }
 });
-ipcMain.on('window-close', (event) => {
+ipcMain.on("window-close", (event) => {
   BrowserWindow.fromWebContents(event.sender)?.close();
 });
-ipcMain.handle('window-is-maximized', (event) => {
+ipcMain.handle("window-is-maximized", (event) => {
   return BrowserWindow.fromWebContents(event.sender)?.isMaximized() ?? false;
 });
 
 // Chess backend commands — each forwarded to Python
 const CHESS_COMMANDS = [
-  'new_game',
-  'make_move',
-  'get_legal_moves',
-  'undo_move',
-  'navigate_to_move',
-  'get_engine_move',
-  'get_bot_move',
-  'get_eval',
-  'export_pgn',
-  'import_pgn',
-  'export_fen',
-  'calculate_accuracy',
-  'calculate_accuracy_from_history',
-  'calculate_accuracy_from_pgn',
-  'estimate_elo',
-  'get_book_moves',
-  'stop_analysis',
+  "new_game",
+  "make_move",
+  "get_legal_moves",
+  "undo_move",
+  "navigate_to_move",
+  "get_engine_move",
+  "get_bot_move",
+  "list_bots",
+  "get_eval",
+  "export_pgn",
+  "import_pgn",
+  "export_fen",
+  "calculate_accuracy",
+  "calculate_accuracy_from_history",
+  "calculate_accuracy_from_pgn",
+  "estimate_elo",
+  "get_book_moves",
+  "stop_analysis",
 ] as const;
 
 for (const cmd of CHESS_COMMANDS) {
@@ -332,12 +356,23 @@ for (const cmd of CHESS_COMMANDS) {
 }
 
 // Analysis streaming (needs window id for push events)
-ipcMain.handle('start_analysis', async (event, params: { fen: string; multipv: number; callback_id: string }) => {
-  return sendCommand('start_analysis', params, params.callback_id, event.sender.id);
-});
+ipcMain.handle(
+  "start_analysis",
+  async (
+    event,
+    params: { fen: string; multipv: number; callback_id: string },
+  ) => {
+    return sendCommand(
+      "start_analysis",
+      params,
+      params.callback_id,
+      event.sender.id,
+    );
+  },
+);
 
 // Settings persistence
-const settingsPath = path.join(app.getPath('userData'), 'settings.json');
+const settingsPath = path.join(app.getPath("userData"), "settings.json");
 
 function ensureDirSync(dirPath: string): void {
   if (!fs.existsSync(dirPath)) {
@@ -346,11 +381,11 @@ function ensureDirSync(dirPath: string): void {
 }
 
 function getHistoryDir(): string {
-  return path.join(app.getPath('userData'), 'games');
+  return path.join(app.getPath("userData"), "games");
 }
 
 function getHistoryIndexPath(): string {
-  return path.join(getHistoryDir(), 'index.json');
+  return path.join(getHistoryDir(), "index.json");
 }
 
 function loadGameIndex(): {
@@ -367,7 +402,7 @@ function loadGameIndex(): {
     return { version: 1, max_entries: 1000, games: [] };
   }
   try {
-    const raw = JSON.parse(fs.readFileSync(indexPath, 'utf-8')) as {
+    const raw = JSON.parse(fs.readFileSync(indexPath, "utf-8")) as {
       version?: number;
       max_entries?: number;
       games?: Array<{
@@ -397,10 +432,13 @@ function saveGameIndex(data: {
   games: Array<{ id: string; pgn_file: string; meta: GameHistoryMeta }>;
 }): void {
   const indexPath = getHistoryIndexPath();
-  fs.writeFileSync(indexPath, JSON.stringify(data, null, 2), 'utf-8');
+  fs.writeFileSync(indexPath, JSON.stringify(data, null, 2), "utf-8");
 }
 
-function pruneGameIndex(data: { max_entries: number; games: Array<{ id: string; pgn_file: string }> }): void {
+function pruneGameIndex(data: {
+  max_entries: number;
+  games: Array<{ id: string; pgn_file: string }>;
+}): void {
   const overflow = data.games.length - data.max_entries;
   if (overflow <= 0) return;
   const toRemove = data.games.slice(0, overflow);
@@ -415,10 +453,10 @@ function pruneGameIndex(data: { max_entries: number; games: Array<{ id: string; 
   data.games.splice(0, overflow);
 }
 
-ipcMain.handle('settings-load', async () => {
+ipcMain.handle("settings-load", async () => {
   try {
     if (fs.existsSync(settingsPath)) {
-      const raw = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+      const raw = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
       return await normalizeSettings(raw);
     }
   } catch {
@@ -427,24 +465,26 @@ ipcMain.handle('settings-load', async () => {
   return await normalizeSettings(null);
 });
 
-ipcMain.handle('settings-save', async (_event, data: unknown) => {
+ipcMain.handle("settings-save", async (_event, data: unknown) => {
   const normalized = await normalizeSettings(data);
   fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
-  fs.writeFileSync(settingsPath, JSON.stringify(normalized, null, 2), 'utf-8');
+  fs.writeFileSync(settingsPath, JSON.stringify(normalized, null, 2), "utf-8");
   return true;
 });
 
 // File picker for Stockfish path
-ipcMain.handle('pick-stockfish-path', async (event) => {
-  const win = BrowserWindow.fromWebContents(event.sender) ?? BrowserWindow.getAllWindows()[0];
+ipcMain.handle("pick-stockfish-path", async (event) => {
+  const win =
+    BrowserWindow.fromWebContents(event.sender) ??
+    BrowserWindow.getAllWindows()[0];
   if (!win) return null;
   const result = await dialog.showOpenDialog(win, {
-    title: 'Select Stockfish executable',
-    properties: ['openFile'],
+    title: "Select Stockfish executable",
+    properties: ["openFile"],
     filters:
-      process.platform === 'win32'
-        ? [{ name: 'Executables', extensions: ['exe', 'bat', 'cmd'] }]
-        : [{ name: 'All Files', extensions: [] }],
+      process.platform === "win32"
+        ? [{ name: "Executables", extensions: ["exe", "bat", "cmd"] }]
+        : [{ name: "All Files", extensions: [] }],
   });
   if (result.canceled) return null;
   const selected = result.filePaths[0];
@@ -458,20 +498,22 @@ ipcMain.handle('pick-stockfish-path', async (event) => {
 function readConfiguredEnginePath(): string | null {
   try {
     if (!fs.existsSync(settingsPath)) return null;
-    const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8')) as Record<string, unknown>;
+    const settings = JSON.parse(
+      fs.readFileSync(settingsPath, "utf-8"),
+    ) as Record<string, unknown>;
     const p = settings.stockfishPath;
-    return typeof p === 'string' && p.trim() ? p : null;
+    return typeof p === "string" && p.trim() ? p : null;
   } catch {
     return null;
   }
 }
 
-ipcMain.handle('stockfish-info', async () => {
+ipcMain.handle("stockfish-info", async () => {
   const configuredPath = readConfiguredEnginePath();
   // Discovery probes each candidate, so it is comparatively slow; the UI calls
   // this on open and after a change, not per frame.
   const engines = await discoverEngines(configuredPath);
-  const bundled = engines.find((e) => e.source === 'bundled');
+  const bundled = engines.find((e) => e.source === "bundled");
 
   // Mirror resolveEnginePath's choice from the same discovery pass, so the
   // highlighted engine and the one the backend receives cannot disagree.
@@ -481,7 +523,9 @@ ipcMain.handle('stockfish-info', async () => {
         ? path.resolve(configuredPath)
         : null
       : (engines[0]?.path ?? null);
-  const chosen = resolvedPath ? engines.find((e) => e.path === resolvedPath) : undefined;
+  const chosen = resolvedPath
+    ? engines.find((e) => e.path === resolvedPath)
+    : undefined;
   if (chosen) chosen.selected = true;
 
   return {
@@ -500,40 +544,53 @@ ipcMain.handle('stockfish-info', async () => {
 });
 
 /** Open the folder a player should drop downloaded binaries into. */
-ipcMain.handle('reveal-engines-dir', async () => {
+ipcMain.handle("reveal-engines-dir", async () => {
   ensureEngineDirs();
-  const target = fs.existsSync(userEnginesDir()) ? userEnginesDir() : appEnginesDir();
+  const target = fs.existsSync(userEnginesDir())
+    ? userEnginesDir()
+    : appEnginesDir();
   await shell.openPath(target);
   return target;
 });
 
-ipcMain.handle('clipboard-copy', (_event, text: string) => {
+ipcMain.handle("clipboard-copy", (_event, text: string) => {
   clipboard.writeText(text);
   return true;
 });
 
-ipcMain.handle('open-external-url', async (_event, url: string) => {
+ipcMain.handle("open-external-url", async (_event, url: string) => {
   await shell.openExternal(url);
   return true;
 });
 
 ipcMain.handle(
-  'maia3-cache',
-  async (_event, params: { model?: string; cache_dir?: string; force_download?: boolean; hf_token?: string }) => {
-    return sendCommand('maia3_cache', params ?? {});
+  "maia3-cache",
+  async (
+    _event,
+    params: {
+      model?: string;
+      cache_dir?: string;
+      force_download?: boolean;
+      hf_token?: string;
+    },
+  ) => {
+    return sendCommand("maia3_cache", params ?? {});
   },
 );
 
-ipcMain.handle('check-maia3-cache', async (_event, params: { model?: string }) => {
-  return sendCommand('check_maia3_cache', params ?? {});
-});
+ipcMain.handle(
+  "check-maia3-cache",
+  async (_event, params: { model?: string }) => {
+    return sendCommand("check_maia3_cache", params ?? {});
+  },
+);
 
 // Books directory for opening explorer
-ipcMain.handle('get-books-dir', async () => {
+ipcMain.handle("get-books-dir", async () => {
   // Open folder picker dialog
   const result = await dialog.showOpenDialog({
-    properties: ['openDirectory'],
-    title: 'Select Opening Books Folder',
+    properties: ["openDirectory"],
+    title: "Select Opening Books Folder",
   });
   if (result.canceled || result.filePaths.length === 0) {
     return null;
@@ -542,56 +599,59 @@ ipcMain.handle('get-books-dir', async () => {
 });
 
 // PGN export / open in file explorer
-ipcMain.handle('reveal-in-folder', (_event, filePath: string) => {
+ipcMain.handle("reveal-in-folder", (_event, filePath: string) => {
   shell.showItemInFolder(filePath);
   return true;
 });
 
 // System info
-ipcMain.handle('get-cpu-count', () => os.cpus().length);
+ipcMain.handle("get-cpu-count", () => os.cpus().length);
 
 // Game history persistence (index.json + per-game PGN file)
-ipcMain.handle('save-game-history', (_event, params: { pgn?: string; meta?: GameHistoryMeta }) => {
-  const pgn = typeof params?.pgn === 'string' ? params.pgn.trim() : '';
-  const meta = params?.meta;
-  if (!pgn || !meta) return { ok: false };
+ipcMain.handle(
+  "save-game-history",
+  (_event, params: { pgn?: string; meta?: GameHistoryMeta }) => {
+    const pgn = typeof params?.pgn === "string" ? params.pgn.trim() : "";
+    const meta = params?.meta;
+    if (!pgn || !meta) return { ok: false };
 
-  const historyDir = getHistoryDir();
-  ensureDirSync(historyDir);
+    const historyDir = getHistoryDir();
+    ensureDirSync(historyDir);
 
-  const index = loadGameIndex();
-  const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const pgnFile = `${id}.pgn`;
-  const pgnPath = path.join(historyDir, pgnFile);
+    const index = loadGameIndex();
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const pgnFile = `${id}.pgn`;
+    const pgnPath = path.join(historyDir, pgnFile);
 
-  fs.writeFileSync(pgnPath, pgn, 'utf-8');
+    fs.writeFileSync(pgnPath, pgn, "utf-8");
 
-  index.games.push({ id, pgn_file: pgnFile, meta });
-  pruneGameIndex(index);
-  saveGameIndex(index);
+    index.games.push({ id, pgn_file: pgnFile, meta });
+    pruneGameIndex(index);
+    saveGameIndex(index);
 
-  return { ok: true, path: pgnPath };
-});
+    return { ok: true, path: pgnPath };
+  },
+);
 
-ipcMain.handle('list-game-history', () => {
+ipcMain.handle("list-game-history", () => {
   const historyDir = getHistoryDir();
   ensureDirSync(historyDir);
   return loadGameIndex();
 });
 
-ipcMain.handle('load-game-pgn', (_event, params: { id?: string }) => {
-  const id = typeof params?.id === 'string' ? params.id : '';
-  if (!id) return { pgn: '' };
+ipcMain.handle("load-game-pgn", (_event, params: { id?: string }) => {
+  const id = typeof params?.id === "string" ? params.id : "";
+  if (!id) return { pgn: "" };
   const index = loadGameIndex();
   const entry = index.games.find((g) => g.id === id);
-  if (!entry) return { pgn: '' };
+  if (!entry) return { pgn: "" };
   const pgnPath = path.join(getHistoryDir(), entry.pgn_file);
-  if (!fs.existsSync(pgnPath)) return { pgn: '' };
-  return { pgn: fs.readFileSync(pgnPath, 'utf-8') };
+  if (!fs.existsSync(pgnPath)) return { pgn: "" };
+  return { pgn: fs.readFileSync(pgnPath, "utf-8") };
 });
 
-ipcMain.handle('get-game-file-path', (_event, params: { id?: string }) => {
-  const id = typeof params?.id === 'string' ? params.id : '';
+ipcMain.handle("get-game-file-path", (_event, params: { id?: string }) => {
+  const id = typeof params?.id === "string" ? params.id : "";
   if (!id) return { path: undefined };
   const index = loadGameIndex();
   const entry = index.games.find((g) => g.id === id);
@@ -601,8 +661,8 @@ ipcMain.handle('get-game-file-path', (_event, params: { id?: string }) => {
   return { path: pgnPath };
 });
 
-ipcMain.handle('delete-game-history', (_event, params: { id?: string }) => {
-  const id = typeof params?.id === 'string' ? params.id : '';
+ipcMain.handle("delete-game-history", (_event, params: { id?: string }) => {
+  const id = typeof params?.id === "string" ? params.id : "";
   if (!id) return { ok: false };
   const index = loadGameIndex();
   const next = index.games.filter((g) => g.id !== id);
@@ -620,21 +680,31 @@ ipcMain.handle('delete-game-history', (_event, params: { id?: string }) => {
   return { ok: true };
 });
 
-ipcMain.handle('update-game-tags', (_event, params: { id?: string; tags?: string[] }) => {
-  const id = typeof params?.id === 'string' ? params.id : '';
-  const tags = Array.isArray(params?.tags) ? params?.tags.filter((t) => typeof t === 'string') : [];
-  if (!id) return { ok: false };
-  const index = loadGameIndex();
-  const entry = index.games.find((g) => g.id === id);
-  if (!entry) return { ok: false };
-  entry.meta.tags = tags;
-  saveGameIndex(index);
-  return { ok: true };
-});
+ipcMain.handle(
+  "update-game-tags",
+  (_event, params: { id?: string; tags?: string[] }) => {
+    const id = typeof params?.id === "string" ? params.id : "";
+    const tags = Array.isArray(params?.tags)
+      ? params?.tags.filter((t) => typeof t === "string")
+      : [];
+    if (!id) return { ok: false };
+    const index = loadGameIndex();
+    const entry = index.games.find((g) => g.id === id);
+    if (!entry) return { ok: false };
+    entry.meta.tags = tags;
+    saveGameIndex(index);
+    return { ok: true };
+  },
+);
 
 // ── Cached Elo estimation ───────────────────────────────────────────
 interface AccuracyFromPgnResult {
-  moves?: Array<{ uci: string; color: string; cp_loss: number; classification: string }>;
+  moves?: Array<{
+    uci: string;
+    color: string;
+    cp_loss: number;
+    classification: string;
+  }>;
   white_accuracy?: number;
   black_accuracy?: number;
   white_avg_cp_loss?: number;
@@ -643,118 +713,135 @@ interface AccuracyFromPgnResult {
 }
 
 /** Compute accuracy for a single saved game and store the result in index.json. */
-ipcMain.handle('compute-and-cache-elo', async (_event, params: { id: string; stockfish_path?: string }) => {
-  const id = typeof params?.id === 'string' ? params.id : '';
-  console.log('[Elo] compute-and-cache-elo start — id:', id);
-  if (!id) {
-    console.warn('[Elo] Missing id');
-    return { ok: false, error: 'Missing id' };
-  }
+ipcMain.handle(
+  "compute-and-cache-elo",
+  async (_event, params: { id: string; stockfish_path?: string }) => {
+    const id = typeof params?.id === "string" ? params.id : "";
+    console.log("[Elo] compute-and-cache-elo start — id:", id);
+    if (!id) {
+      console.warn("[Elo] Missing id");
+      return { ok: false, error: "Missing id" };
+    }
 
-  const index = loadGameIndex();
-  const entry = index.games.find((g) => g.id === id);
-  if (!entry) {
-    console.warn('[Elo] Game not found:', id);
-    return { ok: false, error: 'Game not found' };
-  }
+    const index = loadGameIndex();
+    const entry = index.games.find((g) => g.id === id);
+    if (!entry) {
+      console.warn("[Elo] Game not found:", id);
+      return { ok: false, error: "Game not found" };
+    }
 
-  const pgnPath = path.join(getHistoryDir(), entry.pgn_file);
-  if (!fs.existsSync(pgnPath)) {
-    console.warn('[Elo] PGN file not found:', pgnPath);
-    return { ok: false, error: 'PGN file not found' };
-  }
-  const pgn = fs.readFileSync(pgnPath, 'utf-8');
-  console.log(
-    '[Elo]  PGN loaded —',
-    entry.meta.white ?? '?',
-    'vs',
-    entry.meta.black ?? '?',
-    '—',
-    entry.meta.moves,
-    'moves',
-  );
+    const pgnPath = path.join(getHistoryDir(), entry.pgn_file);
+    if (!fs.existsSync(pgnPath)) {
+      console.warn("[Elo] PGN file not found:", pgnPath);
+      return { ok: false, error: "PGN file not found" };
+    }
+    const pgn = fs.readFileSync(pgnPath, "utf-8");
+    console.log(
+      "[Elo]  PGN loaded —",
+      entry.meta.white ?? "?",
+      "vs",
+      entry.meta.black ?? "?",
+      "—",
+      entry.meta.moves,
+      "moves",
+    );
 
-  let result: AccuracyFromPgnResult;
-  try {
-    result = (await sendCommand('calculate_accuracy_from_pgn', {
-      pgn,
-      stockfish_path: params?.stockfish_path ?? '',
-    })) as AccuracyFromPgnResult;
-  } catch (err) {
-    console.warn('[Elo]  Stockfish analysis threw:', err);
-    return { ok: false, error: String(err) };
-  }
+    let result: AccuracyFromPgnResult;
+    try {
+      result = (await sendCommand("calculate_accuracy_from_pgn", {
+        pgn,
+        stockfish_path: params?.stockfish_path ?? "",
+      })) as AccuracyFromPgnResult;
+    } catch (err) {
+      console.warn("[Elo]  Stockfish analysis threw:", err);
+      return { ok: false, error: String(err) };
+    }
 
-  if (result.error) {
-    console.warn('[Elo]  Stockfish analysis error:', result.error);
-    return { ok: false, error: result.error };
-  }
+    if (result.error) {
+      console.warn("[Elo]  Stockfish analysis error:", result.error);
+      return { ok: false, error: result.error };
+    }
 
-  const rows = result.moves ?? [];
-  const blunders = rows.filter((m) => m.classification === 'Blunder').length;
-  const blunderRate = rows.length > 0 ? blunders / rows.length : 0;
-  const whiteLosses = rows.filter((m) => m.color === 'white').map((m) => m.cp_loss);
-  const blackLosses = rows.filter((m) => m.color === 'black').map((m) => m.cp_loss);
-  const allLosses = [...whiteLosses, ...blackLosses];
-  const avgCpLoss = allLosses.length > 0 ? allLosses.reduce((a, b) => a + b, 0) / allLosses.length : 0;
+    const rows = result.moves ?? [];
+    const blunders = rows.filter((m) => m.classification === "Blunder").length;
+    const blunderRate = rows.length > 0 ? blunders / rows.length : 0;
+    const whiteLosses = rows
+      .filter((m) => m.color === "white")
+      .map((m) => m.cp_loss);
+    const blackLosses = rows
+      .filter((m) => m.color === "black")
+      .map((m) => m.cp_loss);
+    const allLosses = [...whiteLosses, ...blackLosses];
+    const avgCpLoss =
+      allLosses.length > 0
+        ? allLosses.reduce((a, b) => a + b, 0) / allLosses.length
+        : 0;
 
-  const eloCache = {
-    white_accuracy: result.white_accuracy ?? 0,
-    black_accuracy: result.black_accuracy ?? 0,
-    blunder_rate: Math.round(blunderRate * 1000) / 1000,
-    avg_cp_loss: Math.round(avgCpLoss * 10) / 10,
-    computed_at: new Date().toISOString(),
-  };
-  console.log(
-    '[Elo]  Result — W:',
-    eloCache.white_accuracy.toFixed(1),
-    'B:',
-    eloCache.black_accuracy.toFixed(1),
-    'BR:',
-    eloCache.blunder_rate,
-    'CPL:',
-    eloCache.avg_cp_loss,
-  );
+    const eloCache = {
+      white_accuracy: result.white_accuracy ?? 0,
+      black_accuracy: result.black_accuracy ?? 0,
+      blunder_rate: Math.round(blunderRate * 1000) / 1000,
+      avg_cp_loss: Math.round(avgCpLoss * 10) / 10,
+      computed_at: new Date().toISOString(),
+    };
+    console.log(
+      "[Elo]  Result — W:",
+      eloCache.white_accuracy.toFixed(1),
+      "B:",
+      eloCache.black_accuracy.toFixed(1),
+      "BR:",
+      eloCache.blunder_rate,
+      "CPL:",
+      eloCache.avg_cp_loss,
+    );
 
-  // Re-load index to avoid race conditions with other writes
-  const freshIndex = loadGameIndex();
-  const freshEntry = freshIndex.games.find((g) => g.id === id);
-  if (freshEntry) {
-    freshEntry.meta.elo_cache = eloCache;
-    saveGameIndex(freshIndex);
-    console.log('[Elo] compute-and-cache-elo done — cached for', id);
-  } else {
-    console.warn('[Elo]  Game vanished from index between read and write:', id);
-  }
+    // Re-load index to avoid race conditions with other writes
+    const freshIndex = loadGameIndex();
+    const freshEntry = freshIndex.games.find((g) => g.id === id);
+    if (freshEntry) {
+      freshEntry.meta.elo_cache = eloCache;
+      saveGameIndex(freshIndex);
+      console.log("[Elo] compute-and-cache-elo done — cached for", id);
+    } else {
+      console.warn(
+        "[Elo]  Game vanished from index between read and write:",
+        id,
+      );
+    }
 
-  return { ok: true, elo_cache: eloCache };
-});
+    return { ok: true, elo_cache: eloCache };
+  },
+);
 
 /** Return game IDs (up to 30 most recent) that have no cached elo data. */
-ipcMain.handle('get-games-needing-elo', () => {
+ipcMain.handle("get-games-needing-elo", () => {
   const index = loadGameIndex();
   const needing: Array<{ id: string; played_at: string; moves: number }> = [];
   for (const g of index.games) {
     if (!g.meta.elo_cache && g.meta.moves >= 2) {
-      needing.push({ id: g.id, played_at: g.meta.played_at, moves: g.meta.moves });
+      needing.push({
+        id: g.id,
+        played_at: g.meta.played_at,
+        moves: g.meta.moves,
+      });
     }
   }
   needing.sort((a, b) => b.played_at.localeCompare(a.played_at));
   const result = needing.slice(0, 30);
   console.log(
-    '[Elo] get-games-needing-elo —',
+    "[Elo] get-games-needing-elo —",
     result.length,
-    'game(s) without cache (of',
+    "game(s) without cache (of",
     index.games.length,
-    'total)',
+    "total)",
   );
   if (result.length > 0)
     console.log(
-      '[Elo]   First few:',
+      "[Elo]   First few:",
       result
         .slice(0, 3)
         .map((g) => g.id)
-        .join(', '),
+        .join(", "),
     );
   return result;
 });

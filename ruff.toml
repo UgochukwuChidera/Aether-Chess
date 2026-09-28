@@ -1,9 +1,8 @@
 target-version = "py312"
 line-length = 100
 
-# Reference-only code kept for the retired Pygame UI, plus notebooks. Not
-# imported by the Electron app and not linted, matching pyrightconfig.json.
-extend-exclude = ["aether_chess/app.py", "aether_chess/ui", "notebooks"]
+# Exploratory notebooks are not part of the Electron app or the backend.
+extend-exclude = ["notebooks"]
 
 [lint]
 # E4/E7/E9 + F is ruff's own default set: syntax, pyflakes, and the errors that

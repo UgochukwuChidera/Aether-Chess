@@ -7,7 +7,6 @@ import {
   TIME_CONTROLS,
   MAX_HASH_MB,
   type Theme,
-  type PlayEngine,
   type AnimationSpeed,
 } from '../stores/settingsStore';
 import { useGameStore } from '../stores/gameStore';
@@ -120,6 +119,21 @@ export const SettingsPanel: React.FC = () => {
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
 
+  // The selectable bots come from the backend rather than a hard-coded list, so
+  // a discovered Stockfish build or a bot added later appears here by itself.
+  const [bots, setBots] = useState<BotInfo[]>([]);
+
+  const refreshBots = useCallback(() => {
+    return window.electronAPI
+      .listBots()
+      .then((res) => setBots(res.bots))
+      .catch((err: unknown) => {
+        // Keep whatever is already listed. Emptying the list would read as
+        // "this install has no bots", which is a different and wrong claim.
+        console.error('Bot discovery failed', err);
+      });
+  }, []);
+
   const refreshStockfish = useCallback(() => {
     setScanning(true);
     return window.electronAPI
@@ -140,7 +154,14 @@ export const SettingsPanel: React.FC = () => {
   useEffect(() => {
     window.electronAPI.getCpuCount().then(setCpuCount);
     void refreshStockfish();
-  }, [refreshStockfish]);
+    void refreshBots();
+  }, [refreshStockfish, refreshBots]);
+
+  // Changing the configured path can make a different Stockfish build available
+  // or take one away, so availability is re-read rather than fixed at load.
+  useEffect(() => {
+    void refreshBots();
+  }, [refreshBots, settings.stockfishPath]);
 
   // Check cache status whenever the selected model changes
   useEffect(() => {
@@ -291,15 +312,21 @@ export const SettingsPanel: React.FC = () => {
 
       {/* ── Engine ──────────────────────────────────────────────────────── */}
       <Section title="Engine" icon="memory">
-        <Row label="Play engine" tooltip="Mentor = custom bot. Stockfish = classic engine. Maia3 = neural model.">
+        <Row label="Play engine" tooltip="Any bot this install can run. Each discovered Stockfish build is listed separately.">
           <select
             className={selectClass}
             value={settings.playEngine}
-            onChange={(e) => settings.update({ playEngine: e.target.value as PlayEngine })}
+            onChange={(e) => settings.update({ playEngine: e.target.value })}
           >
-            <option value="mentor">Mentor (your bot)</option>
-            <option value="stockfish">Stockfish</option>
-            <option value="maia3">Maia3 (neural)</option>
+            {bots.length === 0 ? (
+              <option value="" disabled>Could not load the bot list</option>
+            ) : (
+              bots.map((bot) => (
+                <option key={bot.bot_id} value={bot.bot_id} disabled={!bot.available}>
+                  {bot.display_name}{bot.available ? '' : ' (unavailable)'}
+                </option>
+              ))
+            )}
           </select>
         </Row>
         {settings.playEngine === 'mentor' && (

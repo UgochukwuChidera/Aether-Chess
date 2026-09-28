@@ -17,6 +17,21 @@ declare global {
     selected: boolean;
   };
 
+  /** A bot the backend can actually run, as reported by the `list_bots` command. */
+  type BotInfo = {
+    bot_id: string;
+    display_name: string;
+    kind: string;
+    description: string;
+    requires_binary: boolean;
+    supports_skill_level: boolean;
+    supports_elo: boolean;
+    supports_eval: boolean;
+    deterministic: boolean;
+    available: boolean;
+    is_default: boolean;
+  };
+
   interface Window {
     electronAPI: {
       // Window controls
@@ -53,7 +68,7 @@ declare global {
         stockfish_path?: string;
         threads?: number;
         hash_mb?: number;
-        engine_type?: 'stockfish' | 'mentor' | 'maia3';
+        engine_type?: string;
         maia3_path?: string;
         maia3_model?: string;
         maia3_device?: 'cpu' | 'cuda';
@@ -61,6 +76,8 @@ declare global {
         think_profile?: string;
         time_remaining?: number;
         time_increment?: number;
+        total_moves?: number;
+        strength?: number;
       }) => Promise<unknown>;
       getBotMove: (params: {
         fen: string;
@@ -72,6 +89,7 @@ declare global {
         time_increment?: number;
         total_moves?: number;
       }) => Promise<unknown>;
+      listBots: () => Promise<{ bots: BotInfo[] }>;
       getEval: (params: { fen: string; use_mentor_eval?: boolean }) => Promise<unknown>;
       exportPgn: () => Promise<unknown>;
       importPgn: (params: { pgn: string }) => Promise<unknown>;
@@ -79,7 +97,7 @@ declare global {
       calculateAccuracy: (params: { fen_list: string[]; moves: string[] }) => Promise<unknown>;
       calculateAccuracyFromHistory: (params: {
         stockfish_path?: string;
-        engine_type?: 'stockfish' | 'mentor' | 'maia3';
+        engine_type?: string;
       }) => Promise<unknown>;
       calculateAccuracyFromPgn: (params: { pgn: string; stockfish_path?: string }) => Promise<unknown>;
       estimateElo: (params: {
@@ -105,7 +123,7 @@ declare global {
         stockfish_path?: string;
         threads?: number;
         hash_mb?: number;
-        engine_type?: 'stockfish' | 'mentor' | 'maia3';
+        engine_type?: string;
         maia3_model?: string;
         maia3_device?: 'cpu' | 'cuda';
       }) => Promise<unknown>;

@@ -28,12 +28,14 @@
                                │                     │
                                │  service.py         │
                                │  chess_engine.py    │
-                               │  custom_bot.py      │
+                               │  bots/ (manager +   │
+                               │  stockfish, mentor, │
+                               │  maia3 adapters)    │
                                │  analysis.py        │
                                │                     │
                                │  python-chess       │
                                │  Stockfish (UCI)    │
-                               │  MentorEngine (PVS) │
+                               │  MentorEngine (PVS) |
                                └─────────────────────┘
 ```
 
