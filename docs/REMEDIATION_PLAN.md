@@ -89,7 +89,7 @@ complete and the gate includes the new suites.
 - **Done when:** it passes now (expect this to surface pre-existing errors — fix or
   explicitly suppress each one, and record them in the PR body).
 
-### P0-T06 — Widen `tsconfig.test.json` to include `e2e/`
+### P0-T06 — Widen `tsconfig.test.json` to include `e2e/` ✅ DONE
 
 - **Files:** `tsconfig.test.json`
 - **Change:** it currently sets `"rootDir": "electron"` and `"include": ["electron/**/*"]`,
