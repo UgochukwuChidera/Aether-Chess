@@ -6,6 +6,7 @@ import chess
 import chess.engine
 
 from aether_chess.engines.mentor_engine import MentorEngine, SearchConfig
+from aether_chess.engines.mentor_profile import mentor_search_config
 from aether_chess.engines.uci_engine import UCIConfig, UCIEngineManager
 from aether_chess.io.opening_book import OpeningBook
 from aether_chess.models.settings import EngineType, GameSettings, OpeningStrategy
@@ -21,14 +22,9 @@ class EngineController:
         self._apply_strength()
 
     def _mentor_config_for_strength(self, strength: int) -> SearchConfig:
-        level = min(10, max(1, strength))
-        return SearchConfig(
-            max_depth=2 + level // 2,
-            max_nodes=30_000 + level * 35_000,
-            time_limit_sec=0.15 + level * 0.18,
-            difficulty=min(1.0, 0.35 + level * 0.07),
-            tt_max_entries=50_000 + level * 15_000,
-        )
+        # The shared mapping, so this controller drives the same Mentor the bot
+        # adapter plays with rather than a weaker variant of the same name.
+        return mentor_search_config(strength)
 
     def _uci_config_for_strength(self, strength: int) -> UCIConfig:
         level = min(10, max(1, strength))

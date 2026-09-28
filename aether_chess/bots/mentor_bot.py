@@ -19,7 +19,8 @@ from aether_chess.bots.base import (
     normalize_move,
     normalize_score,
 )
-from aether_chess.engines.mentor_engine import MentorEngine, SearchConfig
+from aether_chess.engines.mentor_engine import MentorEngine
+from aether_chess.engines.mentor_profile import mentor_search_config
 
 MENTOR_BOT_ID = "mentor"
 
@@ -53,26 +54,13 @@ class MentorBot(Bot):
             self._configured_strength = strength
         return self._engine
 
-    def _build_config(self, request: MoveRequest, time_limit: float) -> SearchConfig:
-        level = request.strength_level()
-        return SearchConfig(
-            # Same 1-10 scale Stockfish's Skill Level is mapped onto, so the
-            # slider means the same thing whichever bot is selected.
-            max_depth=8 + level * 2,
-            max_nodes=200_000 + level * 200_000,
-            time_limit_sec=time_limit,
-            difficulty=min(1.0, 0.5 + level * 0.05),
-            tt_max_entries=200_000 + level * 50_000,
-            threads=1,
-        )
-
     def play(self, request: MoveRequest) -> BotMove:
         import time
 
         board = request.board()
         time_limit = clamp_time_limit(request.time_limit_sec)
         engine = self._ensure_engine(request.strength_level())
-        engine.config = self._build_config(request, time_limit)
+        engine.config = mentor_search_config(request.strength_level(), time_limit)
 
         started = time.time()
         try:

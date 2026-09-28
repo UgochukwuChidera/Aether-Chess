@@ -38,7 +38,8 @@ from aether_chess.bots import (
     MoveRequest,
 )
 from aether_chess.engines.maia3_proxy import Maia3Proxy
-from aether_chess.engines.mentor_engine import MentorEngine, SearchConfig
+from aether_chess.engines.mentor_engine import MentorEngine
+from aether_chess.engines.mentor_profile import mentor_search_config
 from aether_chess.models.game_state import GameState
 
 
@@ -89,18 +90,9 @@ class ChessEngineManager:
         if self._mentor_engine is None:
             self._mentor_engine = MentorEngine()
 
-        level = max(1, min(10, int(strength)))
-        # Realistic depth for nodes budget - depth 18 needs millions of nodes
-        self._mentor_engine.config = SearchConfig(
-            max_depth=max(4, level + 2),  # 6-12 plies only (was 6-24)
-            max_nodes=200_000 * level,  # 200K-2M nodes (was 100K-1.1M)
-            time_limit_sec=max(
-                0.3, min(2.0, 0.3 + level * 0.2)
-            ),  # 0.5-2.3s but capped at 2s
-            difficulty=min(1.0, 0.5 + level * 0.05),
-            tt_max_entries=500_000,  # Fixed size, not scaling
-            threads=1,
-        )
+        # Same mapping the playing bot uses, so the Mentor behind the
+        # evaluation bar is the Mentor the player is actually up against.
+        self._mentor_engine.config = mentor_search_config(strength)
         return self._mentor_engine
 
     # ── Game lifecycle ─────────────────────────────────────────────────────────
