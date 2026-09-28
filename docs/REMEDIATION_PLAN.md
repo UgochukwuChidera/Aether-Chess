@@ -421,7 +421,7 @@ lifetime. A stale `wcId` can also route to a recycled window id.
 - **Change:** delete the entry in the `stop_analysis` handler and on window close.
 - **Test:** e2e — start/stop analysis 20×, assert the map size returns to 0.
 
-### P2-T05 — Backend death hangs every request and never recovers
+### P2-T05 — Backend death hangs every request and never recovers ✅ DONE
 
 **Defect.** `electron/main.ts:191-197` — the `close` handler sets `pyShell = null` and
 emits `backend-closed`, but does **not** reject entries in `pendingRequests` (`:51-64`),

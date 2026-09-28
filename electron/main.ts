@@ -57,6 +57,7 @@ const pendingRequests = new Map<
     resolve: (v: unknown) => void;
     reject: (e: Error) => void;
     timer: ReturnType<typeof setTimeout>;
+    command: string;
   }
 >();
 
@@ -193,6 +194,14 @@ function startPython(mainWindow: BrowserWindow): void {
   pyShell.on("close", () => {
     console.warn("[Python] backend process closed");
     pyShell = null;
+    // P2-T05: fail fast — the old code stopped here, so every in-flight
+    // renderer promise waited out its full timeout and nothing respawned.
+    const rejected = rejectAllPendingRequests();
+    if (rejected > 0) {
+      console.warn(
+        `[Python] rejected ${rejected} pending request(s): backend exited`,
+      );
+    }
     if (!mainWindow.isDestroyed()) {
       mainWindow.webContents.send("backend-closed");
     }
@@ -209,6 +218,24 @@ const LONG_RUNNING_COMMANDS = new Set([
   "maia3_cache",
 ]);
 
+// P2-T05: the backend can die at any time (SIGKILL, crash, OOM).
+// Reject every in-flight renderer promise with a clear backend-exited
+// error instead of letting each wait out its full timeout (30s, 300s for
+// LONG_RUNNING tiers), and clearTimeout each entry so no dead handle
+// fires into a deleted entry later. Returns the rejected count.
+function rejectAllPendingRequests(): number {
+  let rejected = 0;
+  for (const [id, pending] of pendingRequests) {
+    pendingRequests.delete(id);
+    clearTimeout(pending.timer);
+    pending.reject(
+      new Error(`Backend exited before responding to ${pending.command}`),
+    );
+    rejected += 1;
+  }
+  return rejected;
+}
+
 function sendCommand(
   command: string,
   params: Record<string, unknown> = {},
@@ -216,6 +243,15 @@ function sendCommand(
   windowId?: number,
 ): Promise<unknown> {
   return new Promise((resolve, reject) => {
+    if (!pyShell) {
+      // P2-T05 lazy respawn on the next IPC call. BrowserWindow is
+      // already imported and the app is single-window (exactly one
+      // `new BrowserWindow` site; createWindow only), so the first live
+      // window is the right owner with no ref threading. With no live
+      // window (shutdown) this stays null and falls through to reject.
+      const live = BrowserWindow.getAllWindows().find((w) => !w.isDestroyed());
+      if (live) startPython(live);
+    }
     if (!pyShell) {
       reject(new Error("Python backend not running"));
       return;
@@ -239,7 +275,7 @@ function sendCommand(
       reject(new Error(`Request timed out: ${command}`));
     }, timeoutMs);
 
-    pendingRequests.set(id, { resolve, reject, timer });
+    pendingRequests.set(id, { resolve, reject, timer, command });
     pyShell.send({ id, command, params });
   });
 }

@@ -36,6 +36,7 @@ from __future__ import annotations
 import json
 import re
 import sys
+import time
 from typing import Any, Dict, List
 
 START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
@@ -245,6 +246,12 @@ def main() -> None:
         request_id = msg.get("id", "")
         command = msg.get("command", "")
         params = msg.get("params", {}) or {}
+        # P2-T05 test hook: `__hang_sec` holds the request open so the
+        # backend-death spec can SIGKILL mid-flight deterministically.
+        # Absent (every other spec) this is a no-op.
+        hang_s = params.get("__hang_sec")
+        if isinstance(hang_s, (int, float)) and hang_s > 0:
+            time.sleep(hang_s)
         handler = HANDLERS.get(command)
         if handler is None:
             _send({"id": request_id, "error": f"Unknown command: {command}"})
