@@ -236,7 +236,7 @@ the game. `useOpeningBook` defaults to `true` with `openingBookDepth: 20`
 - **Done when:** the book-path test fails before the change, and a repository-wide search
   shows exactly one `applyMoveResult` call site inside the AI flow.
 
-### P1-T02 — Stop hijacking process-wide stdout
+### P1-T02 — Stop hijacking process-wide stdout ✅ DONE
 
 **Defect.** `backend/service.py:290-298` — `handle_maia3_cache` uses
 `contextlib.redirect_stdout`/`redirect_stderr`. These rebind `sys.stdout` for the **whole

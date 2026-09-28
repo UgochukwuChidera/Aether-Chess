@@ -66,6 +66,75 @@ _board_lock = threading.Lock()
 _stdout_lock = threading.Lock()
 
 
+class ThreadLocalStream:
+    '''A per-thread routing proxy around a real text stream.
+
+    Installed once over sys.stdout / sys.stderr at startup. While the calling
+    thread holds a capture (see _ThreadCapture), write/flush go to that
+    thread's buffer; otherwise they go to the wrapped real stream. Threads
+    never observe each other's captures, so one request's download chatter
+    cannot swallow another request's JSON-RPC reply.
+    '''
+
+    def __init__(self, wrapped: Any) -> None:
+        self._wrapped = wrapped
+        self._local: Any = threading.local()
+
+    def _route(self) -> Any:
+        if getattr(self._local, 'depth', 0) > 0:
+            buf = getattr(self._local, 'buffer', None)
+            if buf is not None:
+                return buf
+        return self._wrapped
+
+    def write(self, data: Any) -> Any:
+        return self._route().write(data)
+
+    def writelines(self, lines: Any) -> None:
+        self._route().writelines(lines)
+
+    def flush(self) -> None:
+        self._route().flush()
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._wrapped, name)
+
+
+class _ThreadCapture:
+    '''Capture this thread's stdout/stderr on the installed proxies.
+
+    A plain with-block (no contextlib needed): __exit__ always runs, so the
+    depth counter resets even when the captured call raises. The captured
+    stderr text stays available for the tqdm pass-through filter.
+    '''
+
+    def __init__(self) -> None:
+        self.stdout_buf = io.StringIO()
+        self.stderr_buf = io.StringIO()
+        self._entered: list[Any] = []
+
+    def __enter__(self) -> _ThreadCapture:
+        for stream, buf in ((sys.stdout, self.stdout_buf),
+                            (sys.stderr, self.stderr_buf)):
+            if isinstance(stream, ThreadLocalStream):
+                local = stream._local
+                local.depth = getattr(local, 'depth', 0) + 1
+                self._entered.append((local, getattr(local, 'buffer', None)))
+                local.buffer = buf
+        return self
+
+    def __exit__(self, *exc_info: Any) -> bool:
+        for local, prev in reversed(self._entered):
+            local.buffer = prev
+            local.depth = getattr(local, 'depth', 1) - 1
+        self._entered = []
+        return False
+
+    @property
+    def stderr_text(self) -> str:
+        return self.stderr_buf.getvalue()
+
+
 def _cleanup() -> None:
     engine_mgr.close()
 
@@ -262,9 +331,6 @@ def handle_check_maia3_cache(params: Dict[str, Any]) -> Any:
 
 
 def handle_maia3_cache(params: Dict[str, Any]) -> Any:
-    import contextlib
-    import io
-
     model = params.get("model", "maia3-5m")
     cache_dir = params.get("cache_dir")
     force_download = bool(params.get("force_download", False))
@@ -287,14 +353,13 @@ def handle_maia3_cache(params: Dict[str, Any]) -> Any:
     # Suppress stdout (cache.py prints "Maia3 5M: /path" which breaks JSON protocol)
     # and filter stderr noise (symlink warnings, image.png errors),
     # but let tqdm progress bars (lines with %) show through.
-    with contextlib.redirect_stdout(io.StringIO()):
-        with contextlib.redirect_stderr(io.StringIO()) as err_buf:
-            try:
-                maia3_cache(args)
-            except SystemExit:
-                pass
-    for line in err_buf.getvalue().splitlines():
-        if "%" in line:
+    with _ThreadCapture() as cap:
+        try:
+            maia3_cache(args)
+        except SystemExit:
+            pass
+    for line in cap.stderr_text.splitlines():
+        if '%' in line:
             print(line, file=sys.stderr)
 
     return {"ok": True, "model": model}
@@ -537,6 +602,11 @@ def _process_request(request_id: str, command: str, params: Dict[str, Any]) -> N
 
 
 def main() -> None:
+    # Install per-thread routing first, before any request thread can exist,
+    # so a capture on one thread never observes another thread's writes.
+    sys.stdout = ThreadLocalStream(sys.stdout)
+    sys.stderr = ThreadLocalStream(sys.stderr)
+
     # Force UTF-8 on Windows
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
