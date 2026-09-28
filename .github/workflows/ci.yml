@@ -36,6 +36,18 @@ jobs:
       - name: Build renderer + Electron
         run: npm run build
 
+      - name: Type-check renderer
+        run: npm run typecheck:renderer
+
+      - name: Renderer tests
+        run: npm run test:renderer
+
+      - name: Hermetic e2e (fixture backend)
+        # Electron needs an X display; GitHub Linux runners have none, so run
+        # under a virtual display (xvfb is preinstalled on ubuntu-latest).
+        # Hermetic tier: fixture backend, no Python install needed.
+        run: xvfb-run -a npm run test:e2e
+
   # ── Backend: Python unit tests ──────────────────────────────────────────────
   backend:
     name: Python Tests
@@ -57,6 +69,12 @@ jobs:
         # ruff (linter) and pyright (type checker) are dev-only, so they live in
         # requirements-dev.txt rather than the runtime requirements.
         run: pip install -r requirements-dev.txt
+
+      - name: Note — venv/ not required on runner
+        # venv/ is a local-dev convenience only; the runner uses system python
+        # with pip installs from requirements.txt / requirements-dev.txt above.
+        run: |
+          echo "venv/ is not required on the runner: system python + pip from requirements files is used."
 
       - name: Lint Python (ruff)
         run: ruff check .

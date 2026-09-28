@@ -186,7 +186,7 @@ cpp_engine/build_msvc.bat`, `?? .spec/`, `?? e2e/` (P0-T12 owns e2e/
   add them in the same commit as the spec that needs them.
 - **Done when:** `npm run test:e2e` passes from a clean checkout with no Python installed.
 
-### P0-T13 — Add CI steps
+### P0-T13 — Add CI steps ✅ DONE
 
 - **Files:** `.github/workflows/ci.yml`
 - **Change:** in the `frontend` job, after `npm run build`, add
