@@ -48,3 +48,9 @@ dist-test/
 # The engines folder ships (empty) with packaged builds so the path the
 # resolver reads actually exists. Keep the folder, not its binaries.
 !engines/.gitkeep
+
+# Playwright e2e artifacts
+test-results/
+playwright-report/
+blob-report/
+.playwright/

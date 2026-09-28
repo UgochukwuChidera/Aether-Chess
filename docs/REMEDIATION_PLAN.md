@@ -151,11 +151,23 @@ complete and the gate includes the new suites.
   not exist yet, so that half of the done-when cannot be proven in this item
   (P0-T09 precedent).
 
-### P0-T11 — Add Playwright artifacts to `.gitignore`
+### P0-T11 — Add Playwright artifacts to `.gitignore` ✅ DONE
 
 - **Files:** `.gitignore`
 - **Change:** append `test-results/`, `playwright-report/`, `blob-report/`, `.playwright/`.
 - **Done when:** `git status` is clean after a full e2e run.
+- **Verification (2026-09-28):** none of the four patterns existed in
+  `.gitignore` (grep exit 1); all four appended under a `# Playwright e2e
+artifacts` comment. Pre-change `git status --short` showed
+  `?? test-results/` + `?? playwright-report/` (from earlier probe runs;
+  `blob-report/` and `.playwright/` absent — preventive patterns).
+  Post-change those entries vanish; `git check-ignore -v` maps all four to
+  the new lines. Full `npx playwright test` (empty spec set, exit 1, no
+  browser download) regenerated `test-results/.last-run.json` and
+  `playwright-report/index.html` and both stay ignored — the scoped
+  done-when. Residuals (expected, out of scope): `M
+cpp_engine/build_msvc.bat`, `?? .spec/`, `?? e2e/` (P0-T12 owns e2e/
+  content).
 
 ### P0-T12 — Write `e2e/smoke.spec.ts`
 
