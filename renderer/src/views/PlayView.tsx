@@ -118,9 +118,18 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
   // ── Backend connectivity tracking ────────────────────────────────────────
   const [backendConnected, setBackendConnected] = useState(true);
 
+  // P2-T03: each subscribe call returns its own unsubscribe closure —
+  // without invoking it here, every Play<->Settings switch (which remounts
+  // this view) would leak two ipcRenderer listeners per backend channel.
   useEffect(() => {
-    window.electronAPI.onBackendClosed(() => setBackendConnected(false));
-    window.electronAPI.onBackendError(() => setBackendConnected(false));
+    const handleBackendClosed = () => setBackendConnected(false);
+    const handleBackendError = () => setBackendConnected(false);
+    const unsubscribeClosed = window.electronAPI.onBackendClosed(handleBackendClosed);
+    const unsubscribeError = window.electronAPI.onBackendError(handleBackendError);
+    return () => {
+      unsubscribeClosed();
+      unsubscribeError();
+    };
   }, []);
 
   useEffect(() => {
@@ -129,8 +138,11 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
     return () => { aiLoopRef.current = false; };
   }, [settings.loaded]);
 
+  // P2-T03: subscribe returns an unsubscribe closure, so cleanup removes
+  // exactly this mount's wrapper (bare removeAllListeners would kill a
+  // co-mounted view's subscription on the shared channel).
   useEffect(() => {
-    window.electronAPI.onAnalysisUpdate((raw: unknown) => {
+    const handleAnalysisUpdate = (raw: unknown) => {
       const data = raw as { callback_id: string; pvs?: unknown[]; fen?: string; error?: string };
       if (data.callback_id !== PLAY_ANALYSIS_CB_ID) return;
       // P2-T02: read the live fen via getState() — the render-scope `store`
@@ -149,10 +161,11 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
         fen: data.fen ?? gs.fen,
         running: true,
       });
-    });
+    };
+    const unsubscribeAnalysis = window.electronAPI.onAnalysisUpdate(handleAnalysisUpdate);
     return () => {
       window.electronAPI.stopAnalysis().catch(() => {});
-      window.electronAPI.removeAnalysisListeners();
+      unsubscribeAnalysis();
     };
   }, []);
 

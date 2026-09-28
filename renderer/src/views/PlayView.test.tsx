@@ -82,11 +82,10 @@ function createFakeBackend(): FakeBackend {
     stopAnalysis: async () => undefined,
     onAnalysisUpdate: (cb: (raw: unknown) => void) => {
       analysisCb = cb;
-      return undefined;
+      return () => undefined;
     },
-    removeAnalysisListeners: () => undefined,
-    onBackendClosed: () => undefined,
-    onBackendError: () => undefined,
+    onBackendClosed: () => () => undefined,
+    onBackendError: () => () => undefined,
     exportPgn: async () => ({ pgn: "" }),
     saveGameHistory: async () => ({ ok: true }),
     computeAndCacheElo: async () => ({ ok: true }),

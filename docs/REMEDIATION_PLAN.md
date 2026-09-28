@@ -390,7 +390,7 @@ current FEN, so requests succeed — the results are thrown away.
   updates to it.
 - **Done when:** `npm run lint` reports no `exhaustive-deps` suppression in this file.
 
-### P2-T03 — IPC listener leak on every tab switch
+### P2-T03 — IPC listener leak on every tab switch ✅ DONE
 
 **Defect.** `electron/preload.ts:84-89` registers `onBackendError` / `onBackendClosed`
 with `ipcRenderer.on` and **no removal counterpart**, unlike `onAnalysisUpdate` which is

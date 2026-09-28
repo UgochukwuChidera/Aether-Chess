@@ -128,12 +128,11 @@ declare global {
         maia3_device?: 'cpu' | 'cuda';
       }) => Promise<unknown>;
       stopAnalysis: () => Promise<unknown>;
-      onAnalysisUpdate: (callback: (data: unknown) => void) => void;
-      removeAnalysisListeners: () => void;
+      onAnalysisUpdate: (callback: (data: unknown) => void) => () => void;
 
       // Backend events
-      onBackendError: (callback: (msg: string) => void) => void;
-      onBackendClosed: (callback: () => void) => void;
+      onBackendError: (callback: (msg: string) => void) => () => void;
+      onBackendClosed: (callback: () => void) => () => void;
 
       // Settings
       loadSettings: () => Promise<unknown>;

@@ -19,7 +19,6 @@ const BOTTOM_NAV_H = 64;
 export default function App() {
   const [tab, setTab] = useState<Tab>('play');
   const settings = useSettingsStore();
-  const store = useGameStore();
 
   // Load persisted settings on startup
   useEffect(() => {
@@ -31,16 +30,23 @@ export default function App() {
     document.documentElement.setAttribute('data-theme', settings.theme);
   }, [settings.theme]);
 
-  // Wire backend lifecycle toasts (guard for non-Electron environments)
+  // Wire backend lifecycle toasts (guard for non-Electron environments).
+  // P2-T03: named callbacks (read via getState so no store dep is captured);
+  // each subscribe call returns its own unsubscribe closure, invoked here.
   useEffect(() => {
     if (!window.electronAPI) return;
-    window.electronAPI.onBackendError((msg) => {
-      store.pushToast(`Backend error: ${msg}`, 'error');
-    });
-    window.electronAPI.onBackendClosed(() => {
-      store.pushToast('Backend process closed unexpectedly', 'error');
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- owned by P2-T03: mount-once listener wiring; adding 'store' would resubscribe on every state change. P2-T03 adds the missing cleanup here.
+    const handleBackendError = (msg: string) => {
+      useGameStore.getState().pushToast(`Backend error: ${msg}`, 'error');
+    };
+    const handleBackendClosed = () => {
+      useGameStore.getState().pushToast('Backend process closed unexpectedly', 'error');
+    };
+    const unsubscribeError = window.electronAPI.onBackendError(handleBackendError);
+    const unsubscribeClosed = window.electronAPI.onBackendClosed(handleBackendClosed);
+    return () => {
+      unsubscribeError();
+      unsubscribeClosed();
+    };
   }, []);
 
   const renderView = () => {

@@ -73,19 +73,37 @@ contextBridge.exposeInMainWorld("electronAPI", {
     hash_mb?: number;
   }) => ipcRenderer.invoke("start_analysis", params),
   stopAnalysis: () => ipcRenderer.invoke("stop_analysis"),
+  // P2-T03: every subscribe function returns its own unsubscribe closure.
+  // The closure captures the in-preload wrapper, so cleanup removes exactly
+  // this subscription. A preload-side map keyed by the caller's callback
+  // cannot work here: contextBridge mints a fresh proxy per crossing, so the
+  // reference handed back at cleanup never matches the one stored at
+  // subscribe time (probed: every lookup missed while entries accumulated).
+  // Returning the remover is also what keeps co-mounted views safe — no
+  // removeAllListeners anywhere, so one unmount can never kill a sibling's
+  // subscription on the shared "analysis-update" channel.
   onAnalysisUpdate: (callback: (data: unknown) => void) => {
-    ipcRenderer.on("analysis-update", (_event, data) => callback(data));
-  },
-  removeAnalysisListeners: () => {
-    ipcRenderer.removeAllListeners("analysis-update");
+    const wrapped = (_event: unknown, data: unknown) => callback(data);
+    ipcRenderer.on("analysis-update", wrapped);
+    return () => {
+      ipcRenderer.removeListener("analysis-update", wrapped);
+    };
   },
 
   // ── Backend lifecycle events ─────────────────────────────────────────────
   onBackendError: (callback: (msg: string) => void) => {
-    ipcRenderer.on("backend-error", (_event, msg) => callback(msg));
+    const wrapped = (_event: unknown, msg: unknown) => callback(msg as string);
+    ipcRenderer.on("backend-error", wrapped);
+    return () => {
+      ipcRenderer.removeListener("backend-error", wrapped);
+    };
   },
   onBackendClosed: (callback: () => void) => {
-    ipcRenderer.on("backend-closed", () => callback());
+    const wrapped = () => callback();
+    ipcRenderer.on("backend-closed", wrapped);
+    return () => {
+      ipcRenderer.removeListener("backend-closed", wrapped);
+    };
   },
 
   // ── Settings persistence ─────────────────────────────────────────────────

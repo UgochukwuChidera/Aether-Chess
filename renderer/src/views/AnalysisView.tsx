@@ -33,8 +33,11 @@ export const AnalysisView: React.FC = () => {
     return () => observer.disconnect();
   }, []);
 
+  // P2-T03: subscribe returns an unsubscribe closure, so cleanup removes
+  // exactly this mount's wrapper (this view already cleaned up; only the
+  // removal shape changes with the unsubscribe-handle preload API).
   useEffect(() => {
-    window.electronAPI.onAnalysisUpdate((raw: unknown) => {
+    const handleAnalysisUpdate = (raw: unknown) => {
       const data = raw as { type: string; callback_id: string; pvs?: unknown[]; fen?: string; error?: string };
       if (data.callback_id !== ANALYSIS_CB_ID) return;
       if (data.error) {
@@ -43,10 +46,11 @@ export const AnalysisView: React.FC = () => {
         return;
       }
       store.setAnalysis({ pvs: (data.pvs as PVLine[]) ?? [], fen: data.fen ?? store.fen, running: true });
-    });
+    };
+    const unsubscribeAnalysis = window.electronAPI.onAnalysisUpdate(handleAnalysisUpdate);
     return () => {
       window.electronAPI.stopAnalysis().catch(() => {});
-      window.electronAPI.removeAnalysisListeners();
+      unsubscribeAnalysis();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-once analysis subscription; callbacks use stable store actions, and the store.fen fallback applies only when the backend omits fen
   }, []);
