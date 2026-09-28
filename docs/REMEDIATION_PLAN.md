@@ -294,7 +294,7 @@ backend/` returns only `aether_chess/engines/maia3_proxy.py:187` (see P2-T10).
 - **Done when:** both tests fail before the change; `to_pgn` is never called on the
   mutable shared board.
 
-### P1-T04 — Establish a real concurrency boundary
+### P1-T04 — Establish a real concurrency boundary ✅ DONE
 
 **Defect.** `backend/service.py`:
 

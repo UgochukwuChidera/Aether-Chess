@@ -13,9 +13,10 @@ Analysis streaming uses a push-style message (no id):
 
 Threading model
 ───────────────
-Every incoming request is dispatched to a daemon thread immediately, so the
-stdin reader loop is *never* blocked — the UI stays responsive even when
-Stockfish is thinking or a full-game accuracy analysis is running.
+Every incoming request is submitted to a module-level ThreadPoolExecutor
+(max_workers=8, _REQUEST_POOL) immediately, so the stdin reader loop is
+*never* blocked — the UI stays responsive even when Stockfish is thinking
+or a full-game accuracy analysis is running.
 
   • Board-mutation commands (make_move, undo_move, new_game, …) serialise
     under _board_lock.  They are fast (< 1 ms), so holding that lock is fine.
@@ -23,11 +24,19 @@ Stockfish is thinking or a full-game accuracy analysis is running.
   • Board read-only commands (get_legal_moves, export_pgn, …) also hold
     _board_lock briefly for safety.
 
-  • Engine commands (get_engine_move, get_bot_move) use a FEN supplied in
-    params — they never touch the shared board object and therefore require
-    NO board lock.  They may block for several hundred ms; that is now fine.
-    The shared engine singleton is protected by _uci_lock to prevent concurrent
-    UCI protocol corruption when overlapping requests hit the same engine.
+  • Engine commands (get_engine_move, get_bot_move, start_analysis) hold
+    _uci_lock for the whole search.  python-chess engine handles are not
+    safe for concurrent use: overlapping searches interleave the UCI
+    protocol and corrupt replies, so searches serialise — that wait is
+    the point.
+
+  • Engine handlers that fall back to the shared board FEN
+    (get_engine_move, get_bot_move, get_eval, start_analysis) snapshot it
+    under _board_lock first and release BEFORE taking _uci_lock, so board
+    traffic never blocks on a search.
+
+  • Lock order: _board_lock is outer, _uci_lock is inner — never the
+    reverse.  No path holds both at once.
 
   • calculate_accuracy_from_history briefly acquires _board_lock to snapshot
     history, then releases it BEFORE the long Stockfish computation.
@@ -44,6 +53,7 @@ import json
 import sys
 import threading
 import traceback
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict
 
 import chess
@@ -62,8 +72,23 @@ accuracy_analyser = AccuracyAnalyser()
 # Protects all reads/writes to engine_mgr.board / game_state
 _board_lock = threading.Lock()
 
+# Serialises the shared UCI engine handle(s) behind BotManager and the
+# analysis engine. python-chess handles are not safe for concurrent use:
+# overlapping searches interleave the protocol and corrupt replies, so every
+# engine call holds this for the whole search.
+_uci_lock = threading.Lock()
+
 # Serialises stdout writes so JSON lines never interleave across threads
 _stdout_lock = threading.Lock()
+
+# Lock order (deadlock safety): _board_lock is outer, _uci_lock is inner,
+# never the reverse. In practice no path holds both at once: handlers
+# snapshot the FEN under _board_lock, release it, then take _uci_lock for
+# the search, so board traffic never blocks on a search.
+
+# Bounded pool for request handling (replaces one unbounded daemon thread
+# per request). The stdin loop only submits and never blocks on a search.
+_REQUEST_POOL = ThreadPoolExecutor(max_workers=8)
 
 
 class ThreadLocalStream:
@@ -136,6 +161,7 @@ class _ThreadCapture:
 
 
 def _cleanup() -> None:
+    _REQUEST_POOL.shutdown(wait=True)
     engine_mgr.close()
 
 
@@ -238,8 +264,12 @@ def handle_navigate_to_move(params: Dict[str, Any]) -> Any:
 
 
 def handle_get_engine_move(params: Dict[str, Any]) -> Any:
-    # FEN comes from params — no board lock needed.
-    fen = params.get("fen") or engine_mgr.fen()
+    # Snapshot the shared-board FEN under _board_lock, then release before
+    # the search so board traffic never blocks on the engine.
+    fen = params.get('fen')
+    if not fen:
+        with _board_lock:
+            fen = engine_mgr.fen()
     time_limit = float(params.get("time_limit", 0.5))
     depth = params.get("depth")
     stockfish_path = params.get("stockfish_path")
@@ -255,24 +285,25 @@ def handle_get_engine_move(params: Dict[str, Any]) -> Any:
     time_increment = params.get("time_increment")
     total_moves = params.get("total_moves")
     strength = params.get("strength")
-    return engine_mgr.get_engine_move(
-        fen,
-        time_limit=time_limit,
-        depth=depth,
-        stockfish_path=stockfish_path,
-        threads=threads,
-        hash_mb=hash_mb,
-        engine_type=engine_type,
-        maia3_path=maia3_path,
-        maia3_model=maia3_model,
-        maia3_device=maia3_device,
-        maia3_elo=maia3_elo,
-        think_profile=think_profile,
-        time_remaining=time_remaining,
-        time_increment=time_increment,
-        total_moves=total_moves,
-        strength=strength,
-    )
+    with _uci_lock:
+        return engine_mgr.get_engine_move(
+            fen,
+            time_limit=time_limit,
+            depth=depth,
+            stockfish_path=stockfish_path,
+            threads=threads,
+            hash_mb=hash_mb,
+            engine_type=engine_type,
+            maia3_path=maia3_path,
+            maia3_model=maia3_model,
+            maia3_device=maia3_device,
+            maia3_elo=maia3_elo,
+            think_profile=think_profile,
+            time_remaining=time_remaining,
+            time_increment=time_increment,
+            total_moves=total_moves,
+            strength=strength,
+        )
 
 
 def handle_get_bot_move(params: Dict[str, Any]) -> Any:
@@ -282,20 +313,24 @@ def handle_get_bot_move(params: Dict[str, Any]) -> Any:
     reaching into MentorEngine directly, so there is one move path with one
     result shape rather than two that could drift.
     """
-    fen = params.get("fen") or engine_mgr.fen()
+    fen = params.get('fen')
+    if not fen:
+        with _board_lock:
+            fen = engine_mgr.fen()
     strength = int(params.get("strength", engine_mgr.settings.get("strength", 7)))
-    return engine_mgr.get_engine_move(
-        fen,
-        engine_type=params.get("engine_type", "mentor"),
-        stockfish_path=params.get("stockfish_path"),
-        threads=params.get("threads"),
-        hash_mb=params.get("hash_mb"),
-        strength=strength,
-        think_profile=params.get("think_profile"),
-        time_remaining=params.get("time_remaining"),
-        time_increment=params.get("time_increment"),
-        total_moves=params.get("total_moves"),
-    )
+    with _uci_lock:
+        return engine_mgr.get_engine_move(
+            fen,
+            engine_type=params.get("engine_type", "mentor"),
+            stockfish_path=params.get("stockfish_path"),
+            threads=params.get("threads"),
+            hash_mb=params.get("hash_mb"),
+            strength=strength,
+            think_profile=params.get("think_profile"),
+            time_remaining=params.get("time_remaining"),
+            time_increment=params.get("time_increment"),
+            total_moves=params.get("total_moves"),
+        )
 
 
 def handle_list_bots(_params: Dict[str, Any]) -> Any:
@@ -479,7 +514,10 @@ def handle_get_book_moves(params: Dict[str, Any]) -> Any:
 
 def handle_get_eval(params: Dict[str, Any]) -> Any:
     """Get evaluation from MentorEngine's evaluation function (custom eval)."""
-    fen = params.get("fen") or engine_mgr.fen()
+    fen = params.get('fen')
+    if not fen:
+        with _board_lock:
+            fen = engine_mgr.fen()
     use_mentor_eval = params.get("use_mentor_eval", True)
     if not use_mentor_eval:
         return {"eval_cp": None, "note": "Mentor eval disabled"}
@@ -487,7 +525,10 @@ def handle_get_eval(params: Dict[str, Any]) -> Any:
 
 
 def handle_start_analysis(params: Dict[str, Any]) -> Any:
-    fen = params.get("fen") or engine_mgr.fen()
+    fen = params.get('fen')
+    if not fen:
+        with _board_lock:
+            fen = engine_mgr.fen()
     multipv = int(params.get("multipv", 3))
     callback_id = str(params["callback_id"])
     stockfish_path = params.get(
@@ -495,15 +536,16 @@ def handle_start_analysis(params: Dict[str, Any]) -> Any:
     )
     threads = params.get("threads")
     hash_mb = params.get("hash_mb")
-    engine_mgr.start_analysis(
-        fen=fen,
-        multipv=multipv,
-        callback_id=callback_id,
-        stockfish_path=stockfish_path,
-        threads=threads,
-        hash_mb=hash_mb,
-        push_fn=_send,
-    )
+    with _uci_lock:
+        engine_mgr.start_analysis(
+            fen=fen,
+            multipv=multipv,
+            callback_id=callback_id,
+            stockfish_path=stockfish_path,
+            threads=threads,
+            hash_mb=hash_mb,
+            push_fn=_send,
+        )
     return {"started": True}
 
 
@@ -559,9 +601,11 @@ _BOARD_READ_CMDS = frozenset(
     }
 )
 
-# Commands that operate on a FEN from params + need no board lock:
-#   get_engine_move, get_bot_move, calculate_accuracy,
-#   estimate_elo, start_analysis, stop_analysis, maia3_cache
+# Engine / accuracy / analysis commands run without the dispatcher board
+# lock (handlers snapshot the shared-board FEN under _board_lock only when
+# params carry no FEN, and take _uci_lock for the search itself):
+#   get_engine_move, get_bot_move, get_eval, start_analysis,
+#   calculate_accuracy, estimate_elo, stop_analysis, maia3_cache.
 # calculate_accuracy_from_history acquires the lock internally (snapshot only).
 
 
@@ -572,8 +616,9 @@ def _process_request(request_id: str, command: str, params: Dict[str, Any]) -> N
     """Execute one JSON-RPC request and send the response.
 
     Board-mutating and board-reading commands run under *_board_lock*.
-    Engine / analysis commands run without any lock so they never block
-    the rest of the system while Stockfish is thinking.
+    Engine commands take *_uci_lock* for the search (serialised whole
+    searches) and snapshot any fallback FEN under *_board_lock* first;
+    they never hold the board lock while Stockfish is thinking.
     """
     handler = HANDLERS.get(command)
     if handler is None:
@@ -632,14 +677,9 @@ def main() -> None:
         command: str = msg.get("command", "")
         params: Dict[str, Any] = msg.get("params", {})
 
-        # Dispatch every request to a daemon thread so stdin reading is
+        # Submit every request to the bounded pool so stdin reading is
         # *never* blocked — the UI stays fully responsive at all times.
-        t = threading.Thread(
-            target=_process_request,
-            args=(request_id, command, params),
-            daemon=True,
-        )
-        t.start()
+        _REQUEST_POOL.submit(_process_request, request_id, command, params)
 
 
 if __name__ == "__main__":
