@@ -375,7 +375,7 @@ and `:164`. **Nothing reads it** — the gate the code needed was built and neve
   `playEngine: 'maia3'`, assert `newGame` was called with `maia3`.
 - **Done when:** the test fails on current code.
 
-### P2-T02 — Eval bar frozen after the first move
+### P2-T02 — Eval bar frozen after the first move ✅ DONE
 
 **Defect.** `PlayView.tsx:131-153` registers the analysis listener with `[]` deps and
 filters inside the callback against `store.fen` (`:140`). `store` is the render-scope

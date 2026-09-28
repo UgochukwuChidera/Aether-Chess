@@ -11,7 +11,7 @@
  * Real timers: the loop sleeps 400 ms between plies, so two plies take <1 s.
  */
 import { describe, expect, it } from "vitest";
-import { render, waitFor } from "@testing-library/react";
+import { act, render, waitFor } from "@testing-library/react";
 import { PlayView } from "./PlayView";
 import { useGameStore, type BackendMoveResult } from "../stores/gameStore";
 import { useSettingsStore } from "../stores/settingsStore";
@@ -45,6 +45,7 @@ function moveResult(
 interface FakeBackend {
   api: Record<string, (...args: never[]) => unknown>;
   makeMoveMoves: string[];
+  getAnalysisCb: () => ((raw: unknown) => void) | null;
 }
 
 /**
@@ -58,6 +59,7 @@ interface FakeBackend {
 function createFakeBackend(): FakeBackend {
   const played: string[] = [];
   const makeMoveMoves: string[] = [];
+  let analysisCb: ((raw: unknown) => void) | null = null;
   const api: Record<string, (...args: never[]) => unknown> = {
     newGame: async () => moveResult(INITIAL_FEN, [], false),
     getBookMoves: async () => ({
@@ -78,7 +80,10 @@ function createFakeBackend(): FakeBackend {
     },
     startAnalysis: async () => undefined,
     stopAnalysis: async () => undefined,
-    onAnalysisUpdate: () => undefined,
+    onAnalysisUpdate: (cb: (raw: unknown) => void) => {
+      analysisCb = cb;
+      return undefined;
+    },
     removeAnalysisListeners: () => undefined,
     onBackendClosed: () => undefined,
     onBackendError: () => undefined,
@@ -88,7 +93,11 @@ function createFakeBackend(): FakeBackend {
     loadSettings: async () => null,
     saveSettings: async () => true,
   };
-  return { api, makeMoveMoves };
+  return {
+    api,
+    makeMoveMoves,
+    getAnalysisCb: () => analysisCb,
+  };
 }
 
 function resetStoresForAiVsAi(): void {
@@ -251,6 +260,112 @@ describe("P2-T01 settings load race", () => {
       // Loaded settings win: exactly one game, started as maia3.
       expect(newGameCalls.length).toBe(1);
       expect(newGameCalls[0]?.["engine_type"]).toBe("maia3");
+    } finally {
+      unmount();
+    }
+  }, 15000);
+});
+
+/**
+ * P2-T02: eval bar frozen after the first move.
+ *
+ * Fail-first contract: the analysis listener closes over the render-scope
+ * `store`, so `store.fen` is permanently the INITIAL fen. Dispatching an
+ * analysis_update for a LATER fen is discarded by the stale filter and
+ * `store.analysis.fen` never advances. The test below asserts the FIXED
+ * behaviour (the callback compares against the live fen and accepts the
+ * push) and therefore FAILS on the pre-fix code. A second phase asserts
+ * the guard still works: a push for a superseded fen is ignored.
+ */
+describe("P2-T02 eval-bar analysis listener", () => {
+  it("accepts an analysis_update for the current (later) fen; ignores stale pushes", async () => {
+    const backend = createFakeBackend();
+    let newGameDone = false;
+    const origNewGame = backend.api.newGame;
+    backend.api.newGame = async () => {
+      const r = await (origNewGame as () => Promise<unknown>)();
+      newGameDone = true;
+      return r;
+    };
+    window.electronAPI = backend.api as unknown as Window["electronAPI"];
+
+    useGameStore.getState().resetGame();
+    useGameStore.setState({
+      mode: "human_vs_human",
+      humanColor: "white",
+      flipped: false,
+      engineBusy: false,
+      toasts: [],
+    });
+    // showEvalBar:true models the real frozen-eval-bar scenario; it also
+    // avoids the hidden-bar reset path (setAnalysis running:false,pvs:[])
+    // racing the pvs/running assertions below.
+    useSettingsStore.setState({
+      loaded: true,
+      useOpeningBook: false,
+      showEvalBar: true,
+      soundEnabled: false,
+      autoSaveGameHistory: false,
+      playEngine: "stockfish",
+      botStrength: 5,
+      thinkProfile: "rapid",
+      timeControl: { seconds: 0, increment: 0, label: "Unlimited" },
+    });
+
+    const { unmount } = render(<PlayView onTabChange={() => undefined} />);
+    try {
+      // Mount effect starts the game async; wait until it settles so the
+      // later-fen advance below cannot be clobbered by its resetGame.
+      await waitFor(
+        () => {
+          expect(newGameDone).toBe(true);
+        },
+        { timeout: 4000, interval: 50 },
+      );
+      const cb = backend.getAnalysisCb();
+      if (!cb) throw new Error("analysis listener was not registered");
+
+      const LATER_FEN =
+        "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1";
+      // Advance the store past the initial position, as a real move would.
+      useGameStore
+        .getState()
+        .applyMoveResult(moveResult(LATER_FEN, ["e2e4"], false));
+      expect(useGameStore.getState().fen).toBe(LATER_FEN);
+
+      // The backend answers for the CURRENT position — accept it.
+      const pv = {
+        depth: 12,
+        score_cp: 34,
+        mate: null,
+        pv: ["e7e5"],
+        pv_san: ["e5"],
+      };
+      act(() => {
+        cb({ callback_id: "analysis-play", fen: LATER_FEN, pvs: [pv] });
+      });
+      await waitFor(
+        () => {
+          expect(useGameStore.getState().analysis.fen).toBe(LATER_FEN);
+        },
+        { timeout: 2000, interval: 25 },
+      );
+      expect(useGameStore.getState().analysis.pvs).toHaveLength(1);
+      // The debounce reset (running:false) flushes after the first dispatch;
+      // re-dispatch for the settled position and assert the full payload.
+      act(() => {
+        cb({ callback_id: "analysis-play", fen: LATER_FEN, pvs: [pv] });
+      });
+      expect(useGameStore.getState().analysis.fen).toBe(LATER_FEN);
+      expect(useGameStore.getState().analysis.pvs).toHaveLength(1);
+      expect(useGameStore.getState().analysis.running).toBe(true);
+
+      // A push for the superseded initial fen must still be ignored.
+      act(() => {
+        cb({ callback_id: "analysis-play", fen: INITIAL_FEN, pvs: [] });
+      });
+      expect(useGameStore.getState().analysis.fen).toBe(LATER_FEN);
+      expect(useGameStore.getState().analysis.pvs).toHaveLength(1);
     } finally {
       unmount();
     }

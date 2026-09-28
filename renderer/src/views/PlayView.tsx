@@ -133,17 +133,20 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
     window.electronAPI.onAnalysisUpdate((raw: unknown) => {
       const data = raw as { callback_id: string; pvs?: unknown[]; fen?: string; error?: string };
       if (data.callback_id !== PLAY_ANALYSIS_CB_ID) return;
+      // P2-T02: read the live fen via getState() — the render-scope `store`
+      // snapshot is permanently the mount-time position.
+      const gs = useGameStore.getState();
       if (data.error) {
-        store.setAnalysis({ running: false });
+        gs.setAnalysis({ running: false });
         return;
       }
       // Only accept analysis for the current position - ignore stale results
-      if (data.fen !== store.fen) {
+      if (data.fen !== gs.fen) {
         return;
       }
-      store.setAnalysis({
+      gs.setAnalysis({
         pvs: (data.pvs as PVLine[]) ?? [],
-        fen: data.fen ?? store.fen,
+        fen: data.fen ?? gs.fen,
         running: true,
       });
     });
@@ -151,30 +154,35 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
       window.electronAPI.stopAnalysis().catch(() => {});
       window.electronAPI.removeAnalysisListeners();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- owned by P2-T02: stale store.fen closure; fixed via getState() with its test there
   }, []);
 
   // Debounced eval-bar analysis — stop immediately, restart after 350 ms of quiet.
+  // P2-T02: the timeout body re-reads via getState() so it fires with live
+  // values; the deps below are retrigger keys (restart the debounce when any
+  // of them changes), not values consumed by the body.
   useEffect(() => {
     if (!settings.showEvalBar) {
-      store.setAnalysis({ running: false, pvs: [] });
+      useGameStore.getState().setAnalysis({ running: false, pvs: [] });
       window.electronAPI.stopAnalysis().catch(() => {});
       return;
     }
 
     void window.electronAPI.stopAnalysis().catch(() => {});
-    store.setAnalysis({ running: false });
+    useGameStore.getState().setAnalysis({ running: false });
 
     if (analysisDebounceRef.current) clearTimeout(analysisDebounceRef.current);
     analysisDebounceRef.current = setTimeout(() => {
       analysisDebounceRef.current = null;
+      // P2-T02: re-read at fire time — the render-scope snapshot can be 350 ms stale.
+      const gs = useGameStore.getState();
+      const cfg = useSettingsStore.getState();
       window.electronAPI.startAnalysis({
-        fen: store.fen,
+        fen: gs.fen,
         multipv: 1,
         callback_id: PLAY_ANALYSIS_CB_ID,
-        stockfish_path: settings.stockfishPath,
-        threads: settings.threads,
-        hash_mb: settings.hashMb,
+        stockfish_path: cfg.stockfishPath,
+        threads: cfg.threads,
+        hash_mb: cfg.hashMb,
       }).catch(() => {});
     }, 350);
 
@@ -184,7 +192,6 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
         analysisDebounceRef.current = null;
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- owned by P2-T02: debounced analysis starter reads store at fire time; audited and rewritten with its test there
   }, [
     store.fen,
     settings.showEvalBar,
@@ -251,29 +258,31 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
           if (gameId) {
             window.electronAPI.computeAndCacheElo({
               id: gameId,
-              stockfish_path: settings.stockfishPath,
+              stockfish_path: useSettingsStore.getState().stockfishPath,
             }).catch(() => {});
           }
         }
       })
       .catch(() => {
-        store.pushToast('Auto-save failed', 'error');
+        useGameStore.getState().pushToast('Auto-save failed', 'error');
         autoSaveRef.current = false;
       });
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional one-shot autosave (autoSaveRef guard); adding settings.stockfishPath would double-save on path change, and 'store' reads are stable actions plus listed values
+  // P2-T02: async continuations above re-read via getState(); the sync reads justify the retrigger deps below.
   }, [store.gameResult, store.fullMoveHistoryUCI.length, store.termination, store.mode, store.humanColor, settings.autoSaveGameHistory, settings.playEngine, settings.timeControl]);
 
   useEffect(() => {
-    const tc = settings.timeControl;
+    const tc = useSettingsStore.getState().timeControl;
     if (tc.seconds === 0 || !whiteTime) return;
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = setInterval(() => {
-      if (store.gameResult) { clearInterval(timerRef.current!); return; }
-      if (store.turn === 'white') setWhiteTime((t) => t !== null ? Math.max(0, t - 1) : null);
+      // P2-T02: re-read via getState(); interval structure untouched (P3-T01 owns it).
+      const gs = useGameStore.getState();
+      if (gs.gameResult) { clearInterval(timerRef.current!); return; }
+      if (gs.turn === 'white') setWhiteTime((t) => t !== null ? Math.max(0, t - 1) : null);
       else setBlackTime((t) => t !== null ? Math.max(0, t - 1) : null);
     }, 1000);
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- owned by P3-T01: this client-side interval is deleted when the backend owns the clock; deps untouched until then
+    // P3-T01 owns this interval (deleted when the backend owns the clock); deps untouched.
   }, [store.turn, store.gameResult]);
 
   // ── AI move helper — reads fresh state so it's safe in async loops ──────────
@@ -599,20 +608,18 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
   const handleNavigate = useCallback(async (index: number) => {
     try {
       const result = await window.electronAPI.navigateToMove({ index }) as BackendMoveResult;
-      store.applyMoveResult(result);
+      useGameStore.getState().applyMoveResult(result);
     } catch {/* ignore */}
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- stable callback using only the stable store.applyMoveResult action
   }, []);
 
   // ── Navigation helpers (used by both buttons and keyboard) ────────────────
   const handleNavFirst = useCallback(() => {
-    if (store.fullMoveHistoryUCI.length === 0) return;
+    if (useGameStore.getState().fullMoveHistoryUCI.length === 0) return;
     handleNavigate(-1);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- handleNavigate is a stable useCallback([]) and only the listed primitive store fields are read; adding whole 'store' would defeat memoization
-  }, [store.fullMoveHistoryUCI.length]);
+  }, [handleNavigate]);
 
   const handleNavPrev = useCallback(() => {
-    const { navIndex, fullMoveHistoryUCI } = store;
+    const { navIndex, fullMoveHistoryUCI } = useGameStore.getState();
     const len = fullMoveHistoryUCI.length;
     if (len === 0) return;
     if (navIndex < 0) {
@@ -624,25 +631,22 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
     } else {
       handleNavigate(navIndex - 1);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- handleNavigate is a stable useCallback([]) and only the listed primitive store fields are read; adding whole 'store' would defeat memoization
-  }, [store.navIndex, store.fullMoveHistoryUCI.length]);
+  }, [handleNavigate]);
 
   const handleNavNext = useCallback(() => {
-    const { navIndex, fullMoveHistoryUCI } = store;
+    const { navIndex, fullMoveHistoryUCI } = useGameStore.getState();
     const len = fullMoveHistoryUCI.length;
     if (navIndex < 0 || len === 0) return; // already at end
     if (navIndex < len - 1) handleNavigate(navIndex + 1);
     // navIndex === len-1 means we're already at the last navigated position
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- handleNavigate is a stable useCallback([]) and only the listed primitive store fields are read; adding whole 'store' would defeat memoization
-  }, [store.navIndex, store.fullMoveHistoryUCI.length]);
+  }, [handleNavigate]);
 
   const handleNavLast = useCallback(() => {
-    const { navIndex, fullMoveHistoryUCI } = store;
+    const { navIndex, fullMoveHistoryUCI } = useGameStore.getState();
     const len = fullMoveHistoryUCI.length;
     if (navIndex < 0 || len === 0) return;
     handleNavigate(len - 1);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- handleNavigate is a stable useCallback([]) and only the listed primitive store fields are read; adding whole 'store' would defeat memoization
-  }, [store.navIndex, store.fullMoveHistoryUCI.length]);
+  }, [handleNavigate]);
 
   // ── Keyboard hotkeys ──────────────────────────────────────────────────────
   // ←/→ navigate, Home/Ctrl+← first, End/Ctrl+→ last, Ctrl+Z undo, Z zen, Esc exit zen, F flip
@@ -677,13 +681,13 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
 
         case 'f':
         case 'F':
-          store.flipBoard();
+          useGameStore.getState().flipBoard();
           break;
       }
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- hotkey listener intentionally keys on nav-handler identity; handleUndo/store.* resolve to stable actions and stable IPC, so the first-render closure is harmless (P2-T07 guards handleUndo itself)
+  // P2-T02: store.flipBoard via getState(); handleUndo left as-is (P2-T07 owns its rewrite).
   }, [handleNavFirst, handleNavPrev, handleNavNext, handleNavLast, zenMode, toggleZenMode]);
 
   const handleResign = () => {
