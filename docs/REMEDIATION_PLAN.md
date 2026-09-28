@@ -208,7 +208,7 @@ cpp_engine/build_msvc.bat`, `?? .spec/`, `?? e2e/` (P0-T12 owns e2e/
 
 Four independent defects. Each is one commit. Each ships with its test in the same commit.
 
-### P1-T01 — Give `makeAiMove` exactly one state owner
+### P1-T01 — Give `makeAiMove` exactly one state owner ✅ DONE
 
 **Defect.** `renderer/src/views/PlayView.tsx` — `makeAiMove` returns from four places.
 Three call `applyMoveResult` (`:386`, `:400`, `:410`); the opening-book branch at

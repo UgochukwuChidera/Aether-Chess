@@ -1,0 +1,193 @@
+/**
+ * PlayView.test.tsx — P1-T01: makeAiMove has exactly one state owner.
+ *
+ * Fail-first contract: with useOpeningBook:true the opening-book branch of
+ * makeAiMove returns WITHOUT calling applyMoveResult, and runAiVsAiLoop never
+ * applies either — so in ai_vs_ai mode the backend advances while the store
+ * does not, and the loop re-sends from the stale FEN. Both tests below assert
+ * the FIXED behaviour (store advances once per AI ply) and therefore FAIL on
+ * the pre-fix code (store FEN/history stay at the initial position).
+ *
+ * Real timers: the loop sleeps 400 ms between plies, so two plies take <1 s.
+ */
+import { describe, expect, it } from "vitest";
+import { render, waitFor } from "@testing-library/react";
+import { PlayView } from "./PlayView";
+import { useGameStore, type BackendMoveResult } from "../stores/gameStore";
+import { useSettingsStore } from "../stores/settingsStore";
+
+const INITIAL_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+const BOOK_PLIES = ["e2e4", "e7e5"];
+
+function moveResult(
+  fen: string,
+  historyUci: string[],
+  gameOver: boolean,
+): BackendMoveResult {
+  return {
+    fen,
+    turn: historyUci.length % 2 === 0 ? "white" : "black",
+    legal_moves: ["e2e4", "e7e5", "g1f3", "b8c6"],
+    move_history: [...historyUci],
+    full_move_history: [...historyUci],
+    last_move_san:
+      historyUci.length > 0 ? historyUci[historyUci.length - 1] : "",
+    last_move_uci:
+      historyUci.length > 0 ? historyUci[historyUci.length - 1] : null,
+    nav_index: -1,
+    game_over: gameOver,
+    result: gameOver ? "1-0" : null,
+    termination: null,
+    in_check: false,
+  };
+}
+
+interface FakeBackend {
+  api: Record<string, (...args: never[]) => unknown>;
+  makeMoveMoves: string[];
+}
+
+/**
+ * Minimal fake backend. makeMove advances its own ply count and hands back a
+ * DISTINCT fen per ply; the loop is stopped by reporting game_over after the
+ * second ply. getBookMoves feeds one deterministic legal move per ply (single
+ * candidate, so the weighted-random pick is deterministic). getEngineMove
+ * returns a move the test never expects — if the engine path were taken
+ * instead of the book path, the makeMoveMoves assertion would catch it.
+ */
+function createFakeBackend(): FakeBackend {
+  const played: string[] = [];
+  const makeMoveMoves: string[] = [];
+  const api: Record<string, (...args: never[]) => unknown> = {
+    newGame: async () => moveResult(INITIAL_FEN, [], false),
+    getBookMoves: async () => ({
+      moves: [{ uci: BOOK_PLIES[played.length] ?? "g1f3", weight: 100 }],
+    }),
+    getLegalMoves: async () => ({
+      moves: [{ uci: "e2e4" }, { uci: "e7e5" }, { uci: "g1f3" }],
+    }),
+    getEngineMove: async () => ({ move: "g1f3" }),
+    makeMove: async (params: { move: string }) => {
+      makeMoveMoves.push(params.move);
+      played.push(params.move);
+      return moveResult(
+        `fen-after-${played.length}`,
+        [...played],
+        played.length >= 2,
+      );
+    },
+    startAnalysis: async () => undefined,
+    stopAnalysis: async () => undefined,
+    onAnalysisUpdate: () => undefined,
+    removeAnalysisListeners: () => undefined,
+    onBackendClosed: () => undefined,
+    onBackendError: () => undefined,
+    exportPgn: async () => ({ pgn: "" }),
+    saveGameHistory: async () => ({ ok: true }),
+    computeAndCacheElo: async () => ({ ok: true }),
+    loadSettings: async () => null,
+    saveSettings: async () => true,
+  };
+  return { api, makeMoveMoves };
+}
+
+function resetStoresForAiVsAi(): void {
+  useGameStore.getState().resetGame();
+  useGameStore.setState({
+    mode: "ai_vs_ai",
+    humanColor: "white",
+    flipped: false,
+    engineBusy: false,
+    toasts: [],
+  });
+  useSettingsStore.setState({
+    useOpeningBook: true,
+    openingBookDepth: 20,
+    showEvalBar: false,
+    soundEnabled: false,
+    autoSaveGameHistory: false,
+    playEngine: "stockfish",
+    botStrength: 5,
+    thinkProfile: "rapid",
+    timeControl: { seconds: 0, increment: 0, label: "Unlimited" },
+  });
+}
+
+/**
+ * Count applyMoveResult calls via a setState wrapper (survives zustand's
+ * state-object replacement, unlike vi.spyOn on a stale snapshot).
+ */
+function countApplies(): { count: () => number; restore: () => void } {
+  const orig = useGameStore.getState().applyMoveResult;
+  let n = 0;
+  useGameStore.setState({
+    applyMoveResult: (r: BackendMoveResult) => {
+      n += 1;
+      orig(r);
+    },
+  });
+  return {
+    count: () => n,
+    restore: () => {
+      useGameStore.setState({ applyMoveResult: orig });
+    },
+  };
+}
+
+function renderAiVsAiGame(): {
+  unmount: () => void;
+  backend: FakeBackend;
+  counter: { count: () => number; restore: () => void };
+} {
+  const backend = createFakeBackend();
+  window.electronAPI = backend.api as unknown as Window["electronAPI"];
+  resetStoresForAiVsAi();
+  const counter = countApplies();
+  const { unmount } = render(<PlayView onTabChange={() => undefined} />);
+  return { unmount, backend, counter };
+}
+
+describe("P1-T01 makeAiMove state ownership", () => {
+  it("book-path move advances the store FEN (applied exactly once)", async () => {
+    const { unmount, backend, counter } = renderAiVsAiGame();
+    try {
+      await waitFor(
+        () => {
+          expect(useGameStore.getState().fullMoveHistoryUCI).toEqual(
+            BOOK_PLIES,
+          );
+        },
+        { timeout: 4000, interval: 50 },
+      );
+      // Store tracks the backend board instead of sitting on the stale FEN.
+      expect(useGameStore.getState().fen).toBe("fen-after-2");
+      expect(backend.makeMoveMoves).toEqual(BOOK_PLIES);
+      // 1 × newGame initial position + 1 per AI ply: no missing-apply, no double-apply.
+      expect(counter.count()).toBe(3);
+    } finally {
+      counter.restore();
+      unmount();
+    }
+  }, 15000);
+
+  it("runAiVsAiLoop plays two distinct plies before stopping", async () => {
+    const { unmount, backend, counter } = renderAiVsAiGame();
+    try {
+      await waitFor(
+        () => {
+          expect(backend.makeMoveMoves).toEqual(BOOK_PLIES);
+        },
+        { timeout: 4000, interval: 50 },
+      );
+      // Both plies landed in the store as distinct entries — the second ply
+      // was computed from the advanced position, not a stale-FEN resend.
+      const history = useGameStore.getState().fullMoveHistoryUCI;
+      expect(history).toEqual(BOOK_PLIES);
+      expect(new Set(history).size).toBe(2);
+      expect(counter.count()).toBe(3);
+    } finally {
+      counter.restore();
+      unmount();
+    }
+  }, 15000);
+});

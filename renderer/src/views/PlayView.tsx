@@ -284,7 +284,14 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
     const timeRemaining = isWhiteTurn ? whiteTime : blackTime;
     const totalMoves = gs.fullMoveHistoryUCI.length;
     const requestedEngine = cfg.playEngine;
-    console.log('[AI] makeAiMove called', { fen: fen?.slice(0, 30), totalMoves, playEngine: requestedEngine, botStrength: cfg.botStrength });
+
+    // Single state owner for every AI move: play through the backend, then
+    // apply the result to the store exactly once. All four paths below use it.
+    const playAndApply = async (uci: string): Promise<BackendMoveResult> => {
+      const r = await window.electronAPI.makeMove({ move: uci }) as BackendMoveResult;
+      useGameStore.getState().applyMoveResult(r);
+      return r;
+    };
 
 // Try opening book first if enabled and we're in the opening (first 20 moves total)
     if (cfg.useOpeningBook && totalMoves < cfg.openingBookDepth) {
@@ -305,17 +312,13 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
             for (const move of legalBookMoves) {
               rand -= move.weight;
               if (rand <= 0) {
-                console.log('[AI] Book move:', move.uci);
-                const result = await window.electronAPI.makeMove({ move: move.uci }) as BackendMoveResult;
-                return result;
+                return playAndApply(move.uci);
               }
             }
           }
         }
       } catch (e) { console.warn('[AI] Book error:', e); }
     }
-
-    console.log('[AI] Getting engine move, FEN:', fen);
 
     // Get engine move with fallback if timeout - simple promise race wrapper
     async function getEngineMoveSafe(): Promise<{ move: string | null }> {
@@ -370,7 +373,6 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
   // Get engine move - always try this as fallback
   let reply: { move: string | null; _fallback_msg?: string };
   try {
-    console.log('[AI] Requesting engine move', { engine: cfg.playEngine, fen });
     reply = await getEngineMoveSafe();
   } catch (e) {
     console.error('[AI] Engine call failed:', e);
@@ -386,10 +388,7 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
     const moves = legal?.moves;
     if (moves && moves.length > 0) {
       const fallbackMove = moves[0].uci;
-      console.log('[AI] Using fallback move:', fallbackMove);
-      const result = await window.electronAPI.makeMove({ move: fallbackMove }) as BackendMoveResult;
-      useGameStore.getState().applyMoveResult(result);
-      return result;
+      return playAndApply(fallbackMove);
     }
     return null;
   }
@@ -401,19 +400,14 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
     console.error('[AI] Illegal engine move:', reply.move, 'legal:', legalUcis);
     const fallbackMove = legalUcis[Math.floor(Math.random() * legalUcis.length)];
     if (!fallbackMove) return null;
-    const result = await window.electronAPI.makeMove({ move: fallbackMove }) as BackendMoveResult;
-    useGameStore.getState().applyMoveResult(result);
-    return result;
+    return playAndApply(fallbackMove);
   }
   
   if (reply._fallback_msg) {
     const toast = useGameStore.getState().pushToast;
     toast(reply._fallback_msg, 'warning');
   }
-  console.log('[AI] Engine returned:', reply.move);
-  const result = await window.electronAPI.makeMove({ move: reply.move }) as BackendMoveResult;
-  useGameStore.getState().applyMoveResult(result);
-  return result;
+  return playAndApply(reply.move);
   }, [whiteTime, blackTime]);
 
   // ── AI vs AI autonomous loop ──────────────────────────────────────────────
@@ -490,11 +484,7 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
         // Human chose black — AI (white) moves first.
         // Show board immediately by firing AI async so UI stays responsive.
         store.setEngineBusy(true);
-        makeAiMove(result.fen).then((aiResult) => {
-          if (aiResult) {
-            store.applyMoveResult(aiResult);
-          }
-        }).finally(() => {
+        makeAiMove(result.fen).finally(() => {
           store.setEngineBusy(false);
         });
       }
@@ -523,11 +513,7 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
 
       // In Human vs AI, trigger the engine reply asynchronously so UI shows human move immediately
       if (!result.game_over && useGameStore.getState().mode === 'human_vs_ai') {
-        makeAiMove(result.fen).then((aiResult) => {
-          if (aiResult) {
-            store.applyMoveResult(aiResult);
-          }
-        }).finally(() => {
+        makeAiMove(result.fen).finally(() => {
           store.setEngineBusy(false);
         });
       } else {
