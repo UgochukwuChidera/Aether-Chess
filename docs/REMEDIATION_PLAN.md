@@ -596,6 +596,29 @@ reported an attribute-aliasing bug). But if `configure()` raises, the local is n
 - **Status:** this file is **deleted** in Phase 3 (P3-T06), so the defect disappears with
   it. No action. If P3-T06 is descoped, add `try: ... except: engine.quit(); raise`.
 
+### P2-T21 — Renderer build output never reaches the packaged path
+
+**Defect.** `package.json:12` runs `vite build renderer`, which sets the Vite root to
+`renderer/` — so the bundle lands in `renderer/dist/`, empirically verified
+(`dist/` contains only `electron/`; `dist/renderer/` does not exist after
+`npm run build`). But the packaged path reads elsewhere: `electron/main.ts:269`
+loads `file://<__dirname>/../renderer/index.html`, and
+`build/electron-builder.yml:9-13` packages `dist/renderer/**/*`. `npm run dist`
+therefore ships a window that loads a missing file. Found during P0-T12, which
+works around it by serving the built bundle on `:5173` — so the `file://`
+production path is additionally untested by e2e.
+
+- **Change:** pick one authority and reconcile: the vite `outDir`
+  (`vite.config.ts:12`), the build-script root argument (`package.json:12`), or
+  the `main.ts:269` load path. Land the built bundle where main and the builder
+  both read it.
+- **Test:** after `npm run build`, assert `dist/renderer/index.html` is fresh.
+  Retire the P0-T12 `:5173` static-server workaround in `e2e/smoke.spec.ts` so
+  the smoke spec exercises the real `file://` branch.
+- **Done when:** the packaged app loads its renderer, and e2e covers the
+  `file://` path. Schedule with the P2-T14/P2-T15 packaging cluster, which
+  already opens the builder config.
+
 ---
 
 # Phase 3 — Structural
