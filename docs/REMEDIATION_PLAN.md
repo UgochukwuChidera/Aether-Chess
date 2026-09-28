@@ -648,6 +648,22 @@ production path is additionally untested by e2e.
   `file://` path. Schedule with the P2-T14/P2-T15 packaging cluster, which
   already opens the builder config.
 
+### P2-T22 — `backendConnected` never restores after backend respawn
+
+Gap left by P2-T05 (found during its verification): `PlayView.tsx:119` holds
+`backendConnected` in local state, set `false` on `backend-closed`/`backend-error`
+(`:125-126`), and nothing ever sets it back. P2-T05 proves IPC-level recovery
+(post-kill `newGame` round-trips), but the export guards (`:729`, `:789`, `:800`)
+keep gating with "Backend not connected" for the rest of the session.
+
+- **Change:** emit a `backend-ready` event from main on (re)spawn and set the
+  flag `true` on it (preload + `electron.d.ts` + PlayView/App wiring). Boot spawn
+  emitting ready is harmless (flag starts `true`).
+- **Test:** extend `e2e/backend-death.spec.ts` — post-recovery, assert the
+  export guards no longer gate (or the flag-observable equivalent the
+  implementation chooses).
+- **Done when:** kill → respawn → export path works without reload.
+
 ---
 
 # Phase 3 — Structural
