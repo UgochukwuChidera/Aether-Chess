@@ -71,7 +71,7 @@ complete and the gate includes the new suites.
   `:86` and neither exists in jsdom.
 - **Done when:** a smoke test that renders a component calling `useSettingsStore` runs green.
 
-### P0-T04 — Add `test:renderer` and wire `test`
+### P0-T04 — Add `test:renderer` and wire `test` ✅ DONE
 
 - **Files:** `package.json` (scripts)
 - **Change:** `"test:renderer": "vitest run"`. Replace the broken
