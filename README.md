@@ -13,6 +13,9 @@ Electron (renderer) ←── contextBridge IPC ──→ Electron (main) ←─
 - **Frontend:** React 18 + TypeScript + Tailwind CSS + Zustand
 - **Backend:** Python service exposing a JSON-RPC protocol over stdin/stdout
 - **Chess logic:** python-chess, custom PVS mentor engine, Stockfish UCI
+- **Bots:** Stockfish, Mentor and Maia3 behind one `Bot` interface and one
+  normalized result shape, so no caller branches on which engine ran. The
+  playable list comes from the backend (`list_bots`), not a hard-coded array.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full diagram and IPC protocol.
 
@@ -76,6 +79,10 @@ Full instructions: [docs/BUILD.md](docs/BUILD.md)
 | Opening book (Polyglot .bin, no database) | ✅ |
 | Custom mentor bot (PVS + TT + QSearch) | ✅ |
 | Stockfish integration (UCI) | ✅ |
+| Per-Engine Stockfish builds (SF18, SF19, ...) selectable individually | ✅ |
+| Maia3 neural bot (plays like a human of a chosen Elo) | ✅ |
+| Unified bot interface + one normalized move result | ✅ |
+| Dynamic engine picker driven by backend discovery | ✅ |
 | Accuracy scoring (centipawn loss) | ✅ |
 | Bayesian Elo estimation | ✅ |
 | electron-builder packaging (Win/Mac/Linux) | ✅ |
@@ -92,15 +99,24 @@ Full instructions: [docs/BUILD.md](docs/BUILD.md)
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Process diagram, IPC protocol, state management |
 | [docs/USER_MANUAL.md](docs/USER_MANUAL.md) | End-user guide, keyboard shortcuts |
 | [docs/BACKEND_API.md](docs/BACKEND_API.md) | All JSON-RPC commands with examples |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | Coding standards, how to add themes/engines |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Coding standards, how to add themes/bots, CI-equivalent checklist |
 
 ---
 
 ## Testing
 
+The full gate matches what CI runs:
+
 ```bash
-# Python backend unit tests
-python -m unittest discover -s tests -v
+# Python
+ruff check .                                  # lint
+pyright                                       # types (must be 0 errors)
+python -m unittest discover -s tests -v       # backend unit tests
+
+# Node
+npm run lint                                  # ESLint
+npm run test:electron                         # Stockfish discovery
+npm run build                                 # renderer + Electron
 ```
 
 ---

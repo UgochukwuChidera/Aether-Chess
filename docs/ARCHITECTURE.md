@@ -41,6 +41,57 @@
 
 ---
 
+## The Bot Layer
+
+Every engine is a **bot** behind one interface. Callers ask for a move by
+`bot_id` and receive one normalized `BotMove`, without knowing whether it came
+from a subprocess, from pure Python, or from a neural proxy.
+
+```
+                 MoveRequest (fen, strength, clock, think profile)
+                                │
+                          ┌─────▼──────┐
+                          │ BotManager │  resolves search budget ONCE
+                          │  registry  │  handles availability + fallback
+                          └─────┬──────┘
+        ┌───────────────┬───────┴───────┬──────────────────┐
+        ▼               ▼               ▼                  ▼
+  StockfishBot     MentorBot       Maia3Bot         (new bots register
+  UCI subprocess   in-process      neural proxy       themselves, no
+  SF + per-build   PVS + TT        sampled, Elo       other file changes)
+  ids              + QSearch
+        └───────────────┴───────┬───────┘
+                                ▼
+                    BotMove  (one shape, always)
+                    normalize_move() coerces units + types
+```
+
+### Why the budget is resolved centrally
+
+The manager computes think time once per move, from the clock and the think
+profile, then hands the same value to whichever bot plays. This is what makes
+two bots comparable: switching from Stockfish to Mentor for the same position
+changes *how* the move is chosen, not *how long* it was allowed to think.
+Leaving budget resolution to each bot is how bots end up silently advantaged
+over one another.
+
+### Discovery drives the UI
+
+`list_bots` reports every registered bot with its capabilities and whether it is
+available. The frontend renders that list, so a discovered Stockfish build or a
+newly added bot appears without a frontend change. The `bot_id` is an open
+string rather than a closed union for the same reason.
+
+### Mentor strength lives in one place
+
+Mentor's 1–10 slider maps to a `SearchConfig` in
+`aether_chess/engines/mentor_profile.py`. The playing bot, the evaluation bar
+and the engine controller all call it, so "Mentor at strength 7" means the same
+search everywhere. The clock stays out of it: budget-constrained think time is
+sampled by `think_profile` and arrives already resolved.
+
+---
+
 ## IPC Protocol
 
 All communication between the Electron main process and the Python backend uses **newline-delimited JSON over stdin/stdout**.

@@ -101,6 +101,34 @@ failed scan is reported as an error rather than being mistaken for "no engine".
 
 ---
 
+## 4b. Install Maia3 (optional)
+
+Maia3 is the only bot that needs a Python package of its own. Its inference
+code lives in the vendored `inspiration/` subproject, which is not installed by
+`requirements.txt` because it pulls in PyTorch.
+
+```bash
+source venv/bin/activate
+pip install -e ./inspiration
+```
+
+Then download a model from **Settings → Engine** in the app, or headless:
+
+```bash
+python -m maia3.cache --model maia3-5m      # 5M  — ~smallest, fastest
+python -m maia3.cache --model maia3-23m     # 23M
+python -m maia3.cache --model maia3-79m     # 79M — strongest
+```
+
+If you skip this, Maia3 still appears in the Play engine list marked
+**(unavailable)** and the rest of the app is unaffected. Mentor and Stockfish
+need nothing here.
+
+> Download progress is printed to the terminal only. There is no in-app progress
+> bar yet — see [TODO](../TODO.md) item 1.
+
+---
+
 ## 5. Add an opening book (optional)
 
 Place any Polyglot `.bin` book file in `resources/books/`. Example:
@@ -215,12 +243,20 @@ aether-chess/
 │   └── index.html
 ├── backend/           # Python stdio JSON-RPC service
 ├── aether_chess/      # Core Python chess library (reused by backend)
-├── resources/books/   # Polyglot opening books (.bin)
+│   ├── bots/          # Bot interface, BotManager, per-bot adapters
+│   ├── engines/       # Mentor, UCI, engine controller
+│   ├── models/        # Settings + game models
+│   └── io/            # Opening book, PGN helpers
+├── inspiration/       # Vendored Maia-3 (optional bot, installed with -e)
+├── engines/           # Drop Stockfish binaries here (gitignored, .gitkeep only)
+├── resources/         # Config defaults, icons
+│   └── books/         # Polyglot opening books (.bin)
 ├── build/             # Build configs (electron-builder, PyInstaller)
 ├── docs/              # Documentation
 ├── typings/           # Type stubs for optional deps not installed locally
 ├── tests/             # Python unit tests + TypeScript engine-discovery tests
 ├── package.json
 ├── requirements.txt
+├── requirements-dev.txt   # ruff + pyright, dev only
 └── README.md
 ```

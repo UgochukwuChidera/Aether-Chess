@@ -13,13 +13,17 @@ Launch Aether Chess. The **Play** tab opens automatically with the board ready.
 3. **Play as** — choose White, Black, or Random (hidden for AI vs AI).
 4. Press **New Game** to apply your selection and start.
 
+> Your opponent is chosen in **Settings → Engine → Play engine**, not here. That
+> setting carries across new games, so you pick an engine once and start as many
+> games as you like.
+
 White pieces are at the bottom by default. Press **Flip** or `F` to swap perspectives.
 
 ### Game Modes
 
 | Mode | Description |
 |------|-------------|
-| Human vs AI | You play against the Aether Mentor bot or Stockfish |
+| Human vs AI | You play against the bot selected in Settings |
 | Human vs Human | Two players take turns on the same device |
 | AI vs AI | Watch the engine play both sides (no human input) |
 
@@ -112,10 +116,39 @@ Access via the **Settings** tab or the gear icon in the top bar.
 - Adjust animation speed.
 
 ### Engine
+
+#### Play engine
+
+The **Play engine** dropdown lists every bot this install can actually run. The
+list is built by the app from what it finds on your machine, so it changes with
+your setup rather than being fixed.
+
+| Entry | What it is |
+|-------|------------|
+| **Mentor** | Built-in engine. Always available, no install, plays instantly. Default. |
+| **Stockfish** | Your configured Stockfish build. |
+| **Stockfish 18**, **Stockfish 19**, … | One entry per build found in `engines/`. Pick one to pin that exact version. |
+| **Maia3** | Neural bot that plays like a human of a chosen Elo. Needs its model downloaded first. |
+
+A bot that cannot run right now still appears, marked **(unavailable)** and
+greyed out — for example Maia3 before its model is downloaded. Mentor is never
+unavailable, so there is always something to play against.
+
+If the list says **Could not load the bot list**, the app could not reach its
+own backend. Restart the app; if it persists, see [docs/SETUP.md](SETUP.md).
+
+#### Engine tuning
+
 - Set the path to your Stockfish executable.
 - Configure thread count and hash memory.
 - Set Multi-PV lines for analysis (1–5).
-- Adjust mentor bot difficulty (1–10).
+- Adjust mentor bot difficulty (1–10) — a global strength scale that applies to
+  whichever bot you pick.
+- Maia3 Elo (e.g. 1500) and device, when Maia3 is selected.
+
+> **Mentor difficulty** changes the depth, node budget, transposition table and
+> move sampling that Mentor searches with. At 10 it always plays its best move;
+> at lower levels it samples weaker moves so it can be beaten.
 
 #### Memory presets
 

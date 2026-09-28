@@ -31,8 +31,10 @@ npm run dev
 
 ### Backend (Python)
 
-- **Formatter:** Black — `black backend/ aether_chess/`
-- **Linter:** Flake8 — `flake8 backend/ aether_chess/ --max-line-length 100`
+- **Linter + formatter:** [Ruff](https://docs.astral.sh/ruff/) — `ruff check .` and `ruff format .`
+  (There is no Black or Flake8 config in this repo; Ruff replaced both.)
+- **Type checker:** [Pyright](https://microsoft.github.io/pyright/) — `pyright` (must report 0 errors)
+- Both are dev-only and live in `requirements-dev.txt`, so packaged builds do not pull them in.
 - Type annotations on all public functions (`from __future__ import annotations`).
 - Each new backend command must be added to the `HANDLERS` dict in `service.py` and documented in `docs/BACKEND_API.md`.
 
@@ -47,13 +49,57 @@ npm run dev
 
 ---
 
-## Adding a New Engine Adapter
+## Adding a New Bot
 
-1. Create `aether_chess/engines/my_engine.py` implementing a `choose_move(board) -> chess.Move` interface.
-2. Add a new value to `EngineType` enum in `aether_chess/models/settings.py`.
-3. Update `EngineController.choose_move()` in `aether_chess/engines/controller.py`.
-4. Update `backend/chess_engine.py` to call your adapter when `engine_type == 'my_engine'`.
+Every engine in this app is a **bot** behind one interface, and a new bot needs
+**no changes outside its own file** — no enum, no dispatcher branch, no
+frontend edit.
+
+1. Create `aether_chess/bots/my_bot.py` with a class implementing the `Bot`
+   protocol from `aether_chess/bots/base.py`:
+   - `capabilities` — a `BotCapabilities` record with your `bot_id`,
+     `display_name`, `description`, and honest flags (`requires_binary`,
+     `supports_eval`, `deterministic`, ...). These flags let callers degrade
+     gracefully instead of crashing.
+   - `is_available()` — whether it can play right now.
+   - `play(request: MoveRequest) -> BotMove` — return a normalized move.
+   - `close()` — release any subprocess or model.
+2. Register it in `BotManager.register_default_bots()` in
+   `aether_chess/bots/manager.py`. Add it to `DEFAULT_PRIORITY` too if it
+   should be eligible for `auto` and for the fallback chain.
+3. Build the result with `normalize_move(...)` from `base.py` rather than
+   hand-rolling a dict, so units and types stay identical across bots.
+4. Add the module to the `hiddenimports` list in `build/backend.spec` if it
+   imports anything dynamically, or the packaged backend will miss it.
 5. Add unit tests in `tests/`.
+
+Once registered, the bot appears automatically in the UI — the Play engine
+dropdown is populated from the `list_bots` command, not a hard-coded list.
+
+### Rules that keep bots comparable
+
+- **Do not resolve your own search budget.** The manager resolves think time
+  once per move from the clock and think profile, and passes it to you in
+  `request.time_limit_sec`. Re-deriving it per bot is exactly how bots end up
+  silently advantaged over one another.
+- **Do not add a new return shape.** Extend `BotMove` if you need a field.
+- **Raise `BotUnavailableError`** when you cannot run. The manager will fall
+  back; returning a fake move hides the problem.
+- **Reuse existing mappings.** If your bot has a 1–10 strength scale, keep the
+  mapping in one shared function (see `aether_chess/engines/mentor_profile.py`)
+  rather than re-deriving it at each call site.
+
+---
+
+## Adding a New Stockfish Build
+
+Stockfish needs no code at all. Drop the binary in `engines/` (or set
+`Stockfish engine` in Settings → Engine) and it is discovered on the next
+`list_bots`, appearing as its own id like `stockfish-19`. Pinning that id
+selects that exact build.
+
+`engines/` is gitignored — do not commit binaries. CI fails if any file other
+than `engines/.gitkeep` is tracked there.
 
 ---
 
@@ -72,10 +118,17 @@ refactor: split Board component into sub-components
 
 ## Pull Request Checklist
 
-- [ ] `npm run lint` passes
+These mirror what CI actually runs, so a green local run means a green pipeline.
+
+- [ ] `ruff check .` passes
+- [ ] `pyright` reports 0 errors
 - [ ] `python -m unittest discover -s tests -v` passes
+- [ ] `npm run lint` passes
+- [ ] `npm run test:electron` passes
+- [ ] `npm run build` succeeds
 - [ ] New features documented in relevant `docs/` file
 - [ ] New backend commands documented in `docs/BACKEND_API.md`
+- [ ] Nothing under `engines/` committed except `.gitkeep`
 - [ ] No secrets or API keys committed
 
 ---
