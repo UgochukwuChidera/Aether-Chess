@@ -63,7 +63,7 @@ complete and the gate includes the new suites.
   match `vite.config.ts:6`.
 - **Done when:** `npx vitest run` executes and reports 0 test files without a config error.
 
-### P0-T03 — Create `vitest.setup.ts`
+### P0-T03 — Create `vitest.setup.ts` ✅ DONE
 
 - **Files:** `vitest.setup.ts` (new)
 - **Change:** `import '@testing-library/jest-dom/vitest'`. Add stubs for `matchMedia` and
