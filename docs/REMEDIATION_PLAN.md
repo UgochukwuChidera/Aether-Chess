@@ -133,13 +133,23 @@ complete and the gate includes the new suites.
 - **Done when:** setting the env var changes which script `PythonShell` receives, verified
   by a unit test in P0-T12 or by the smoke spec observing the fixture's handshake.
 
-### P0-T10 — Add e2e scripts
+### P0-T10 — Add e2e scripts ✅ DONE
 
 - **Files:** `package.json` (scripts)
 - **Change:** `"test:e2e": "playwright test"`, `"test:e2e:real": "playwright test
 --grep @real"`, and `"test:e2e:build": "npm run build && playwright test"`.
 - **Done when:** `npm run test:e2e` runs against the fixture backend and
   `npm run test:e2e:real` is opt-in.
+- **Verification (2026-09-28):** all three script strings verified present
+  exactly as specified — installed by P0-T04's commit, no edit needed in this
+  item. `npm run test:e2e` → `Error: No tests found`, exit 1 (zero specs; no
+  browser download attempted; Playwright 1.59 exits 1 on empty — established in
+  P0-T08). `npm run test:e2e:real` → same empty set, exit 1, `--grep @real`
+  opt-in shape intact. `test:e2e:build` not run to completion (redundant: build
+  gate-verified separately, spec list empty). Runnable-against-fixture proof
+  lands with P0-T12 — the fixture backend + smoke spec are P0-T12 scope and do
+  not exist yet, so that half of the done-when cannot be proven in this item
+  (P0-T09 precedent).
 
 ### P0-T11 — Add Playwright artifacts to `.gitignore`
 
