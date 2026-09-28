@@ -122,7 +122,7 @@ These mirror what CI actually runs, so a green local run means a green pipeline.
 
 - [ ] `ruff check .` passes
 - [ ] `pyright` reports 0 errors
-- [ ] `python -m unittest discover -s tests -v` passes
+- [ ] `venv/bin/python -m unittest discover -s tests -v` passes (via `venv/` — see `docs/SETUP.md` §3; bare `python` fails with `ModuleNotFoundError: No module named 'chess'` because dependencies live in `venv/`, an environment artefact, not a defect)
 - [ ] `npm run lint` passes
 - [ ] `npm run test:electron` passes
 - [ ] `npm run build` succeeds

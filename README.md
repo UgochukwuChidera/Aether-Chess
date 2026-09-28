@@ -111,7 +111,7 @@ The full gate matches what CI runs:
 # Python
 ruff check .                                  # lint
 pyright                                       # types (must be 0 errors)
-python -m unittest discover -s tests -v       # backend unit tests
+venv/bin/python -m unittest discover -s tests -v  # backend unit tests (via venv/; bare `python` misses deps — see docs/SETUP.md §7)
 
 # Node
 npm run lint                                  # ESLint

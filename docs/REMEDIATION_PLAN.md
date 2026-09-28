@@ -195,7 +195,7 @@ cpp_engine/build_msvc.bat`, `?? .spec/`, `?? e2e/` (P0-T12 owns e2e/
   add a step documenting that `venv/` is not required on the runner.
 - **Done when:** CI is green and the new steps appear in the run log.
 
-### P0-T14 — Document the local test invocation
+### P0-T14 — Document the local test invocation ✅ DONE
 
 - **Files:** `CONTRIBUTING.md`, `docs/SETUP.md`
 - **Change:** record `venv/bin/python -m unittest discover -s tests` and state explicitly

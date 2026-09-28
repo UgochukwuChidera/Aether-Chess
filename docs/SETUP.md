@@ -166,10 +166,16 @@ npm test                 # everything below
 npm run test:electron    # Stockfish discovery (Node, no Electron needed)
 npm run test:python      # Python resolver + backend routing
 
-# or individually
-python -m unittest tests.test_engine_registry -v
-python -m unittest tests.test_backend_engine_routing -v
+# or the full Python suite directly (always via venv/ — see §3 above):
+venv/bin/python -m unittest discover -s tests
 ```
+
+Run the Python suite with `venv/bin/python`, not bare `python`: dependencies
+live in `venv/`, so the bare command fails with 8× `ModuleNotFoundError: No
+module named 'chess'` — an environment artefact, not a defect. The hermetic
+e2e tier (`npm run test:e2e`) needs no third-party Python packages, but the
+`python3` interpreter itself is still required — the fixture backend is
+stdlib-only.
 
 Neither suite needs a real Stockfish binary: each writes throwaway UCI stubs
 that speak the real handshake. The one test that does use a real engine skips

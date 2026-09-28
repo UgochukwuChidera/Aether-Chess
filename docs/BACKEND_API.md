@@ -22,6 +22,10 @@ An unknown command produces an error, not a crash:
 > The module uses flat imports (`from analysis import ...`), which resolve
 > because running the script puts `backend/` on `sys.path`.
 
+> Backend tests run from the repo root as `venv/bin/python -m unittest
+> discover -s tests` — see [SETUP](SETUP.md#7-run-the-tests) for why the
+> `venv/` prefix is required.
+
 ---
 
 ## The Bot Model
