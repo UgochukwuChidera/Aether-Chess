@@ -169,7 +169,7 @@ artifacts` comment. Pre-change `git status --short` showed
 cpp_engine/build_msvc.bat`, `?? .spec/`, `?? e2e/` (P0-T12 owns e2e/
   content).
 
-### P0-T12 — Write `e2e/smoke.spec.ts`
+### P0-T12 — Write `e2e/smoke.spec.ts` ✅ DONE
 
 - **Files:** `e2e/smoke.spec.ts` (new), `e2e/fixtures/fake-backend.py` (new)
 - **Change:** the fixture speaks the same newline-delimited JSON-RPC as
