@@ -46,10 +46,11 @@
     "authority": "docs/VERIFICATION_REGISTER.md outranks docs/REMEDIATION_PLAN.md where they disagree (register §5 adjudication)."
   },
   "gate": {
-    "baseline": "python 130 passed · ruff clean · pyright 0 errors · electron 21 passed · lint clean · build succeeds",
+    "baseline": "python 133 passed · ruff clean · pyright 0 errors · electron 21 passed · lint clean · build succeeds",
     "phaseExits": {
       "phase-0": "python 122 passed",
-      "phase-1": "python 130 passed"
+      "phase-1": "python 130 passed",
+      "phase-2-open": "python 133 passed (P2-T01, P1-T05)"
     },
     "addedInPhase0": "test:renderer 1 passed · typecheck:renderer 0 errors · test:e2e 1 passed (hermetic, stdlib fixture)",
     "commands": [
@@ -210,19 +211,28 @@
       "note": "_uci_lock + pool(8); lock order board-outer/uci-inner, snapshot-then-release (no nesting); docstring rewritten to match."
     },
     {
+      "id": "P1-T05",
+      "title": "History navigation return-to-live transition",
+      "phase": "phase-1",
+      "status": "completed",
+      "commit": "5b2c3d0811046403ddf6c9361959a76d02422a7d",
+      "note": "Regression from P1-T03 fixed out of order (user-blocked): Optional sentinel, end-navigate restores live, reason surfaces via service. Renderer Change-3 declined with evidence. Plan docs commit 47fc9e3."
+    },
+    {
       "id": "P2-T01",
       "title": "Settings load race",
       "phase": "phase-2",
-      "status": "todo",
-      "next": true,
-      "note": "Gate on settings.loaded. Removes its P0-T07 suppression."
+      "status": "completed",
+      "commit": "a6dd507cb8f9a0804a30dd1d8860e370145c556c",
+      "note": "Startup game gated on settings.loaded. Removed owned P0-T07 suppression (27->26). P1-T01 tests needed loaded:true precondition (test-only). 1 exhaustive-deps warning remains (handleNewGame dep would be a bug)."
     },
     {
       "id": "P2-T02",
       "title": "Eval bar frozen after first move",
       "phase": "phase-2",
       "status": "todo",
-      "note": "getState().fen in callback. Removes 2 P0-T07 suppressions."
+      "note": "getState().fen in callback. Removes 2 P0-T07 suppressions.",
+      "next": true
     },
     {
       "id": "P2-T03",
