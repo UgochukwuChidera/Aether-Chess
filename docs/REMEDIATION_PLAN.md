@@ -48,7 +48,7 @@ items 1-4 from recurring. Phase 0 therefore precedes all remediation.
 No item in Phases 1-4 is verifiable without this. Do not start Phase 1 until Phase 0 is
 complete and the gate includes the new suites.
 
-### P0-T01 — Add the renderer test stack
+### P0-T01 — Add the renderer test stack ✅ DONE
 
 - **Files:** `package.json` (devDependencies)
 - **Change:** add `vitest`, `jsdom`, `@testing-library/react`, `@testing-library/user-event`,

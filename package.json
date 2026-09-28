@@ -1,7 +1,7 @@
 {
   "name": "aether-chess",
   "version": "1.0.0",
-  "description": "Professional desktop chess application \u2014 Electron + Python hybrid",
+  "description": "Professional desktop chess application — Electron + Python hybrid",
   "main": "dist/electron/main.js",
   "private": true,
   "scripts": {
@@ -32,6 +32,9 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.45.3",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.7",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
@@ -40,11 +43,13 @@
     "electron": "^31.3.1",
     "electron-builder": "^24.13.3",
     "eslint": "^9.8.0",
+    "jsdom": "^30.1.1",
     "postcss": "^8.4.41",
     "tailwindcss": "^3.4.9",
     "typescript": "^5.5.4",
     "typescript-eslint": "^8.59.0",
     "vite": "^5.4.0",
+    "vitest": "^2.1.9",
     "wait-on": "^7.2.0"
   },
   "build": {
