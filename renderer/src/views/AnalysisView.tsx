@@ -48,6 +48,7 @@ export const AnalysisView: React.FC = () => {
       window.electronAPI.stopAnalysis().catch(() => {});
       window.electronAPI.removeAnalysisListeners();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-once analysis subscription; callbacks use stable store actions, and the store.fen fallback applies only when the backend omits fen
   }, []);
 
   // Stop analysis immediately on FEN / settings change; debounce the restart
@@ -71,6 +72,7 @@ export const AnalysisView: React.FC = () => {
         debounceRef.current = null;
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- owned by P2-T18: duplicate restart plus missing settings.playEngine dep; rewritten with its behavior change there
   }, [store.fen, settings.multipv, settings.stockfishPath, settings.threads, settings.hashMb]);
 
   async function handleStartAnalysis() {
@@ -104,6 +106,7 @@ export const AnalysisView: React.FC = () => {
       store.applyMoveResult(result);
       if (runningRef.current) await handleStartAnalysis();
     } catch {/* ignore */}
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- owned by P2-T18: the direct handleStartAnalysis call is the duplicate-start defect; removed with its behavior change there
   }, []);
 
   const handleComputeAccuracy = async () => {
@@ -137,6 +140,7 @@ export const AnalysisView: React.FC = () => {
   const handleNavFirst = useCallback(() => {
     if (store.fullMoveHistoryUCI.length === 0) return;
     handleNavigate(-1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- handleNavigate is a stable useCallback([]) and only the listed primitive store fields are read; adding whole 'store' would defeat memoization
   }, [store.fullMoveHistoryUCI.length]);
 
   const handleNavPrev = useCallback(() => {
@@ -151,6 +155,7 @@ export const AnalysisView: React.FC = () => {
     } else {
       handleNavigate(navIndex - 1);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- handleNavigate is a stable useCallback([]) and only the listed primitive store fields are read; adding whole 'store' would defeat memoization
   }, [store.navIndex, store.fullMoveHistoryUCI.length]);
 
   const handleNavNext = useCallback(() => {
@@ -158,6 +163,7 @@ export const AnalysisView: React.FC = () => {
     const len = fullMoveHistoryUCI.length;
     if (navIndex < 0 || len === 0) return;
     if (navIndex < len - 1) handleNavigate(navIndex + 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- handleNavigate is a stable useCallback([]) and only the listed primitive store fields are read; adding whole 'store' would defeat memoization
   }, [store.navIndex, store.fullMoveHistoryUCI.length]);
 
   const handleNavLast = useCallback(() => {
@@ -165,6 +171,7 @@ export const AnalysisView: React.FC = () => {
     const len = fullMoveHistoryUCI.length;
     if (navIndex < 0 || len === 0) return;
     handleNavigate(len - 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- handleNavigate is a stable useCallback([]) and only the listed primitive store fields are read; adding whole 'store' would defeat memoization
   }, [store.navIndex, store.fullMoveHistoryUCI.length]);
 
   // ── Keyboard hotkeys ──────────────────────────────────────────────────────

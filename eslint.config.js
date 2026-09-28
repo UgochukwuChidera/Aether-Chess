@@ -1,9 +1,11 @@
 // @ts-check
 const tseslint = require('typescript-eslint');
+const reactHooks = /** @type {any} */ (require('eslint-plugin-react-hooks'));
 
 module.exports = tseslint.config(
   { ignores: ['dist/**', 'node_modules/**', 'tailwind.config.js', 'vite.config.ts', 'postcss.config.js'] },
   ...tseslint.configs.recommended,
+  ...reactHooks.configs['recommended-latest'],
   {
     rules: {
       // Allow explicit `any` with a warning — existing code uses it in a few places

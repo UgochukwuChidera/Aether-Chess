@@ -59,6 +59,7 @@ export const AnalysisPanel: React.FC<Props> = ({
   const [eloEstimate, setEloEstimate] = React.useState<EloEstimate | null>(null);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional async derivation: effect fans out to estimateElo IPC and caches the reply; deps are memo inputs so there is no render loop
     if (!hasAccuracy) { setEloEstimate(null); return; }
     const whites = classified.filter((m) => m.color === 'white');
     const blacks = classified.filter((m) => m.color === 'black');

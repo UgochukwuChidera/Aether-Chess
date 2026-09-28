@@ -24,6 +24,7 @@ export default function App() {
   // Load persisted settings on startup
   useEffect(() => {
     settings.loadFromBackend();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional mount-once startup load; adding 'settings' (whole-store snapshot, new identity on every update) would re-fire loadFromBackend on each change
   }, []);
 
   useEffect(() => {
@@ -39,6 +40,7 @@ export default function App() {
     window.electronAPI.onBackendClosed(() => {
       store.pushToast('Backend process closed unexpectedly', 'error');
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- owned by P2-T03: mount-once listener wiring; adding 'store' would resubscribe on every state change. P2-T03 adds the missing cleanup here.
   }, []);
 
   const renderView = () => {

@@ -79,16 +79,20 @@ export const BoardDrawingLayer: React.FC<Props> = ({
 
   // Refs (mutable — always current, for mount-once window listeners)
   const flippedRef = useRef(flipped);
+  // eslint-disable-next-line react-hooks/refs -- intentional latest-ref mirror for mount-once window listeners; keeps the ref current without resubscribing
   flippedRef.current = flipped;
   const drawingRef = useRef(false);
   const drawStartRef = useRef<string | null>(null);
   const drawButtonRef = useRef<'left' | 'right' | null>(null);
   const drawColorIdxRef = useRef(0);
   const userArrowsRef = useRef<Arrow[]>(arrows);
+  // eslint-disable-next-line react-hooks/refs -- intentional latest-ref mirror for mount-once window listeners; keeps the ref current without resubscribing
   userArrowsRef.current = userArrows;
   const onArrowsChangeRef = useRef(onArrowsChange);
+  // eslint-disable-next-line react-hooks/refs -- intentional latest-ref mirror for mount-once window listeners; keeps the ref current without resubscribing
   onArrowsChangeRef.current = onArrowsChange;
   const onMarksChangeRef = useRef(onMarksChange);
+  // eslint-disable-next-line react-hooks/refs -- intentional latest-ref mirror for mount-once window listeners; keeps the ref current without resubscribing
   onMarksChangeRef.current = onMarksChange;
   const ctrlHeldRef = useRef(false);
   const shiftHeldRef = useRef(false);

@@ -97,7 +97,7 @@ complete and the gate includes the new suites.
   `tsconfig.e2e.json` for Playwright specs in P0-T09 instead. Do not repurpose this file.
 - **Done when:** `npm run test:electron` is unchanged and still emits to `dist-test/`.
 
-### P0-T07 — Add `eslint-plugin-react-hooks`
+### P0-T07 — Add `eslint-plugin-react-hooks` ✅ DONE
 
 - **Files:** `package.json` (devDependencies), `eslint.config.js`
 - **Change:** add the plugin and extend

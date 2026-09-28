@@ -102,6 +102,7 @@ export const EvalBar: React.FC = () => {
     if (settings.useMentorEval && !analysis.running && settings.playEngine === 'mentor') {
       fetchMentorEval(fen);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchMentorEval is a stable store action; deps intentionally list only the reactive inputs (fen/settings/running)
   }, [fen, settings.useMentorEval, settings.playEngine, analysis.running]);
 
   // Use custom eval if enabled and available, otherwise fall back to Stockfish

@@ -149,6 +149,7 @@ export const HistoryView: React.FC<Props> = ({ onTabChange }) => {
       })
       .finally(() => mounted && setLoading(false));
     return () => { mounted = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional mount-once load; processMissingElo is redefined every render, so listing it would re-fire the load on each render
   }, []);
 
   const computeOverallEloFromCache = async (games: HistoryGame[]) => {
