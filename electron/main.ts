@@ -21,6 +21,7 @@ import {
   userEnginesDir,
   appEnginesDir,
 } from "./engineRegistry";
+import { isAllowedOpenUrl, isPathWithinRoots } from "./shellPolicy";
 
 type EloCache = {
   white_accuracy: number;
@@ -315,7 +316,11 @@ function createWindow(): BrowserWindow {
   });
 
   win.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    // P2-T06: same shell.openExternal sink as open-external-url, so the
+    // same allowlist applies. Denied either way (popup suppression).
+    if (isAllowedOpenUrl(url)) {
+      shell.openExternal(url);
+    }
     return { action: "deny" };
   });
 
@@ -469,6 +474,18 @@ function ensureDirSync(dirPath: string): void {
 
 function getHistoryDir(): string {
   return path.join(app.getPath("userData"), "games");
+}
+
+// P2-T06: the only folders showItemInFolder may reveal — userData (covers
+// settings.json), the game-history dir (the reveal-in-folder caller shape),
+// and both engines dirs (what reveal-engines-dir opens via openPath).
+function shellFileRoots(): string[] {
+  return [
+    app.getPath("userData"),
+    getHistoryDir(),
+    userEnginesDir(),
+    appEnginesDir(),
+  ];
 }
 
 function getHistoryIndexPath(): string {
@@ -646,6 +663,14 @@ ipcMain.handle("clipboard-copy", (_event, text: string) => {
 });
 
 ipcMain.handle("open-external-url", async (_event, url: string) => {
+  // P2-T06: renderer-supplied value reached shell.openExternal unfiltered
+  // (file:// and smb:// were reachable). Throw so invoke() rejects — the
+  // boolean return shape is unchanged on the allow path.
+  if (!isAllowedOpenUrl(url)) {
+    throw new Error(
+      "open-external-url blocked: only https: and mailto: URLs are allowed",
+    );
+  }
   await shell.openExternal(url);
   return true;
 });
@@ -687,6 +712,14 @@ ipcMain.handle("get-books-dir", async () => {
 
 // PGN export / open in file explorer
 ipcMain.handle("reveal-in-folder", (_event, filePath: string) => {
+  // P2-T06: renderer-supplied path reached showItemInFolder unfiltered.
+  // Throw so invoke() rejects — the boolean return shape is unchanged.
+  if (
+    typeof filePath !== "string" ||
+    !isPathWithinRoots(filePath, shellFileRoots())
+  ) {
+    throw new Error("reveal-in-folder blocked: path is outside known folders");
+  }
   shell.showItemInFolder(filePath);
   return true;
 });

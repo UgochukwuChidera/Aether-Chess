@@ -434,7 +434,7 @@ shell. Also `mainWindow` is a module-level global, so events never reach a secon
 - **Test:** e2e — kill the backend process, assert in-flight and subsequent calls reject
   promptly rather than hanging, and that the app recovers.
 
-### P2-T06 — Unrestricted `shell` calls from the renderer
+### P2-T06 — Unrestricted `shell` calls from the renderer ✅ DONE
 
 **Defect.** `electron/main.ts:561-564` (`open-external-url` → `shell.openExternal`) and
 `:601-604` (`reveal-in-folder` → `shell.showItemInFolder`) pass renderer-supplied values
