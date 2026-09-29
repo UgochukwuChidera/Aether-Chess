@@ -224,7 +224,14 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   applyAccuracyResults: (rows) =>
     set((s) => {
-      const byUci = new Map(rows.map((r, i) => [`${r.uci}:${i}`, r]));
+      const rowOccurrence = new Map<string, number>();
+      const byUci = new Map(
+        rows.map((r) => {
+          const n = rowOccurrence.get(r.uci) ?? 0;
+          rowOccurrence.set(r.uci, n + 1);
+          return [`${r.uci}:${n}`, r] as const;
+        }),
+      );
       const occurrence = new Map<string, number>();
       const moveHistory = s.moveHistory.map((m) => {
         const seen = occurrence.get(m.uci) ?? 0;

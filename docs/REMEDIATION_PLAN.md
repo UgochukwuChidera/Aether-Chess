@@ -461,7 +461,7 @@ loop) cannot cancel them. Undo or New Game while the engine thinks lets a late
   result if it no longer matches. Guard `handleUndo` with `engineBusy`.
 - **Test:** start an AI move, immediately undo, assert the store is unchanged.
 
-### P2-T08 — Accuracy annotations keyed inconsistently
+### P2-T08 — Accuracy annotations keyed inconsistently ✅ DONE
 
 **Defect.** `renderer/src/stores/gameStore.ts:227` builds `byUci` keyed by **row index**
 (`${r.uci}:${i}`) but `:232` looks it up by **occurrence count** within `moveHistory`.
