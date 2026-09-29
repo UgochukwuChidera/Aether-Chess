@@ -1065,7 +1065,7 @@ def _eval_numba(
             bb &= bb - u1
             total_pieces += 1
             mg_score += val + pst[sq]
-            eg_score += val + pst_king_end[sq]
+            eg_score += val + pst[sq]
 
         bb = (b_pawns, b_knights, b_bishops, b_rooks, b_queens)[pt]
         while bb:
@@ -1075,7 +1075,7 @@ def _eval_numba(
             total_pieces += 1
             msq = sq ^ 56
             mg_score -= val + pst[msq]
-            eg_score -= val + pst_king_end[msq]
+            eg_score -= val + pst[msq]
 
     ws = _bitscan(w_king) if w_king else 0
     mg_score += 20000 + pst_king_mid[ws]

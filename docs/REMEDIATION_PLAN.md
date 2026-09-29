@@ -503,7 +503,7 @@ The hang-guard at `:124-127` also does not work: it wraps `future.result(timeout
 - **Test:** a slow stub proxy; assert elapsed ≤ budget + tolerance.
 - **Done when:** `TODO.md` item 4 is struck.
 
-### P2-T11 — King endgame PST applied to every piece
+### P2-T11 — King endgame PST applied to every piece ✅ DONE
 
 **Defect.** `aether_chess/engines/mentor_engine.py:1065` — inside the loop over piece
 types `(0,1,2,3,4)` = pawn/knight/bishop/rook/queen, the code does
