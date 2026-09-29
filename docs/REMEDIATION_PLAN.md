@@ -473,7 +473,7 @@ attached to the wrong move.
 - **Test:** a game containing a repeated move; assert every row is annotated and none
   lands on the wrong ply.
 
-### P2-T09 — Move colour inferred by history parity
+### P2-T09 — Move colour inferred by history parity ✅ DONE
 
 **Defect.** `gameStore.ts:160` — `color: i % 2 === 0 ? 'white' : 'black'`. A game loaded
 from a FEN or PGN where Black is to move labels every move with the wrong colour, which

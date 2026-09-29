@@ -49,6 +49,13 @@ class ChessEngineManager:
     def __init__(self) -> None:
         self.game_state = GameState()
         self._full_history: List[chess.Move] = []
+        # Retained start position (P2-T09). Every replay helper must start
+        # here, not at `chess.Board()`: a FEN-loaded game does not open
+        # with White to move, so startpos replays mislabel each ply's mover
+        # (and drop moves illegal from startpos). Standard startpos unless
+        # `new_game(fen=...)` says otherwise; `import_pgn` resets it because
+        # `load_pgn` replays from startpos.
+        self._initial_fen: str = chess.STARTING_FEN
         # None == live position. Any int is a viewing window into
         # `_full_history` (P1-T05): -1 shows startpos, 0..len-1 a ply.
         # The IPC snapshot still emits -1 for live, so the renderer is
@@ -117,9 +124,16 @@ class ChessEngineManager:
         threads: Optional[int] = None,
         hash_mb: Optional[int] = None,
         multipv: Optional[int] = None,
+        fen: Optional[str] = None,
     ) -> None:
         self.game_state.reset()
         self.board = self.game_state.board
+        if fen is not None:
+            # Raises ValueError on a bad FEN (same surface as import_pgn).
+            self.game_state.load_fen(fen)
+            self._initial_fen = self.game_state.to_fen()
+        else:
+            self._initial_fen = chess.STARTING_FEN
         self._full_history = []
         self._nav_index = None
         self.settings.update(
@@ -251,6 +265,23 @@ class ChessEngineManager:
                 b.push(m)
         return san_list
 
+    def _history_with_colors(self) -> List[tuple[str, str, str]]:
+        """Replay `_full_history` from the retained start as (uci, san, color).
+
+        The color is the side that MOVED — `board.turn` BEFORE the push —
+        never index parity. Same replay pattern as `history_fens_and_moves`:
+        skip moves illegal from the replay position (unreachable for games
+        played through this manager, which validates on push).
+        """
+        board = chess.Board(self._initial_fen)
+        replayed: List[tuple[str, str, str]] = []
+        for move in self._full_history:
+            if move in board.legal_moves:
+                color = "white" if board.turn == chess.WHITE else "black"
+                replayed.append((move.uci(), board.san(move), color))
+                board.push(move)
+        return replayed
+
     def _state_snapshot(self, last_san: str = "") -> Dict[str, Any]:
         board = self.board
         is_over = board.is_game_over()
@@ -270,12 +301,18 @@ class ChessEngineManager:
         else:
             last_uci = None
 
+        # One replay feeds all three parallel arrays, so uci/san/color can
+        # never desynchronise (P2-T09). For standard-start games this is
+        # byte-identical to the old `move_history_san()` + full-history UCIs.
+        replayed = self._history_with_colors()
+
         return {
             "fen": board.fen(),
             "turn": "white" if board.turn == chess.WHITE else "black",
             "legal_moves": self.legal_moves_uci(),
-            "move_history": self.move_history_san(),
-            "full_move_history": [m.uci() for m in self._full_history],
+            "move_history": [san for _, san, _ in replayed],
+            "full_move_history": [uci for uci, _, _ in replayed],
+            "move_colors": [color for _, _, color in replayed],
             "last_move_san": last_san,
             "last_move_uci": last_uci,
             "nav_index": -1 if self._nav_index is None else self._nav_index,
@@ -801,6 +838,9 @@ class ChessEngineManager:
     def import_pgn(self, pgn_text: str) -> None:
         self.game_state.load_pgn(pgn_text)
         self.board = self.game_state.board
+        # load_pgn replays from startpos (SetUp/FEN headers ignored), so the
+        # effective start is standard — never inherit a stale FEN start.
+        self._initial_fen = chess.STARTING_FEN
         self._full_history = list(self.board.move_stack)
         self._nav_index = None
 

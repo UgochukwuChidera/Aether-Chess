@@ -206,6 +206,9 @@ def handle_new_game(params: Dict[str, Any]) -> Any:
     threads = params.get("threads")
     hash_mb = params.get("hash_mb")
     multipv = params.get("multipv")
+    # P2-T09: optional custom start position (black-to-move FEN loads).
+    # Absent → standard startpos; the renderer sends nothing today.
+    fen = params.get("fen")
 
     engine_mgr.new_game(
         mode=mode,
@@ -222,6 +225,7 @@ def handle_new_game(params: Dict[str, Any]) -> Any:
         threads=threads,
         hash_mb=hash_mb,
         multipv=multipv,
+        fen=fen,
     )
     return engine_mgr._state_snapshot()
 

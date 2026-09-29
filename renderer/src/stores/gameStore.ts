@@ -103,6 +103,9 @@ export interface BackendMoveResult {
   legal_moves: string[];
   move_history: string[];       // SAN list
   full_move_history: string[];  // UCI list
+  // Per-move mover ('white'/'black'), parallel to move_history.
+  // Present on new backends; absent on old ones and the e2e fixture.
+  move_colors?: Color[];
   last_move_san: string;
   last_move_uci: string | null;
   nav_index: number;
@@ -154,10 +157,14 @@ export const useGameStore = create<GameState>((set, get) => ({
   setFen: (fen) => set({ fen }),
 
   applyMoveResult: (result) => {
+    // P2-T09: prefer the backend-fed per-move colour (correct for games that
+    // did not open with White to move); fall back to index parity for old
+    // backends and producers that omit move_colors (P0-T12 fixture, P1-T01
+    // mocks) — never assume the fallback, it mislabels black-open games.
     const history: MoveEntry[] = result.move_history.map((san, i) => ({
       uci: result.full_move_history[i] ?? '',
       san,
-      color: i % 2 === 0 ? 'white' : 'black',
+      color: result.move_colors?.[i] ?? (i % 2 === 0 ? 'white' : 'black'),
     }));
 
     const lastUCI = result.last_move_uci;
