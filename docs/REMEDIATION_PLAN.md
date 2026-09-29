@@ -604,13 +604,35 @@ file label is not. Playing as Black — the default `handleNewGame` sets via
   needs `8 - displayRank` (e.g. flipped top row labels `8` on rank-`1` squares);
   left untouched per the one-expression rule, flagged as follow-up. Full gate green.
 
-### P2-T17 — Canvas overlay not redrawn on flip
+### P2-T17 — Canvas overlay not redrawn on flip ✅ DONE
 
-**Defect.** `renderer/src/components/BoardDrawingLayer.tsx:366-372` and `:427-434` — the
-redraw effect dependency arrays omit `flipped`, so toggling flip repaints the board but
-not the canvas overlay. Analysis arrows and user arrows stay where they were.
+**Defect.** `renderer/src/components/BoardDrawingLayer.tsx` — the redraw effect deps
+(`:438`, `[drawCanvas]`) omit `flipped` (plan anchors `:366-372`/`:427-434` drifted;
+actual: `toPoint` `:370-376`, `drawCanvas` deps `:431`, redraw effect `:433-438`), so
+with stable arrow/analysis props toggling flip never re-invokes the canvas painter.
+`flipped` is read only via `flippedRef` (`:369`), which syncs every render and is
+always current — the defect is purely the missing re-trigger, not a stale read.
 
-- **Change:** add `flipped` to both dependency arrays.
+- **Change (minimal variant of the prescription):** `flipped` joins the redraw-effect
+  array only (`:438` → `[drawCanvas, flipped]`). Adding it to `drawCanvas`'s array too
+  is redundant (either alone re-fires, since the ref read is always current) and trips
+  `exhaustive-deps` (`unnecessary dependency` — the closure reads `flippedRef.current`,
+  not the prop). Single dep keeps lint at baseline (0 errors, 3 pre-existing warnings),
+  no suppressions, no ref-pattern disturbance (P0-T07 latest-ref mirrors untouched).
+- **Test:** `renderer/src/components/BoardDrawingLayer.test.tsx` (new; separate from
+  `Board.test.tsx`, which owns label assertions without canvas). Scoped `getContext`
+  recording-stub + fixed 448px `getBoundingClientRect` mocks (jsdom ctx is null; no
+  `canvas` package — verified absent, not installed). Stable identities for every memo
+  input (naive version passed pre-fix: fresh `[]` defaults bust the memo each render).
+  e2→e4 arrow paints tail at (252,364) unflipped; after flip must repaint at (196,84):
+  zero paint calls pre-fix (recorded FAIL), exact flipped coords post-fix.
+- **Verification (2026-09-29):** coordinate-level assertion achieved (not a mere
+  effect-spy). Production nuance: PlayView/Board hand down fresh `[]` defaults, so the
+  overlay currently repaints by accident on flip; the fix converts accidental repaint
+  into guaranteed repaint (register §3 P2-T17 'not yet proven' now proven at unit
+  level — register touch-up left to coordinator per one-item scope). Full gate green:
+  python 146 OK, ruff clean, pyright 0, electron 45 pass, lint 0 errors,
+  build succeeds, typecheck:renderer clean, test:renderer 17 pass, test:e2e 4 pass.
 
 ### P2-T18 — Duplicate analysis start and missing dependency
 

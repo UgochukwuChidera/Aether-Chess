@@ -435,7 +435,7 @@ export const BoardDrawingLayer: React.FC<Props> = ({
     const onResize = () => drawCanvas();
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
-  }, [drawCanvas]);
+  }, [drawCanvas, flipped]);
 
   useEffect(() => {
     if (!svgRef.current) return;
