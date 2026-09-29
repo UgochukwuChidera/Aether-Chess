@@ -664,6 +664,30 @@ keep gating with "Backend not connected" for the rest of the session.
   implementation chooses).
 - **Done when:** kill → respawn → export path works without reload.
 
+### P2-T23 — Maia proxy double-discounts the resolved budget
+
+Follow-up to P2-T10 (found on challenge): `manager.resolve_budget` samples the
+think profile ONCE (`manager.py:185-192`), and Stockfish (`Limit(time=budget)`)
+and Mentor (`search_config(strength, budget)`) consume it directly. Maia3Proxy
+re-samples the profile and takes `Limit(min(sampled, budget))` (`:236`) — the
+minimum of two independent rolls. Measured: budget 3.23 → limit 1.05. Maia
+systematically thinks less than the aligned budget whenever its second roll
+lands lower: the mirror image of the "silently advantaged bot" P2-T10 fixed,
+in the disadvantaged direction. P2-T10 kept the proxy-side roll where the plan
+said to remove the independent resample.
+
+- **Change:** proxy drives `Limit` from `time_limit_sec` directly; drop its
+  `sample_think_time` call. Profile shaping lives in `resolve_budget` alone.
+  Keep the clamp.
+- **Test:** extend `tests/test_maia3_budget.py` — budget B under profiles whose
+  samples would differ → engine sees `Limit(time=B)` exactly, both profiles.
+- **Done when:** Maia's elapsed matches the manager budget like the other bots;
+  `rg sample_think_time aether_chess/engines/maia3_proxy.py` returns zero.
+
+Note (no item): classical's "5–120s typical" doc vs the 5.0s ceiling is GLOBAL
+(`clamp_time_limit` caps every bot) and the ceiling serves comparability — doc
+describes pre-clamp buckets. Product copy, out of this track.
+
 ---
 
 # Phase 3 — Structural
