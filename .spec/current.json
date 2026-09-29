@@ -46,7 +46,7 @@
     "authority": "docs/VERIFICATION_REGISTER.md outranks docs/REMEDIATION_PLAN.md where they disagree (register §5 adjudication)."
   },
   "gate": {
-    "baseline": "python 133 passed · ruff clean · pyright 0 errors · electron 21 passed · lint clean · build succeeds",
+    "baseline": "python 146 passed · ruff clean · pyright 0 errors · electron 45 passed · lint clean · build succeeds",
     "phaseExits": {
       "phase-0": "python 122 passed",
       "phase-1": "python 130 passed",
@@ -230,114 +230,129 @@
       "id": "P2-T02",
       "title": "Eval bar frozen after first move",
       "phase": "phase-2",
-      "status": "todo",
-      "note": "getState().fen in callback. Removes 2 P0-T07 suppressions.",
-      "next": true
+      "status": "completed",
+      "note": "Live-fen reads via getState; all 10 file suppressions removed (0 remain).",
+      "commit": "c5c764feb970118b9c2080e3a72e0989eb09a5eb"
     },
     {
       "id": "P2-T03",
       "title": "IPC listener leak on tab switch",
       "phase": "phase-2",
-      "status": "todo",
-      "note": "removeBackendListeners + wrapper-specific removal. Removes 1 suppression."
+      "status": "completed",
+      "note": "Unsubscribe handles (contextBridge defeats ref-keyed removal); App getState switch; AnalysisView mechanical migration.",
+      "commit": "ffadaad2c7fdd06e5bc0e7e978c9d374f049a3bd"
     },
     {
       "id": "P2-T04",
       "title": "analysisCallbacks grows without bound",
       "phase": "phase-2",
-      "status": "todo",
-      "note": "Delete on stop/close."
+      "status": "completed",
+      "note": "Dedicated stop handler (was array-only/shadowed) + close purge + size logs; no test-only IPC.",
+      "commit": "9d33e5733813347195b10f1c3f10d5f0f6626439"
     },
     {
       "id": "P2-T05",
       "title": "Backend death hangs requests",
       "phase": "phase-2",
-      "status": "todo",
-      "note": "Reject pending + respawn/reconnect."
+      "status": "completed",
+      "note": "Pendings rejected w/ timer hygiene + lazy respawn via getAllWindows; second-window sub-claim moot. Flag gap -> P2-T22.",
+      "commit": "ceaaee27de2e84f81c3a0383956785bf7c00cdb8"
     },
     {
       "id": "P2-T06",
       "title": "Unrestricted shell calls",
       "phase": "phase-2",
-      "status": "todo",
-      "note": "Allowlist openExternal; root-jail showItemInFolder."
+      "status": "completed",
+      "note": "Pure shellPolicy module (allowlist + root jail); setWindowOpenHandler same-sink extension. 27->45 electron tests.",
+      "commit": "73b22a5dfe61330b19d80c7202e534ef12eb7175"
     },
     {
       "id": "P2-T07",
       "title": "In-flight AI moves never cancelled",
       "phase": "phase-2",
-      "status": "todo",
-      "note": "gameGenerationRef + engineBusy guard on undo."
+      "status": "completed",
+      "note": "Generation ref + owner-checked busy clears; cancel-and-undo (not refuse). Done by coordinator from adopted failing tests.",
+      "commit": "0ac2a8523bb7d6b7222d375cf9e4f99c42efd1a9"
     },
     {
       "id": "P2-T08",
       "title": "Accuracy annotations keyed inconsistently",
       "phase": "phase-2",
-      "status": "todo",
-      "note": "Occurrence-index keying."
+      "status": "completed",
+      "note": "Per-row occurrence-index keying; drop + misattach cases.",
+      "commit": "4b9c1aa302146c1c9610ac2d9137f346e67fe920"
     },
     {
       "id": "P2-T09",
       "title": "Move colour inferred by history parity",
       "phase": "phase-2",
-      "status": "todo",
-      "note": "Backend per-move color field in _state_snapshot."
+      "status": "completed",
+      "note": "Parallel move_colors from single replay + new_game(fen); client prefers record, parity fallback.",
+      "commit": "bbe4fd14a85d1206c742d8973ecb489684232107"
     },
     {
       "id": "P2-T10",
       "title": "Maia3 ignores its time budget",
       "phase": "phase-2",
-      "status": "todo",
-      "note": "Clamp to caller budget; real shutdown(wait=False) timeout. Strikes TODO.md item 4."
+      "status": "completed",
+      "note": "Manager->request->bot->proxy single source; 21.75s -> 0.40s; TODO item 4 struck.",
+      "commit": "42a5a05e9f97696c5837319040558b556fff3714"
     },
     {
       "id": "P2-T11",
       "title": "King endgame PST applied to every piece",
       "phase": "phase-2",
-      "status": "todo",
-      "note": "Defect at :1068/:1078 (register-corrected anchor); phase blend :1088-1093 CORRECT — do not touch."
+      "status": "completed",
+      "note": "Kings-only eg-table selection (2 lines); blend/kings md5-identical.",
+      "commit": "d700acaf72e70528fea891fe1778d89996baf305"
     },
     {
       "id": "P2-T12",
       "title": "mg_score and eg_score are the same number",
       "phase": "phase-2",
-      "status": "todo",
-      "note": "Implement vs mentor eval or drop fields."
+      "status": "completed",
+      "note": "DROPPED (not implemented): no cheap mg/eg entry, zero value-readers; snapshot {eval_cp, phase}.",
+      "commit": "4a34e123403a40cf9cc6dd513b8c828174ebaeed"
     },
     {
       "id": "P2-T13",
       "title": "Capture sound fires on nearly every move",
       "phase": "phase-2",
-      "status": "todo",
-      "note": "Piece-count/destination-occupied compare."
+      "status": "completed",
+      "note": "Piece-count capture compare (en-passant-safe); promotion/castle silent.",
+      "commit": "4b854153801a8b15820462a5c7cd6bfb3222d4c8"
     },
     {
       "id": "P2-T14",
       "title": "Packaged app ships all devDependencies",
       "phase": "phase-2",
-      "status": "todo",
-      "note": "Drop node_modules glob (retraction: range was correct, glob real)."
+      "status": "completed",
+      "note": "Glob removed; premise contradicted on builder 24.13.3 (pre/post byte-identical) — footgun-removal.",
+      "commit": "e4d432e1c97a912286eeec9223250c4068f33d04"
     },
     {
       "id": "P2-T15",
       "title": "Packaged backend from unpinned deps",
       "phase": "phase-2",
-      "status": "todo",
-      "note": "Install from requirements.txt."
+      "status": "completed",
+      "note": "Install from requirements.txt + freeze log; pyinstaller extra-derived pin; no live build (toolchain absent).",
+      "commit": "5c0b27eb3d88cd5818a5e74f1d1922e598ae20cc"
     },
     {
       "id": "P2-T16",
       "title": "Board file labels mirrored when flipped",
       "phase": "phase-2",
-      "status": "todo",
-      "note": "'abcdefgh'[displayFile]."
+      "status": "completed",
+      "note": "abcdefgh[displayFile]; rankLabel found ALSO mirrored -> P2-T25, left untouched.",
+      "commit": "4f8ce7cd49fb68146ea37d478a6669632ae8b1ea"
     },
     {
       "id": "P2-T17",
       "title": "Canvas overlay not redrawn on flip",
       "phase": "phase-2",
       "status": "todo",
-      "note": "flippedRef identity is the mechanism; no P0-T07 suppression exists here — test-driven."
+      "note": "flippedRef identity is the mechanism; no P0-T07 suppression exists here — test-driven.",
+      "next": true
     },
     {
       "id": "P2-T18",
@@ -359,6 +374,34 @@
       "phase": "phase-2",
       "status": "todo",
       "note": "No action — file deleted by P3-T06. If P3-T06 descoped, try/except quit."
+    },
+    {
+      "id": "P2-T22",
+      "title": "backendConnected never restores after respawn",
+      "phase": "phase-2",
+      "status": "todo",
+      "note": "P2-T05 follow-up: backend-ready event + flag restore + extended death-spec."
+    },
+    {
+      "id": "P2-T23",
+      "title": "Maia proxy double-discounts the resolved budget",
+      "phase": "phase-2",
+      "status": "todo",
+      "note": "min() of two rolls; proxy must use budget directly. Challenge-confirmed."
+    },
+    {
+      "id": "P2-T24",
+      "title": "Classical think profile collapses to constant 5s",
+      "phase": "phase-2",
+      "status": "todo",
+      "note": "Rescale bucket to vary within the ceiling; ceiling stays."
+    },
+    {
+      "id": "P2-T25",
+      "title": "Board rank labels mirrored when flipped",
+      "phase": "phase-2",
+      "status": "todo",
+      "note": "P2-T16 follow-up: String(8 - displayRank); left out by one-expression rule."
     },
     {
       "id": "P2-T21",

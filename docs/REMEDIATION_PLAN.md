@@ -740,6 +740,18 @@ Blitz varies (~1–5s); classical is a constant. Not Maia-specific.
 - **Done when:** classical elapsed varies run to run while never exceeding the
   aligned budget.
 
+### P2-T25 — Board rank labels are mirrored when flipped
+
+Follow-up to P2-T16 (found during its verification, left out by the
+one-expression rule): `Board.tsx` `rankLabel` uses `String(8 - rank)` — the
+grid rank — while the displayed square's rank is `8 - displayRank`. The plan's
+"right by coincidence" does not hold: flipped, the top row (true rank 1)
+labels `8`, i.e. the right column reads 8…1 top-to-bottom for squares 1…8.
+
+- **Change:** `String(8 - displayRank)` (symmetric with the P2-T16 fix).
+- **Test:** extend `Board.test.tsx` — flipped rank assertions both columns.
+- **Done when:** rank labels match their squares in both orientations.
+
 ---
 
 # Phase 3 — Structural
