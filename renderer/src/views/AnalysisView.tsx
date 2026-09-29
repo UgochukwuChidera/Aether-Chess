@@ -76,8 +76,7 @@ export const AnalysisView: React.FC = () => {
         debounceRef.current = null;
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- owned by P2-T18: duplicate restart plus missing settings.playEngine dep; rewritten with its behavior change there
-  }, [store.fen, settings.multipv, settings.stockfishPath, settings.threads, settings.hashMb]);
+  }, [store.fen, settings.multipv, settings.playEngine, settings.stockfishPath, settings.threads, settings.hashMb]);
 
   async function handleStartAnalysis() {
     runningRef.current = true;
@@ -108,9 +107,7 @@ export const AnalysisView: React.FC = () => {
     try {
       const result = await window.electronAPI.navigateToMove({ index }) as BackendMoveResult;
       store.applyMoveResult(result);
-      if (runningRef.current) await handleStartAnalysis();
     } catch {/* ignore */}
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- owned by P2-T18: the direct handleStartAnalysis call is the duplicate-start defect; removed with its behavior change there
   }, []);
 
   const handleComputeAccuracy = async () => {

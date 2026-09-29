@@ -634,7 +634,7 @@ always current — the defect is purely the missing re-trigger, not a stale read
   python 146 OK, ruff clean, pyright 0, electron 45 pass, lint 0 errors,
   build succeeds, typecheck:renderer clean, test:renderer 17 pass, test:e2e 4 pass.
 
-### P2-T18 — Duplicate analysis start and missing dependency
+### P2-T18 — Duplicate analysis start and missing dependency ✅ DONE
 
 **Defect.** `renderer/src/views/AnalysisView.tsx:105` calls `handleStartAnalysis()`
 directly, while the effect at `:54-74` independently restarts analysis 350 ms later on
