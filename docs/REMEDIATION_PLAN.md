@@ -563,7 +563,7 @@ into the distributed app.
   removal); pre/post asar file sets are byte-identical (1044 entries, 9.8 MB),
   prod deps present (react, zustand, python-shell, electron-updater). Full gate green.
 
-### P2-T15 — Packaged backend built from unpinned dependencies
+### P2-T15 — Packaged backend built from unpinned dependencies ✅ DONE
 
 **Defect.** `build/build-backend.sh:11` runs
 `pip install pyinstaller python-chess onnxruntime`, ignoring `requirements.txt`. The
@@ -572,6 +572,18 @@ validated (python-chess is verified at 1.11.2 locally).
 
 - **Change:** install from `requirements.txt`; record resolved versions in the build log.
 - **Done when:** the build script references no hard-coded package list.
+- **Verification (2026-09-29):** pre-change quoted `:11`
+  `pip install pyinstaller python-chess onnxruntime` with zero `requirements`
+  references (grep exit 1). Post-change the script runs
+  `pip install -r requirements.txt`, derives the pyinstaller pin from the same
+  file (`grep '^pyinstaller' | sed 's/ *;.*//'` → `pyinstaller>=6.0`; needed
+  because the `; extra == "build"` marker evaluates False under `-r`, verified
+  via `packaging.markers`), and emits `pip freeze` into the build log. No
+  literal `pip install <name>` remains (grep exit 1); `bash -n` clean. Live
+  build skipped — pyinstaller in neither `venv/` nor PATH here; static
+  assertion + log-step presence is the proof, not a built-binary proof. Full
+  gate green (python 146 OK, ruff clean, pyright 0, lint 0 errors, build
+  exit 0). Staged: script + this mark only; `backend-dist/` stays ignored.
 
 ### P2-T16 — Board file labels are mirrored when flipped
 

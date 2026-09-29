@@ -8,7 +8,13 @@ ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 DIST="$ROOT/build/backend-dist"
 
 echo "→ Installing Python dependencies…"
-pip install pyinstaller python-chess onnxruntime
+pip install -r "$ROOT/requirements.txt"
+# pyinstaller is pinned in requirements.txt as a build extra (`extra == "build"`),
+# which `pip install -r` skips — install its pinned spec from the file (no version hard-coded here).
+pip install "$(grep '^pyinstaller' "$ROOT/requirements.txt" | sed 's/ *;.*//')"
+
+echo "→ Resolved package versions…"
+pip freeze
 
 echo "→ Running PyInstaller…"
 pyinstaller "$ROOT/build/backend.spec" \
