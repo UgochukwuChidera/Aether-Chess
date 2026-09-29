@@ -168,7 +168,7 @@ class ChessEngineManager:
     def make_move(self, move_uci: str) -> tuple[bool, Dict[str, Any]]:
         """Push a UCI move. Returns (success, state_snapshot)."""
         if self._nav_index is not None:
-            return False, {'reason': 'Return to the live position before moving'}
+            return False, {"reason": "Return to the live position before moving"}
         try:
             move = chess.Move.from_uci(move_uci)
         except ValueError:
@@ -287,9 +287,8 @@ class ChessEngineManager:
         is_over = board.is_game_over()
         outcome = board.outcome()
 
-        if (
-            self._nav_index is not None
-            and 0 <= self._nav_index < len(self._full_history)
+        if self._nav_index is not None and 0 <= self._nav_index < len(
+            self._full_history
         ):
             last_uci: Optional[str] = self._full_history[self._nav_index].uci()
         elif (
@@ -747,45 +746,9 @@ class ChessEngineManager:
             return {
                 "eval_cp": eval_score,
                 "phase": mentor._phase(board),
-                "mg_score": self._get_mg_score(board, mentor),
-                "eg_score": self._get_eg_score(board, mentor),
             }
         except Exception as e:
             return {"eval_cp": None, "error": str(e)}
-
-    def _get_mg_score(self, board: chess.Board, mentor: MentorEngine) -> int:
-        """Get midgame score (raw)."""
-        score = 0
-        for pt, val in [
-            (chess.PAWN, 100),
-            (chess.KNIGHT, 320),
-            (chess.BISHOP, 330),
-            (chess.ROOK, 500),
-            (chess.QUEEN, 950),
-            (chess.KING, 20000),
-        ]:
-            for _ in board.pieces(pt, chess.WHITE):
-                score += val
-            for _ in board.pieces(pt, chess.BLACK):
-                score -= val
-        return score
-
-    def _get_eg_score(self, board: chess.Board, mentor: MentorEngine) -> int:
-        """Get endgame score (raw)."""
-        score = 0
-        for pt, val in [
-            (chess.PAWN, 100),
-            (chess.KNIGHT, 320),
-            (chess.BISHOP, 330),
-            (chess.ROOK, 500),
-            (chess.QUEEN, 950),
-            (chess.KING, 20000),
-        ]:
-            for _ in board.pieces(pt, chess.WHITE):
-                score += val
-            for _ in board.pieces(pt, chess.BLACK):
-                score -= val
-        return score
 
     def history_fens_and_moves(self) -> tuple[List[str], List[str]]:
         board = chess.Board()

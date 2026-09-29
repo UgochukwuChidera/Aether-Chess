@@ -516,7 +516,15 @@ evaluation engine-wide. (The `phase` blend at `:1088-1093` is **correct** — do
 - **Test:** assert each piece type's contribution uses its own table; assert evaluation is
   antisymmetric under colour flip.
 
-### P2-T12 — `mg_score` and `eg_score` are the same number
+### P2-T12 — `mg_score` and `eg_score` are the same number ✅ DONE
+
+**Decision: DROPPED** (2026-09-29). No code reader branches on the values
+(`EvalBar.tsx:109,116` + `gameStore.ts:212` consume only `eval_cp`; all
+`mg_score`/`eg_score` declarations were optional pass-through), and
+`MentorEngine` exposes no mg/eg entry point (`_eval_numba` returns only the
+blended score — exposing it would mean refactoring the numba JIT signature
+for unread fields). Snapshot is now exactly `{eval_cp, phase}`; helpers
+deleted; `gameStore` types, e2e fixture, and `BACKEND_API.md` updated.
 
 **Defect.** `backend/chess_engine.py:671-703` — `_get_mg_score` and `_get_eg_score` are
 byte-identical, and both sum raw material values with `KING = 20000` dominating. The

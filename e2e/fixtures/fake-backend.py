@@ -193,7 +193,7 @@ def _handle_stop_analysis(_params: Dict[str, Any]) -> Any:
 
 
 def _handle_get_eval(_params: Dict[str, Any]) -> Any:
-    return {"eval_cp": 24, "phase": 1.0, "mg_score": 0, "eg_score": 0}
+    return {"eval_cp": 24, "phase": 1.0}
 
 
 def _handle_export_pgn(_params: Dict[str, Any]) -> Any:

@@ -3,17 +3,20 @@
 The Python backend (`backend/service.py`) communicates over **stdin/stdout** using newline-delimited JSON.
 
 All requests follow the shape:
+
 ```json
 { "id": "<string>", "command": "<name>", "params": { ... } }
 ```
 
 All responses follow the shape:
+
 ```json
 { "id": "<string>", "result": { ... } }     // success
 { "id": "<string>", "error": "<message>" }  // failure
 ```
 
 An unknown command produces an error, not a crash:
+
 ```json
 { "id": "r7", "error": "Unknown command: bogus_command" }
 ```
@@ -23,7 +26,7 @@ An unknown command produces an error, not a crash:
 > because running the script puts `backend/` on `sys.path`.
 
 > Backend tests run from the repo root as `venv/bin/python -m unittest
-> discover -s tests` — see [SETUP](SETUP.md#7-run-the-tests) for why the
+discover -s tests` — see [SETUP](SETUP.md#7-run-the-tests) for why the
 > `venv/` prefix is required.
 
 ---
@@ -38,13 +41,13 @@ one interface and one result shape, so callers never branch on which one ran.
 A `bot_id` is an open string, not a closed enum. Ids come from the backend
 (`list_bots`), never from a hard-coded list in the frontend.
 
-| `bot_id` | What it is |
-|----------|------------|
-| `mentor` | Built-in PVS engine in pure Python. Always available, no binary needed. Default bot. |
-| `stockfish` | Canonical Stockfish. Resolves a binary per move; honours a per-request path. |
-| `stockfish-<major>` | One entry per *discovered* build, e.g. `stockfish-19`, `stockfish-18`. Selecting one pins that exact build. |
-| `maia3` | Neural proxy that plays like a human of a chosen Elo. Sampled, not deterministic. |
-| `auto` | Not a real bot. Asks the manager to pick the best available one (Stockfish → Mentor → Maia3). |
+| `bot_id`            | What it is                                                                                                  |
+| ------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `mentor`            | Built-in PVS engine in pure Python. Always available, no binary needed. Default bot.                        |
+| `stockfish`         | Canonical Stockfish. Resolves a binary per move; honours a per-request path.                                |
+| `stockfish-<major>` | One entry per _discovered_ build, e.g. `stockfish-19`, `stockfish-18`. Selecting one pins that exact build. |
+| `maia3`             | Neural proxy that plays like a human of a chosen Elo. Sampled, not deterministic.                           |
+| `auto`              | Not a real bot. Asks the manager to pick the best available one (Stockfish → Mentor → Maia3).               |
 
 ### The standard move result
 
@@ -66,18 +69,18 @@ supply it, and `move: null` means the bot failed to produce a move.
 }
 ```
 
-| Field | Type | Meaning |
-|-------|------|---------|
-| `move` | `string \| null` | Move in UCI. `null` on failure. |
-| `san` | `string \| null` | Same move in SAN. |
-| `from_book` | `bool` | Came from the opening book rather than a search. |
-| `bot_id` | `string` | Which bot actually produced this. |
-| `eval_cp` | `int \| null` | Centipawns from the side to move. `null` for Maia3, which returns no score. |
-| `depth` | `int \| null` | Search depth. |
-| `elapsed_sec` | `float` | Wall-clock seconds spent. |
-| `ponder` | `string \| null` | Predicted reply, when the bot offers one. |
-| `is_mate` | `bool` | Whether the score is a forced mate. |
-| `mate_in` | `int \| null` | Moves to mate. |
+| Field         | Type             | Meaning                                                                     |
+| ------------- | ---------------- | --------------------------------------------------------------------------- |
+| `move`        | `string \| null` | Move in UCI. `null` on failure.                                             |
+| `san`         | `string \| null` | Same move in SAN.                                                           |
+| `from_book`   | `bool`           | Came from the opening book rather than a search.                            |
+| `bot_id`      | `string`         | Which bot actually produced this.                                           |
+| `eval_cp`     | `int \| null`    | Centipawns from the side to move. `null` for Maia3, which returns no score. |
+| `depth`       | `int \| null`    | Search depth.                                                               |
+| `elapsed_sec` | `float`          | Wall-clock seconds spent.                                                   |
+| `ponder`      | `string \| null` | Predicted reply, when the bot offers one.                                   |
+| `is_mate`     | `bool`           | Whether the score is a forced mate.                                         |
+| `mate_in`     | `int \| null`    | Moves to mate.                                                              |
 
 **Total failure is normalized too.** If no bot can move, the response is
 `{"move": null, "san": null, ...}` with the rest of the shape intact — not a
@@ -89,7 +92,7 @@ missing key.
 Think time is resolved **once per move** by the manager, from the clock and the
 think profile, and handed unchanged to whichever bot plays. This is what makes
 bots comparable: switching from Stockfish to Mentor for the same position
-changes *how* the move is chosen, not *how long* it was allowed to think.
+changes _how_ the move is chosen, not _how long_ it was allowed to think.
 Budgets are clamped to 0.01–5.0 s.
 
 ---
@@ -101,6 +104,7 @@ Budgets are clamped to 0.01–5.0 s.
 Start a new game and reset the board.
 
 **Request params:**
+
 ```json
 {
   "mode": "human_vs_ai",
@@ -112,6 +116,7 @@ Start a new game and reset the board.
 ```
 
 **Response result:**
+
 ```json
 {
   "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
@@ -128,6 +133,7 @@ Start a new game and reset the board.
 Push a UCI move onto the board.
 
 **Request params:**
+
 ```json
 { "move": "e2e4" }
 ```
@@ -141,11 +147,13 @@ Push a UCI move onto the board.
 Get all legal moves for a position.
 
 **Request params:**
+
 ```json
 { "fen": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1" }
 ```
 
 **Response result:**
+
 ```json
 {
   "moves": [
@@ -172,6 +180,7 @@ Pop the last move from the stack.
 Navigate history to a specific move index without modifying the game.
 
 **Request params:**
+
 ```json
 { "index": 5 }
 ```
@@ -186,6 +195,7 @@ Get a move for a position. This is the general engine entry point and accepts
 **any** bot id, not just Stockfish.
 
 **Request params** (all optional except a usable `fen`):
+
 ```json
 {
   "fen": "<FEN>",
@@ -222,6 +232,7 @@ to the same manager path — and kept because the renderer calls it. Prefer
 `get_engine_move` in new code.
 
 **Request params:**
+
 ```json
 { "fen": "<FEN>", "engine_type": "mentor", "strength": 7 }
 ```
@@ -241,6 +252,7 @@ Stockfish build or a bot added later appears without frontend changes.
 **Request params:** `{}` (ignored)
 
 **Response result:**
+
 ```json
 {
   "bots": [
@@ -287,16 +299,16 @@ Stockfish build or a bot added later appears without frontend changes.
 }
 ```
 
-| Field | Meaning |
-|-------|---------|
-| `kind` | `builtin` (in-process) or `uci` (subprocess / proxy). |
-| `requires_binary` | Needs a discovered executable to be available. |
+| Field                  | Meaning                                                                                                                              |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `kind`                 | `builtin` (in-process) or `uci` (subprocess / proxy).                                                                                |
+| `requires_binary`      | Needs a discovered executable to be available.                                                                                       |
 | `supports_skill_level` | Exposes a **native UCI `Skill Level` option**. False for Mentor, whose 1–10 strength is Aether's own scale rather than a UCI option. |
-| `supports_elo` | Configurable by Elo rating (Maia3). |
-| `supports_eval` | Can return a score. False for Maia3, so callers must not require one. |
-| `deterministic` | False for Maia3, which samples from a distribution. |
-| `available` | Whether it can play right now. Unavailable bots appear but are disabled in the UI. |
-| `is_default` | The fallback used when nothing else is specified (currently `mentor`). |
+| `supports_elo`         | Configurable by Elo rating (Maia3).                                                                                                  |
+| `supports_eval`        | Can return a score. False for Maia3, so callers must not require one.                                                                |
+| `deterministic`        | False for Maia3, which samples from a distribution.                                                                                  |
+| `available`            | Whether it can play right now. Unavailable bots appear but are disabled in the UI.                                                   |
+| `is_default`           | The fallback used when nothing else is specified (currently `mentor`).                                                               |
 
 > Discovery starts engines, so the first `list_bots` after launch is not
 > instant. The UI tracks a separate "still looking" state so a slow scan is not
@@ -310,6 +322,7 @@ Score the current position with Mentor's built-in evaluation (no Stockfish
 needed). The evaluation bar in Human vs Mentor mode uses this.
 
 **Request params:**
+
 ```json
 { "fen": "<FEN>", "use_mentor_eval": true }
 ```
@@ -317,12 +330,15 @@ needed). The evaluation bar in Human vs Mentor mode uses this.
 Set `use_mentor_eval` to `false` to skip custom evaluation.
 
 **Response result:**
+
 ```json
-{ "eval_cp": 0, "phase": 0, "mg_score": 0, "eg_score": 0 }
+{ "eval_cp": 0, "phase": 0 }
 ```
 
-`mg_score` and `eg_score` are the middlegame and endgame components; `phase`
-runs 0–1 from opening to endgame.
+`phase` runs 0–256 from opening to endgame (see `MentorEngine._phase`).
+The former `mg_score` / `eg_score` fields were dropped in P2-T12: both
+were identical raw-material sums (KING=20000-dominated) that no consumer
+read; the blended `eval_cp` is the authoritative score.
 
 ---
 
@@ -333,6 +349,7 @@ Export the current game as a PGN string.
 **Request params:** `{}`
 
 **Response result:**
+
 ```json
 { "pgn": "[Event \"Aether Chess Game\"]\n[Site \"?\"]\n..." }
 ```
@@ -344,6 +361,7 @@ Export the current game as a PGN string.
 Load a game from PGN text.
 
 **Request params:**
+
 ```json
 { "pgn": "[Event \"...\"]\n..." }
 ```
@@ -359,6 +377,7 @@ Get the current position as FEN.
 **Request params:** `{}`
 
 **Response result:**
+
 ```json
 { "fen": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1" }
 ```
@@ -370,11 +389,13 @@ Get the current position as FEN.
 Query the Polyglot opening book for moves at a position.
 
 **Request params:**
+
 ```json
 { "fen": "<FEN>", "books_dir": "resources/books" }
 ```
 
 **Response result (book found):**
+
 ```json
 {
   "moves": [
@@ -385,6 +406,7 @@ Query the Polyglot opening book for moves at a position.
 ```
 
 **Response result (no book):**
+
 ```json
 {
   "moves": [],
@@ -399,16 +421,19 @@ Query the Polyglot opening book for moves at a position.
 Start streaming engine analysis (returns immediately; updates pushed as events).
 
 **Request params:**
+
 ```json
 { "fen": "<FEN>", "multipv": 3, "callback_id": "my-analysis-1" }
 ```
 
 **Response result:**
+
 ```json
 { "started": true }
 ```
 
 **Push events (no id):**
+
 ```json
 {
   "type": "analysis_update",
@@ -429,6 +454,7 @@ Stop an ongoing analysis.
 **Request params:** `{}`
 
 **Response result:**
+
 ```json
 { "stopped": true }
 ```
@@ -440,6 +466,7 @@ Stop an ongoing analysis.
 Post-game accuracy scoring (requires Stockfish, may take several minutes).
 
 **Request params:**
+
 ```json
 {
   "fen_list": ["<FEN before move 1>", "<FEN before move 2>", ...],
@@ -449,6 +476,7 @@ Post-game accuracy scoring (requires Stockfish, may take several minutes).
 ```
 
 **Response result:**
+
 ```json
 {
   "moves": [
@@ -467,11 +495,13 @@ Post-game accuracy scoring (requires Stockfish, may take several minutes).
 Estimate Elo rating from accuracy metrics.
 
 **Request params:**
+
 ```json
 { "accuracy": 87.4, "blunder_rate": 0.05 }
 ```
 
 **Response result:**
+
 ```json
 {
   "estimated_elo": 1490,
@@ -496,6 +526,7 @@ the game. Cheaper than `calculate_accuracy` because no fresh Stockfish analysis
 is run.
 
 **Request params:**
+
 ```json
 { "moves": ["e2e4", "e7e5", "g1f3", "..."] }
 ```
@@ -509,6 +540,7 @@ is run.
 Score an imported game. Runs the full analysis, so it can take a while.
 
 **Request params:**
+
 ```json
 { "pgn": "[Event \"...\"]\n...", "stockfish_path": "stockfish" }
 ```
@@ -523,6 +555,7 @@ Whether a Maia3 model is already downloaded, so the UI can avoid starting a
 download the user cannot see progress for.
 
 **Request params:**
+
 ```json
 { "model": "maia3-5m" }
 ```
@@ -530,6 +563,7 @@ download the user cannot see progress for.
 Valid `model` values are `maia3-5m`, `maia3-23m`, `maia3-79m`.
 
 **Response result:**
+
 ```json
 { "cached": true, "model": "maia3-5m" }
 ```
@@ -541,6 +575,7 @@ Valid `model` values are `maia3-5m`, `maia3-23m`, `maia3-79m`.
 Download a Maia3 model into the Hugging Face cache.
 
 **Request params:**
+
 ```json
 {
   "model": "maia3-5m",
@@ -554,6 +589,7 @@ Set `hf_token` for gated repos. `HF_HOME` is honoured; it defaults to
 `~/.cache/huggingface`.
 
 **Response result:**
+
 ```json
 { "ok": true, "model": "maia3-5m" }
 ```
@@ -575,13 +611,13 @@ never blocked** and the UI stays responsive even while an engine is thinking.
 
 Commands are then grouped by what they need:
 
-| Group | Commands | Locking |
-|-------|----------|---------|
-| Board mutation | `new_game`, `make_move`, `undo_move`, `navigate_to_move`, `import_pgn` | Serialized under one board lock, so the game state cannot be corrupted by interleaving. |
-| Board read | `get_legal_moves`, `export_pgn`, `export_fen`, `get_book_moves` | Same board lock, but fast. |
+| Group           | Commands                                                                                                                                                                 | Locking                                                                                                                    |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| Board mutation  | `new_game`, `make_move`, `undo_move`, `navigate_to_move`, `import_pgn`                                                                                                   | Serialized under one board lock, so the game state cannot be corrupted by interleaving.                                    |
+| Board read      | `get_legal_moves`, `export_pgn`, `export_fen`, `get_book_moves`                                                                                                          | Same board lock, but fast.                                                                                                 |
 | Everything else | `get_engine_move`, `get_bot_move`, `list_bots`, `get_eval`, `calculate_accuracy*`, `estimate_elo`, `start_analysis`, `stop_analysis`, `maia3_cache`, `check_maia3_cache` | **No board lock.** These take a FEN from params and may block for a long time, so holding the lock would freeze the board. |
 
-`new_game` stops analysis *before* taking the board lock, so waiting on
+`new_game` stops analysis _before_ taking the board lock, so waiting on
 analysis teardown cannot block board traffic.
 
 Because non-board commands are not serialized, **do not fire two

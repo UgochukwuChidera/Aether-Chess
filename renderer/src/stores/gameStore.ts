@@ -1,11 +1,11 @@
 /**
  * gameStore.ts — Central Zustand store for all live game state.
  */
-import { create } from 'zustand';
+import { create } from "zustand";
 
-export type Color = 'white' | 'black';
-export type GameMode = 'human_vs_ai' | 'human_vs_human' | 'ai_vs_ai';
-export type EngineType = 'stockfish' | 'mentor';
+export type Color = "white" | "black";
+export type GameMode = "human_vs_ai" | "human_vs_human" | "ai_vs_ai";
+export type EngineType = "stockfish" | "mentor";
 
 export interface MoveEntry {
   uci: string;
@@ -27,26 +27,22 @@ export interface AnalysisData {
   pvs: PVLine[];
   fen: string;
   running: boolean;
-  mentorEval?: { eval_cp?: number; phase?: number; mg_score?: number; eg_score?: number };
+  mentorEval?: { eval_cp?: number; phase?: number };
 }
 
-export type GameResult =
-  | 'white_wins'
-  | 'black_wins'
-  | 'draw'
-  | null;
+export type GameResult = "white_wins" | "black_wins" | "draw" | null;
 
 export interface Toast {
   id: string;
   message: string;
-  type: 'info' | 'error' | 'success' | 'warning';
+  type: "info" | "error" | "success" | "warning";
 }
 
 export interface GameState {
   // Board
   fen: string;
   turn: Color;
-  legalMoves: string[];         // UCI
+  legalMoves: string[]; // UCI
   selectedSquare: string | null;
   highlightedSquares: string[]; // legal move targets
   lastMoveFrom: string | null;
@@ -54,8 +50,8 @@ export interface GameState {
   flipped: boolean;
 
   // History
-  moveHistory: MoveEntry[];     // ordered list of all moves
-  navIndex: number;             // -1 = current position
+  moveHistory: MoveEntry[]; // ordered list of all moves
+  navIndex: number; // -1 = current position
   fullMoveHistoryUCI: string[]; // raw UCI for navigation
 
   // Game metadata
@@ -87,7 +83,7 @@ export interface GameState {
   setPendingPromotion: (promo: { from: string; to: string } | null) => void;
   setAnalysis: (data: Partial<AnalysisData>) => void;
   fetchMentorEval: (fen: string) => Promise<void>;
-  pushToast: (message: string, type?: Toast['type']) => void;
+  pushToast: (message: string, type?: Toast["type"]) => void;
   dismissToast: (id: string) => void;
   setEngineBusy: (busy: boolean) => void;
   applyAccuracyResults: (rows: AccuracyMoveResult[]) => void;
@@ -101,8 +97,8 @@ export interface BackendMoveResult {
   fen: string;
   turn: Color;
   legal_moves: string[];
-  move_history: string[];       // SAN list
-  full_move_history: string[];  // UCI list
+  move_history: string[]; // SAN list
+  full_move_history: string[]; // UCI list
   // Per-move mover ('white'/'black'), parallel to move_history.
   // Present on new backends; absent on old ones and the e2e fixture.
   move_colors?: Color[];
@@ -123,16 +119,16 @@ export interface AccuracyMoveResult {
 
 function parseResult(r: string | null): GameResult {
   if (!r) return null;
-  if (r === '1-0') return 'white_wins';
-  if (r === '0-1') return 'black_wins';
-  return 'draw';
+  if (r === "1-0") return "white_wins";
+  if (r === "0-1") return "black_wins";
+  return "draw";
 }
 
-const INITIAL_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+const INITIAL_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
 export const useGameStore = create<GameState>((set, get) => ({
   fen: INITIAL_FEN,
-  turn: 'white',
+  turn: "white",
   legalMoves: [],
   selectedSquare: null,
   highlightedSquares: [],
@@ -142,9 +138,9 @@ export const useGameStore = create<GameState>((set, get) => ({
   moveHistory: [],
   navIndex: -1,
   fullMoveHistoryUCI: [],
-  mode: 'human_vs_ai',
-  engineType: 'stockfish',
-  humanColor: 'white',
+  mode: "human_vs_ai",
+  engineType: "stockfish",
+  humanColor: "white",
   strength: 7,
   gameResult: null,
   termination: null,
@@ -162,9 +158,9 @@ export const useGameStore = create<GameState>((set, get) => ({
     // backends and producers that omit move_colors (P0-T12 fixture, P1-T01
     // mocks) — never assume the fallback, it mislabels black-open games.
     const history: MoveEntry[] = result.move_history.map((san, i) => ({
-      uci: result.full_move_history[i] ?? '',
+      uci: result.full_move_history[i] ?? "",
       san,
-      color: result.move_colors?.[i] ?? (i % 2 === 0 ? 'white' : 'black'),
+      color: result.move_colors?.[i] ?? (i % 2 === 0 ? "white" : "black"),
     }));
 
     const lastUCI = result.last_move_uci;
@@ -179,7 +175,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       termination: result.termination,
       inCheck: result.in_check,
       lastMoveFrom: lastUCI ? lastUCI.slice(0, 2) : null,
-      lastMoveTo:   lastUCI ? lastUCI.slice(2, 4) : null,
+      lastMoveTo: lastUCI ? lastUCI.slice(2, 4) : null,
       selectedSquare: null,
       highlightedSquares: [],
       pendingPromotion: null,
@@ -207,15 +203,23 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   fetchMentorEval: async (fen) => {
     try {
-      const result = await window.electronAPI.getEval({ fen, use_mentor_eval: true });
-      const data = result as { eval_cp?: number; phase?: number; mg_score?: number; eg_score?: number };
+      const result = await window.electronAPI.getEval({
+        fen,
+        use_mentor_eval: true,
+      });
+      const data = result as {
+        eval_cp?: number;
+        phase?: number;
+      };
       if (data.eval_cp !== undefined) {
         set((s) => ({ analysis: { ...s.analysis, mentorEval: data } }));
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   },
 
-  pushToast: (message, type = 'info') => {
+  pushToast: (message, type = "info") => {
     const id = `toast-${Date.now()}`;
     set((s) => ({ toasts: [...s.toasts, { id, message, type }] }));
     setTimeout(() => get().dismissToast(id), 4000);
@@ -245,7 +249,11 @@ export const useGameStore = create<GameState>((set, get) => ({
         occurrence.set(m.uci, seen + 1);
         const row = byUci.get(`${m.uci}:${seen}`);
         if (!row) return m;
-        return { ...m, cp_loss: row.cp_loss, classification: row.classification };
+        return {
+          ...m,
+          cp_loss: row.cp_loss,
+          classification: row.classification,
+        };
       });
       return { moveHistory };
     }),
@@ -256,7 +264,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   resetGame: () =>
     set({
       fen: INITIAL_FEN,
-      turn: 'white',
+      turn: "white",
       legalMoves: [],
       selectedSquare: null,
       highlightedSquares: [],
