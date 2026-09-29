@@ -536,7 +536,7 @@ meaningless.
   already read them.
 - **Test:** assert the two differ on a middlegame position and both are finite ints.
 
-### P2-T13 — Capture sound fires on nearly every move
+### P2-T13 — Capture sound fires on nearly every move ✅ DONE
 
 **Defect.** `PlayView.tsx:509-511` —
 `oldBoard.replace(/[PNBRQK]/g,'') !== newBoard.replace(/[pnbrqk]/g,'')` strips _white_

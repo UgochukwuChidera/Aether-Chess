@@ -10,11 +10,12 @@
  *
  * Real timers: the loop sleeps 400 ms between plies, so two plies take <1 s.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import { PlayView } from "./PlayView";
 import { useGameStore, type BackendMoveResult } from "../stores/gameStore";
 import { useSettingsStore } from "../stores/settingsStore";
+import { Sound } from "../utils/sound";
 
 const INITIAL_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 const BOOK_PLIES = ["e2e4", "e7e5"];
@@ -585,6 +586,190 @@ describe("P2-T07 in-flight AI cancellation", () => {
       expect(useGameStore.getState().engineBusy).toBe(true);
     } finally {
       rendered.unmount();
+    }
+  }, 15000);
+});
+
+/**
+ * P2-T13: capture sound fires on nearly every move.
+ *
+ * Fail-first contract: commitMove computes
+ * `oldBoard.replace(/[PNBRQK]/g,'') !== newBoard.replace(/[pnbrqk]/g,'')` —
+ * white pieces stripped from the old board, black pieces stripped from the
+ * new one — two non-comparable strings that differ on almost any move, so
+ * Sound.capture fires even for a quiet developing move. All three tests
+ * below drive commitMove through real square clicks on the mounted Board
+ * (human_vs_human, so no AI reply interferes) with Sound.move/capture
+ * spied (no-op implementations — the real ones need AudioContext, which
+ * jsdom lacks). The quiet-move and promotion silence assertions FAIL on
+ * the pre-fix code; the real-capture assertion guards against
+ * over-silencing (it passes both before and after).
+ */
+const E2E4_NEW_FEN =
+  "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1";
+const E4D5_OLD_FEN =
+  "rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2";
+const E4D5_NEW_FEN =
+  "rnbqkbnr/ppp1pppp/8/3P4/8/8/PPPP1PPP/RNBQKBNR b KQkq - 0 2";
+const PROMO_OLD_FEN = "k7/4P3/8/8/8/8/8/4K3 w - - 0 1";
+const PROMO_NEW_FEN = "k3Q3/8/8/8/8/8/8/4K3 b - - 0 1";
+
+interface BoardGameHarness {
+  rendered: { container: HTMLElement; unmount: () => void };
+  moveSpy: { mockRestore: () => void };
+  captureSpy: { mockRestore: () => void };
+  cleanup: () => void;
+}
+
+async function renderBoardGame(opts: {
+  oldFen: string;
+  newFen: string;
+  newHistory: string[];
+  legalMoves: string[];
+  autoQueen?: boolean;
+}): Promise<BoardGameHarness> {
+  const backend = createFakeBackend();
+  let newGameDone = false;
+  backend.api.newGame = async () => {
+    const r = moveResult(INITIAL_FEN, [], false);
+    newGameDone = true;
+    return r;
+  };
+  backend.api.makeMove = async () =>
+    moveResult(opts.newFen, opts.newHistory, false);
+  window.electronAPI = backend.api as unknown as Window["electronAPI"];
+
+  useGameStore.getState().resetGame();
+  useGameStore.setState({
+    mode: "human_vs_human",
+    humanColor: "white",
+    flipped: false,
+    engineBusy: false,
+    toasts: [],
+  });
+  useSettingsStore.setState({
+    loaded: true,
+    useOpeningBook: false,
+    showEvalBar: false,
+    soundEnabled: true,
+    autoSaveGameHistory: false,
+    autoQueen: opts.autoQueen ?? false,
+    playEngine: "stockfish",
+    botStrength: 5,
+    thinkProfile: "rapid",
+    timeControl: { seconds: 0, increment: 0, label: "Unlimited" },
+  });
+
+  const moveSpy = vi.spyOn(Sound, "move").mockImplementation(() => undefined);
+  const captureSpy = vi
+    .spyOn(Sound, "capture")
+    .mockImplementation(() => undefined);
+  const rendered = render(<PlayView onTabChange={() => undefined} />);
+  // Mount effect starts a game async; wait until it settles so the preset
+  // below cannot be clobbered by its resetGame.
+  await waitFor(
+    () => {
+      expect(newGameDone).toBe(true);
+    },
+    { timeout: 4000, interval: 50 },
+  );
+  act(() => {
+    useGameStore.setState({
+      fen: opts.oldFen,
+      turn: "white",
+      legalMoves: opts.legalMoves,
+    });
+  });
+  return {
+    rendered,
+    moveSpy,
+    captureSpy,
+    cleanup: () => {
+      moveSpy.mockRestore();
+      captureSpy.mockRestore();
+      rendered.unmount();
+    },
+  };
+}
+
+function clickSquare(container: HTMLElement, sq: string): void {
+  const el = container.querySelector(`[data-sq="${sq}"]`);
+  if (!el) throw new Error(`square ${sq} not rendered (Board missing?)`);
+  fireEvent.click(el);
+}
+
+describe("P2-T13 capture-sound condition", () => {
+  it("quiet developing move e2e4: move sound yes, capture sound NO", async () => {
+    const h = await renderBoardGame({
+      oldFen: INITIAL_FEN,
+      newFen: E2E4_NEW_FEN,
+      newHistory: ["e2e4"],
+      legalMoves: ["e2e4"],
+    });
+    try {
+      clickSquare(h.rendered.container, "e2");
+      clickSquare(h.rendered.container, "e4");
+      await waitFor(
+        () => {
+          expect(h.moveSpy).toHaveBeenCalledTimes(1);
+        },
+        { timeout: 4000, interval: 50 },
+      );
+      // The buggy strip-compare reports a capture here (white-stripped old
+      // vs black-stripped new always differ) — this line fails pre-fix.
+      expect(h.captureSpy).not.toHaveBeenCalled();
+      expect(useGameStore.getState().fen).toBe(E2E4_NEW_FEN);
+    } finally {
+      h.cleanup();
+    }
+  }, 15000);
+
+  it("real capture e4d5: capture sound yes", async () => {
+    const h = await renderBoardGame({
+      oldFen: E4D5_OLD_FEN,
+      newFen: E4D5_NEW_FEN,
+      newHistory: ["e4d5"],
+      legalMoves: ["e4d5"],
+    });
+    try {
+      clickSquare(h.rendered.container, "e4");
+      clickSquare(h.rendered.container, "d5");
+      await waitFor(
+        () => {
+          expect(h.moveSpy).toHaveBeenCalledTimes(1);
+        },
+        { timeout: 4000, interval: 50 },
+      );
+      expect(h.captureSpy).toHaveBeenCalledTimes(1);
+      expect(useGameStore.getState().fen).toBe(E4D5_NEW_FEN);
+    } finally {
+      h.cleanup();
+    }
+  }, 15000);
+
+  it("promotion without capture e7e8: move sound yes, capture sound NO", async () => {
+    const h = await renderBoardGame({
+      oldFen: PROMO_OLD_FEN,
+      newFen: PROMO_NEW_FEN,
+      newHistory: ["e7e8q"],
+      legalMoves: ["e7e8q"],
+      autoQueen: true,
+    });
+    try {
+      clickSquare(h.rendered.container, "e7");
+      clickSquare(h.rendered.container, "e8");
+      await waitFor(
+        () => {
+          expect(h.moveSpy).toHaveBeenCalledTimes(1);
+        },
+        { timeout: 4000, interval: 50 },
+      );
+      // Pawn becomes queen: total piece count unchanged, so no capture.
+      // The buggy strip-compare fires here too — fails pre-fix.
+      expect(h.captureSpy).not.toHaveBeenCalled();
+      expect(useGameStore.getState().fen).toBe(PROMO_NEW_FEN);
+    } finally {
+      h.cleanup();
     }
   }, 15000);
 });

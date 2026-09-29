@@ -548,10 +548,17 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
       // position owns the store now; discard silently without touching busy.
       if (commitGen !== gameGenerationRef.current) return;
       
-      // Determine if this was a capture for sound
+      // P2-T13: a capture removes a piece, so the total piece-letter count
+      // drops. Count both boards with the SAME class (the old code stripped
+      // white from old and black from new — non-comparable strings that
+      // differ on nearly every move). Unchanged counts stay silent:
+      // promotions swap one piece for another, castles move two pieces.
+      // En passant still reports (the taken pawn leaves the count).
       const oldBoard = oldFen.split(' ')[0];
       const newBoard = result.fen.split(' ')[0];
-      const isCapture = oldBoard.replace(/[PNBRQK]/g, '') !== newBoard.replace(/[pnbrqk]/g, '');
+      const countPieces = (board: string): number =>
+        (board.match(/[pnbrqkPNBRQK]/g) ?? []).length;
+      const isCapture = countPieces(newBoard) < countPieces(oldBoard);
       
       store.applyMoveResult(result);
       Sound.move();
