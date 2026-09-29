@@ -547,7 +547,7 @@ non-comparable strings.
   whether the destination square was occupied.
 - **Test:** a non-capturing move produces no capture sound; an actual capture does.
 
-### P2-T14 — Packaged app ships all devDependencies
+### P2-T14 — Packaged app ships all devDependencies ✅ DONE
 
 **Defect.** `build/electron-builder.yml:9-13` — an explicit `node_modules/**/*` glob
 replaces electron-builder's production-dependency filter, so `@playwright/test` (and its
@@ -556,6 +556,12 @@ into the distributed app.
 
 - **Change:** drop the line so electron-builder prunes, or list production deps explicitly.
 - **Test:** build a package and assert the asar contents contain no devDependency.
+- **Verification (2026-09-29):** defect did NOT reproduce on electron-builder 24.13.3 —
+  the pre-change `--linux --dir` package already contained zero devDependencies
+  (production collector prunes regardless of the glob; see `builder-debug.yml`
+  `nodeModuleFilePatterns`). The glob was dropped anyway as a footgun (one-line
+  removal); pre/post asar file sets are byte-identical (1044 entries, 9.8 MB),
+  prod deps present (react, zustand, python-shell, electron-updater). Full gate green.
 
 ### P2-T15 — Packaged backend built from unpinned dependencies
 
