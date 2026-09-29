@@ -448,7 +448,7 @@ any script in the renderer can call it.
 - **Test:** unit-test both handlers with rejected inputs.
 - **Done when:** this is fixed on its own merits regardless of the other work.
 
-### P2-T07 — In-flight AI moves are never cancelled
+### P2-T07 — In-flight AI moves are never cancelled ✅ DONE
 
 **Defect.** `PlayView.tsx` — `makeAiMove` promises from `commitMove` (`:521`) and
 `handleNewGame` (`:488`) are not tracked, so `aiLoopRef` (which only governs the AI-vs-AI

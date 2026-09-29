@@ -11,7 +11,7 @@
  * Real timers: the loop sleeps 400 ms between plies, so two plies take <1 s.
  */
 import { describe, expect, it } from "vitest";
-import { act, render, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import { PlayView } from "./PlayView";
 import { useGameStore, type BackendMoveResult } from "../stores/gameStore";
 import { useSettingsStore } from "../stores/settingsStore";
@@ -367,6 +367,224 @@ describe("P2-T02 eval-bar analysis listener", () => {
       expect(useGameStore.getState().analysis.pvs).toHaveLength(1);
     } finally {
       unmount();
+    }
+  }, 15000);
+});
+
+/**
+ * P2-T07: in-flight AI moves are never cancelled.
+ *
+ * Fail-first contract: makeAiMove promises from commitMove/handleNewGame are
+ * untracked (aiLoopRef governs only the AI-vs-AI loop), so superseding the
+ * position while the engine thinks lets a late applyMoveResult write the
+ * PREVIOUS position over the new one. Both tests drive a DEFERRED engine
+ * promise, supersede it, then resolve and assert the store is unchanged by
+ * the late result. On pre-fix code the late apply lands and both fail.
+ *
+ * Guard semantics (cancel-and-undo, not refuse): handleUndo PROCEEDS while
+ * engineBusy. The Undo button is already disabled mid-think, and Ctrl+Z has
+ * always issued undo from the keyboard — refusing in the handler would
+ * remove working UX. The guard is the generation bump: the pending reply is
+ * cancelled (its late result is discarded and its stale finally skips
+ * clearing busy), and undo takes ownership of the busy flag. Test A asserts
+ * undoMove was issued while busy was true.
+ *
+ * jsdom note: the board never mounts here (the ResizeObserver stub never
+ * fires, so boardSize stays 0 and Board is gated off), therefore
+ * square-click commitMove is undrivable. Both tests launch the AI via the
+ * New Game button (Play as black), which fires the IDENTICAL untracked
+ * makeAiMove + .finally(clear) shape the item names at handleNewGame;
+ * commitMove's call site gets the same scoped edit by construction
+ * (the generation mechanism is caller-agnostic).
+ */
+const FEN_AFTER_E2E4 =
+  "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1";
+const FEN_AFTER_E7E5 =
+  "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 1";
+
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise<void>((r) => setTimeout(r, ms));
+}
+
+function createP2T07Backend() {
+  const base = createFakeBackend();
+  const newGameCalls: unknown[] = [];
+  const aiReplyMoves: string[] = [];
+  const undoCalls: unknown[] = [];
+  const engineQueue: Array<{
+    promise: Promise<{ move: string | null }>;
+    resolve: (value: { move: string | null }) => void;
+  }> = [];
+  base.api.newGame = async (params?: Record<string, unknown>) => {
+    newGameCalls.push(params);
+    return moveResult(INITIAL_FEN, [], false);
+  };
+  base.api.makeMove = async (params: { move: string }) => {
+    // The black-game human never moves, so the ONLY reply the AI path may
+    // legitimately issue is e7e5. Track it separately: any entry here after
+    // supersede is the stale-overwrite defect.
+    if (params.move === "e7e5") {
+      aiReplyMoves.push(params.move);
+      return moveResult(FEN_AFTER_E7E5, ["e2e4", "e7e5"], false);
+    }
+    return moveResult(FEN_AFTER_E2E4, ["e2e4"], false);
+  };
+  base.api.getEngineMove = async () => {
+    const d = deferred<{ move: string | null }>();
+    engineQueue.push(d);
+    return d.promise;
+  };
+  base.api.getLegalMoves = async () => ({
+    moves: [{ uci: "e7e5" }, { uci: "e2e4" }, { uci: "g1f3" }],
+  });
+  base.api.undoMove = async () => {
+    undoCalls.push("undo");
+    return moveResult(INITIAL_FEN, [], false);
+  };
+  return { api: base.api, newGameCalls, aiReplyMoves, undoCalls, engineQueue };
+}
+
+function resetStoresHumanVsAi(): void {
+  useGameStore.getState().resetGame();
+  useGameStore.setState({
+    mode: "human_vs_ai",
+    humanColor: "white",
+    flipped: false,
+    engineBusy: false,
+    toasts: [],
+  });
+  useSettingsStore.setState({
+    loaded: true, // post-load state: the mount game starts immediately
+    useOpeningBook: false, // force the deferred engine path, not the book path
+    openingBookDepth: 20,
+    showEvalBar: false,
+    soundEnabled: false,
+    autoSaveGameHistory: false,
+    playEngine: "stockfish",
+    botStrength: 5,
+    thinkProfile: "rapid",
+    timeControl: { seconds: 0, increment: 0, label: "Unlimited" },
+  });
+}
+
+describe("P2-T07 in-flight AI cancellation", () => {
+  it("undo-while-thinking cancels the pending reply: late result discarded, undo issued", async () => {
+    const backend = createP2T07Backend();
+    window.electronAPI = backend.api as unknown as Window["electronAPI"];
+    resetStoresHumanVsAi();
+    const rendered = render(<PlayView onTabChange={() => undefined} />);
+    try {
+      await waitFor(
+        () => {
+          expect(backend.newGameCalls.length).toBe(1);
+        },
+        { timeout: 4000, interval: 50 },
+      );
+      // Launch the deferred AI reply via New Game (Play as black: white AI moves first).
+      const selects = rendered.container.querySelectorAll("select");
+      expect(selects.length).toBeGreaterThanOrEqual(2);
+      const colorSelect = selects[1];
+      if (!colorSelect) throw new Error("Play-as select not rendered");
+      fireEvent.change(colorSelect, { target: { value: "black" } });
+      fireEvent.click(rendered.getByRole("button", { name: "New Game" }));
+      await waitFor(
+        () => {
+          expect(backend.newGameCalls.length).toBe(2);
+          expect(backend.engineQueue.length).toBe(1);
+          expect(useGameStore.getState().engineBusy).toBe(true);
+        },
+        { timeout: 4000, interval: 50 },
+      );
+      expect(useGameStore.getState().fen).toBe(INITIAL_FEN);
+
+      // Ctrl+Z while busy: cancel-and-undo issues undoMove DESPITE busy.
+      expect(useGameStore.getState().engineBusy).toBe(true);
+      fireEvent.keyDown(document, { key: "z", ctrlKey: true });
+      await waitFor(
+        () => {
+          expect(backend.undoCalls.length).toBe(1);
+        },
+        { timeout: 4000, interval: 50 },
+      );
+      expect(useGameStore.getState().fen).toBe(INITIAL_FEN);
+      expect(useGameStore.getState().fullMoveHistoryUCI).toEqual([]);
+      expect(useGameStore.getState().engineBusy).toBe(false);
+
+      // Resolve the superseded reply: stale means neither apply nor throw.
+      const staleReply = backend.engineQueue[0];
+      if (!staleReply) throw new Error("deferred engine reply missing");
+      await act(async () => {
+        staleReply.resolve({ move: "e7e5" });
+        await sleep(100);
+      });
+      expect(backend.aiReplyMoves).toEqual([]);
+      expect(useGameStore.getState().fen).toBe(INITIAL_FEN);
+      expect(useGameStore.getState().fullMoveHistoryUCI).toEqual([]);
+      expect(useGameStore.getState().engineBusy).toBe(false);
+    } finally {
+      rendered.unmount();
+    }
+  }, 15000);
+
+  it("stale AI completion neither applies nor clears the new game busy flag", async () => {
+    const backend = createP2T07Backend();
+    window.electronAPI = backend.api as unknown as Window["electronAPI"];
+    resetStoresHumanVsAi();
+    const rendered = render(<PlayView onTabChange={() => undefined} />);
+    try {
+      await waitFor(
+        () => {
+          expect(backend.newGameCalls.length).toBe(1);
+        },
+        { timeout: 4000, interval: 50 },
+      );
+      const selects = rendered.container.querySelectorAll("select");
+      expect(selects.length).toBeGreaterThanOrEqual(2);
+      const colorSelect = selects[1];
+      if (!colorSelect) throw new Error("Play-as select not rendered");
+      fireEvent.change(colorSelect, { target: { value: "black" } });
+      fireEvent.click(rendered.getByRole("button", { name: "New Game" }));
+      await waitFor(
+        () => {
+          expect(backend.newGameCalls.length).toBe(2);
+          expect(backend.engineQueue.length).toBe(1);
+          expect(useGameStore.getState().engineBusy).toBe(true);
+        },
+        { timeout: 4000, interval: 50 },
+      );
+
+      // Supersede with a second black game: AI#2 now owns busy under the new generation.
+      fireEvent.click(rendered.getByRole("button", { name: "New Game" }));
+      await waitFor(
+        () => {
+          expect(backend.newGameCalls.length).toBe(3);
+          expect(backend.engineQueue.length).toBe(2);
+          expect(useGameStore.getState().engineBusy).toBe(true);
+        },
+        { timeout: 4000, interval: 50 },
+      );
+
+      // Resolve the STALE first reply: discarded, and the new flag survives.
+      const staleReply = backend.engineQueue[0];
+      if (!staleReply) throw new Error("deferred engine reply missing");
+      await act(async () => {
+        staleReply.resolve({ move: "e7e5" });
+        await sleep(100);
+      });
+      expect(backend.aiReplyMoves).toEqual([]);
+      expect(useGameStore.getState().fen).toBe(INITIAL_FEN);
+      expect(useGameStore.getState().fullMoveHistoryUCI).toEqual([]);
+      expect(useGameStore.getState().engineBusy).toBe(true);
+    } finally {
+      rendered.unmount();
     }
   }, 15000);
 });

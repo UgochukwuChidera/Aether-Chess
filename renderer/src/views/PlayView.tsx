@@ -99,6 +99,11 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
   // ── AI vs AI loop control ─────────────────────────────────────────────────
   const aiLoopRef = useRef(false);
 
+  // P2-T07: monotonic game generation. Bumped on every superseding action
+  // (new game, undo, navigate); in-flight AI work captures it on entry and
+  // discards its result when it no longer matches. Refs need no effect deps.
+  const gameGenerationRef = useRef(0);
+
   // ── Analysis debounce ─────────────────────────────────────────────────────
   const analysisDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -306,11 +311,14 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
     const timeRemaining = isWhiteTurn ? whiteTime : blackTime;
     const totalMoves = gs.fullMoveHistoryUCI.length;
     const requestedEngine = cfg.playEngine;
+    // P2-T07: captured on entry; a superseded call discards its result.
+    const gen = gameGenerationRef.current;
 
     // Single state owner for every AI move: play through the backend, then
     // apply the result to the store exactly once. All four paths below use it.
-    const playAndApply = async (uci: string): Promise<BackendMoveResult> => {
+    const playAndApply = async (uci: string): Promise<BackendMoveResult | null> => {
       const r = await window.electronAPI.makeMove({ move: uci }) as BackendMoveResult;
+      if (gen !== gameGenerationRef.current) return null;
       useGameStore.getState().applyMoveResult(r);
       return r;
     };
@@ -401,6 +409,10 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
     return null;
   }
 
+  // P2-T07: superseded while thinking (new game / undo / navigate) — stay
+  // silent instead of toasting or falling back onto the new position.
+  if (gen !== gameGenerationRef.current) return null;
+
   if (!reply || !reply.move) {
     console.warn('[AI] No move returned, using fallback');
     const toast = useGameStore.getState().pushToast;
@@ -438,6 +450,7 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
       const s = useGameStore.getState();
       if (s.gameResult) { aiLoopRef.current = false; break; }
 
+      const iterGen = gameGenerationRef.current;
       useGameStore.getState().setEngineBusy(true);
       try {
         const result = await makeAiMove(s.fen);
@@ -446,7 +459,8 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
         aiLoopRef.current = false;
         break;
       } finally {
-        useGameStore.getState().setEngineBusy(false);
+        // P2-T07: a superseded loop must not clear the new owner's busy flag.
+        if (iterGen === gameGenerationRef.current) useGameStore.getState().setEngineBusy(false);
       }
 
       if (aiLoopRef.current) await new Promise<void>((r) => setTimeout(r, 400));
@@ -456,6 +470,8 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
   const handleNewGame = async () => {
     // Stop any running AI loop / analysis before resetting
     aiLoopRef.current = false;
+    // P2-T07: cancel any in-flight AI work from the previous game.
+    gameGenerationRef.current += 1;
     autoSaveRef.current = false;
     if (analysisDebounceRef.current) {
       clearTimeout(analysisDebounceRef.current);
@@ -469,6 +485,7 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
     // Apply mode/color to store before the backend call so resetGame won't clobber them
     useGameStore.setState({ mode: setupMode, humanColor: resolvedColor });
 
+    const newGameGen = gameGenerationRef.current;
     try {
       const result = await window.electronAPI.newGame({
         mode: setupMode,
@@ -485,6 +502,9 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
         hash_mb: settings.hashMb,
         multipv: settings.multipv,
       }) as BackendMoveResult;
+
+      // P2-T07: a second New Game superseded this one mid-flight — stay silent.
+      if (newGameGen !== gameGenerationRef.current) return;
 
       store.resetGame();
       // resetGame doesn't touch mode/humanColor; re-assert to be explicit
@@ -507,10 +527,12 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
         // Show board immediately by firing AI async so UI stays responsive.
         store.setEngineBusy(true);
         makeAiMove(result.fen).finally(() => {
-          store.setEngineBusy(false);
+          // P2-T07: only the owning generation clears busy.
+          if (newGameGen === gameGenerationRef.current) store.setEngineBusy(false);
         });
       }
     } catch (err) {
+      if (newGameGen !== gameGenerationRef.current) return;
       store.pushToast(`Failed to start game: ${err}`, 'error');
     }
   };
@@ -519,8 +541,12 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
     const oldFen = store.fen;
     store.selectSquare(null);
     store.setEngineBusy(true);
+    const commitGen = gameGenerationRef.current;
     try {
       const result = await window.electronAPI.makeMove({ move: moveUCI }) as BackendMoveResult;
+      // P2-T07: superseded mid-flight (new game / undo / navigate) — the new
+      // position owns the store now; discard silently without touching busy.
+      if (commitGen !== gameGenerationRef.current) return;
       
       // Determine if this was a capture for sound
       const oldBoard = oldFen.split(' ')[0];
@@ -536,12 +562,13 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
       // In Human vs AI, trigger the engine reply asynchronously so UI shows human move immediately
       if (!result.game_over && useGameStore.getState().mode === 'human_vs_ai') {
         makeAiMove(result.fen).finally(() => {
-          store.setEngineBusy(false);
+          if (commitGen === gameGenerationRef.current) store.setEngineBusy(false);
         });
-      } else {
+      } else if (commitGen === gameGenerationRef.current) {
         store.setEngineBusy(false);
       }
     } catch (err) {
+      if (commitGen !== gameGenerationRef.current) return;
       Sound.illegal();
       store.pushToast(`Move error: ${err}`, 'error');
       store.setEngineBusy(false);
@@ -609,20 +636,41 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
     await commitMove(from + to);
   };
 
+  // P2-T07: undo cancels any in-flight AI reply (generation bump) and takes
+  // ownership of the busy flag — cancel-and-undo, not refuse. The Undo button
+  // is already disabled mid-think and Ctrl+Z has always issued undo, so
+  // refusing here would remove working UX. Late replies discard via the
+  // generation check in playAndApply.
   const handleUndo = async () => {
+    gameGenerationRef.current += 1;
+    const undoGen = gameGenerationRef.current;
+    const gs = useGameStore.getState();
     try {
       const result = await window.electronAPI.undoMove() as BackendMoveResult;
-      store.applyMoveResult(result);
+      if (undoGen !== gameGenerationRef.current) return;
+      gs.applyMoveResult(result);
     } catch (err) {
-      store.pushToast(`Undo failed: ${err}`, 'error');
+      if (undoGen !== gameGenerationRef.current) return;
+      gs.pushToast(`Undo failed: ${err}`, 'error');
+    } finally {
+      if (undoGen === gameGenerationRef.current) gs.setEngineBusy(false);
     }
   };
 
   const handleNavigate = useCallback(async (index: number) => {
+    // P2-T07: navigating supersedes any in-flight AI reply; rapid repeats
+    // resolve latest-wins via the same check.
+    gameGenerationRef.current += 1;
+    const navGen = gameGenerationRef.current;
     try {
       const result = await window.electronAPI.navigateToMove({ index }) as BackendMoveResult;
+      if (navGen !== gameGenerationRef.current) return;
       useGameStore.getState().applyMoveResult(result);
-    } catch {/* ignore */}
+    } catch {/* ignore */} finally {
+      // No AI work survives the bump, so the owner releases busy; a
+      // superseding navigation owns it instead. Never leaves busy stuck.
+      if (navGen === gameGenerationRef.current) useGameStore.getState().setEngineBusy(false);
+    }
   }, []);
 
   // ── Navigation helpers (used by both buttons and keyboard) ────────────────
