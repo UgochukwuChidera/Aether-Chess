@@ -17,6 +17,7 @@ from aether_chess.bots.base import (
     BotMove,
     BotUnavailableError,
     MoveRequest,
+    clamp_time_limit,
     normalize_move,
 )
 from aether_chess.engines.maia3_proxy import Maia3Proxy, Maia3UnavailableError
@@ -54,6 +55,10 @@ class Maia3Bot(Bot):
 
     def play(self, request: MoveRequest) -> BotMove:
         board = request.board()
+        # The manager resolves one aligned budget per move; read it here like
+        # every other bot (mentor_bot, stockfish_bot) so Maia3 is comparable
+        # in timed play instead of silently advantaged.
+        time_limit = clamp_time_limit(request.time_limit_sec)
         started = time.time()
         try:
             raw = self._proxy.play(
@@ -68,6 +73,7 @@ class Maia3Bot(Bot):
                 think_profile=request.think_profile,
                 time_remaining=request.time_remaining,
                 time_increment=request.time_increment,
+                time_limit_sec=time_limit,
             )
         except Maia3UnavailableError as exc:
             raise BotUnavailableError(str(exc)) from exc

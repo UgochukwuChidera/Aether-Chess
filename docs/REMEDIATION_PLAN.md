@@ -484,7 +484,7 @@ then corrupts the per-side accuracy averages in `AnalysisPanel.tsx:62-70`.
   recomputing it in the client.
 - **Test:** load a black-to-move FEN; assert the first move is labelled black.
 
-### P2-T10 — Maia3 ignores its time budget
+### P2-T10 — Maia3 ignores its time budget ✅ DONE
 
 **Defect.** `aether_chess/bots/maia3_bot.py:55-85` never reads
 `request.time_limit_sec`, while every other bot clamps it. `aether_chess/engines/maia3_proxy.py:183`

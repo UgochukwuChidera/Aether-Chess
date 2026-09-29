@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+import concurrent.futures
 import contextlib
 import io
 import os
 import sys
-import time
 from dataclasses import dataclass
 from typing import Optional
 
@@ -36,9 +36,41 @@ class Maia3Request:
 class Maia3Proxy:
     """Run Maia3 inference while suppressing stdout noise."""
 
-    def __init__(self) -> None:
+    def __init__(self, ping_timeout: float = 300.0) -> None:
         self._engine = None
         self._engine_key: Optional[tuple] = None
+        self._ping_timeout = ping_timeout
+        self._ping_pool = self._new_ping_pool()
+
+    @staticmethod
+    def _new_ping_pool() -> concurrent.futures.ThreadPoolExecutor:
+        # One persistent worker: ping is rare and serial, so a pool of one
+        # bounds thread use without a per-call executor whose __exit__ would
+        # join (and hang) on a stuck ping.
+        return concurrent.futures.ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="maia3-ping"
+        )
+
+    def _ping_with_timeout(self, engine) -> None:
+        """Ping the engine, raising if it does not answer within ping_timeout.
+
+        Runs on the persistent pool so a hung ping raises on time instead of
+        hanging the caller: the old per-call ``with ThreadPoolExecutor`` joined
+        on exit and blocked regardless of the future timeout. On failure the
+        worker is abandoned without waiting and replaced, so the proxy stays
+        reusable and no thread accumulates per retry.
+        """
+        future = self._ping_pool.submit(engine.ping)
+        try:
+            future.result(timeout=self._ping_timeout)
+        except Exception:
+            # Never wait for the stuck worker — waiting is exactly what made
+            # the old hang-guard useless. The hung thread exits on its own (it
+            # is a ping, not a join), so thread count stays flat across
+            # retries while the next ping gets a fresh worker.
+            self._ping_pool.shutdown(wait=False, cancel_futures=True)
+            self._ping_pool = self._new_ping_pool()
+            raise
 
     def is_available(self, maia3_path: Optional[str] = None) -> bool:
         """Cheap check that Maia3 *could* run. Never loads the model.
@@ -69,6 +101,13 @@ class Maia3Proxy:
                 pass
             self._engine = None
             self._engine_key = None
+        # Never block shutdown on a stuck ping worker: abandon without
+        # waiting, then hand any future use a fresh pool.
+        try:
+            self._ping_pool.shutdown(wait=False, cancel_futures=True)
+        except Exception:
+            pass
+        self._ping_pool = self._new_ping_pool()
 
     def _ensure_engine(self, req: Maia3Request):
         key = (
@@ -116,14 +155,11 @@ class Maia3Proxy:
             cmd += ["--elo", str(req.elo)]
             self._engine = chess.engine.SimpleEngine.popen_uci(cmd, timeout=120)
             # Force model loading now (sends isready, engine loads model).
-            # Use a thread with timeout so a hanging model download doesn't
-            # freeze the backend forever. Failure here means a clear error
-            # instead of a silent crash during play().
-            import concurrent.futures
-
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                fut = pool.submit(self._engine.ping)
-                fut.result(timeout=300.0)
+            # Use the persistent pool with a timeout so a hanging model
+            # download raises instead of freezing the backend forever.
+            # Failure here means a clear error instead of a silent crash
+            # during play().
+            self._ping_with_timeout(self._engine)
             self._engine_key = key
             return self._engine
         except Exception as exc:
@@ -150,7 +186,12 @@ class Maia3Proxy:
         think_profile: str = "human_like",
         time_remaining: float | None = None,
         time_increment: float | None = None,
+        time_limit_sec: float | None = None,
     ) -> dict:
+        # Late import: aether_chess.bots.maia3_bot imports this module, so a
+        # top-level import would cycle back through aether_chess.bots/__init__.
+        from aether_chess.bots.base import clamp_time_limit
+
         if temperature is None:
             if elo >= 2200:
                 temperature = 0.0
@@ -180,9 +221,20 @@ class Maia3Proxy:
         )
         engine = self._ensure_engine(req)
         board = chess.Board(fen)
-        limit = chess.engine.Limit(time=0.1)
+        # Single budget source: the manager resolves one aligned budget per
+        # move (resolve_budget -> request.time_limit_sec) and the bot forwards
+        # it here. The profile sample only sets the human-like pace; the
+        # caller's budget always wins (clamp, not replace), sampled once —
+        # never an independent post-play resample-and-sleep that blows past it.
+        budget = clamp_time_limit(time_limit_sec)
+        sampled = sample_think_time(
+            get_profile(think_profile),
+            board=board,
+            time_remaining=time_remaining,
+            time_increment=time_increment,
+        )
+        limit = chess.engine.Limit(time=min(sampled, budget))
 
-        t0 = time.perf_counter()
         try:
             with contextlib.redirect_stdout(io.StringIO()):
                 result = engine.play(board, limit)
@@ -201,17 +253,6 @@ class Maia3Proxy:
                     f"Maia3 failed to start (torch DLL error). Reinstall CPU-only torch in the venv. [{exc}]"
                 ) from exc
             raise Maia3UnavailableError(f"[{type(exc).__name__}] {exc}") from exc
-        elapsed = time.perf_counter() - t0
-
-        target = sample_think_time(
-            get_profile(think_profile),
-            board=board,
-            time_remaining=time_remaining,
-            time_increment=time_increment,
-        )
-        remaining = target - elapsed
-        if remaining > 0:
-            time.sleep(remaining)
 
         if result and result.move:
             san = board.san(result.move)
