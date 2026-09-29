@@ -688,6 +688,24 @@ Note (no item): classical's "5–120s typical" doc vs the 5.0s ceiling is GLOBAL
 (`clamp_time_limit` caps every bot) and the ceiling serves comparability — doc
 describes pre-clamp buckets. Product copy, out of this track.
 
+### P2-T24 — Classical think profile collapses to a constant 5s
+
+Conceded on challenge: raw classical samples measure 9–35s (mean ~22s), so the
+global 5.0s ceiling (`clamp_time_limit`) clips EVERY classical roll — classical
+is 5.00s flat, zero variability, and the profile's stated purpose (variability,
+thought-ish pacing per profile) is defeated for the whole top tier, all bots.
+Blitz varies (~1–5s); classical is a constant. Not Maia-specific.
+
+- **Change:** rescale the classical bucket in `think_profile.py` so its sampled
+  range varies _within_ the ceiling (e.g. shaping that lands 2–5s instead of
+  9–35s-clipped-to-5), or otherwise restore variance without touching the
+  global ceiling (the ceiling stays — it serves comparability). Product decision
+  recorded here: variability within budget, not longer budgets.
+- **Test:** sample classical N times → assert variance (not constant) and every
+  sample within budget/ceiling.
+- **Done when:** classical elapsed varies run to run while never exceeding the
+  aligned budget.
+
 ---
 
 # Phase 3 — Structural
