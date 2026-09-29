@@ -585,7 +585,7 @@ validated (python-chess is verified at 1.11.2 locally).
   gate green (python 146 OK, ruff clean, pyright 0, lint 0 errors, build
   exit 0). Staged: script + this mark only; `backend-dist/` stays ignored.
 
-### P2-T16 — Board file labels are mirrored when flipped
+### P2-T16 — Board file labels are mirrored when flipped ✅ DONE
 
 **Defect.** `renderer/src/components/Board.tsx:126` — `const fileLabel = 'abcdefgh'[file]`
 uses the grid index, ignoring the 180° mapping. `displayFile` / `displayRank` (`:95-102`)
@@ -595,6 +595,14 @@ file label is not. Playing as Black — the default `handleNewGame` sets via
 
 - **Change:** `'abcdefgh'[displayFile]`.
 - **Test:** assert the top-left file label is `a` unflipped and `h` flipped.
+- **Verification (2026-09-29):** test-first `renderer/src/components/Board.test.tsx`
+  (new, Board mounted directly — no PlayView `boardSize` gate): unflipped top-left
+  `a8` / file label `a` passes pre-fix; flipped top-left `h1` reads `a` pre-fix
+  (recorded FAIL) and `h` post-fix. One-expression change at `:126`, nothing else
+  in `Board.tsx`. Reading note: the item's "`rankLabel` right by coincidence" does
+  not hold — `:127` `String(8 - rank)` uses the grid rank where the displayed square
+  needs `8 - displayRank` (e.g. flipped top row labels `8` on rank-`1` squares);
+  left untouched per the one-expression rule, flagged as follow-up. Full gate green.
 
 ### P2-T17 — Canvas overlay not redrawn on flip
 
