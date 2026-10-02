@@ -272,7 +272,11 @@ def normalize_move(
             eval_cp, score_is_mate, mate_in = normalize_score(
                 raw_score, board.turn if board else None
             )
-            is_mate = is_mate or score_is_mate
+            # A present score is authoritative (P2-T19): a numeric score clears
+            # a stale is_mate flag — otherwise a position reports "mate in N"
+            # with a centipawn value and no N — while a mate score sets it.
+            # A flag-only dict (no score key) keeps its flag.
+            is_mate = score_is_mate
         depth_raw = raw.get("depth")
         if isinstance(depth_raw, (int, float)) and not isinstance(depth_raw, bool):
             depth = int(depth_raw)

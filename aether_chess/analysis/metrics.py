@@ -6,7 +6,11 @@ from typing import Iterable, List, Tuple
 
 
 def cp_to_win_pct(cp: float) -> float:
-    return 100.0 / (1.0 + math.exp(-cp / 120.0))
+    # P2-T19: clamp the exponent — very negative mate-mapped scores
+    # (e.g. -100000) overflow math.exp. Same +-60 clamp style as
+    # estimate_bayesian_elo below.
+    x = max(-60.0, min(60.0, -cp / 120.0))
+    return 100.0 / (1.0 + math.exp(x))
 
 
 def classify_move(cp_loss: float, is_book: bool = False) -> str:

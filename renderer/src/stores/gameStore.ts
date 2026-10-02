@@ -220,7 +220,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   pushToast: (message, type = "info") => {
-    const id = `toast-${Date.now()}`;
+    const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     set((s) => ({ toasts: [...s.toasts, { id, message, type }] }));
     setTimeout(() => get().dismissToast(id), 4000);
   },

@@ -285,6 +285,38 @@ class TestScoreNormalization(unittest.TestCase):
         )
         self.assertEqual(result.eval_cp, 12)
 
+    def test_numeric_score_clears_stale_mate_flag(self):
+        """P2-T19(a): a numeric score overwrote the value while is_mate stayed
+        True, reporting "mate in N" with a centipawn score and no N."""
+        result = normalize_move(
+            {"move": "e2e4", "is_mate": True, "eval_cp": 35},
+            bot_id="b",
+            board=chess.Board(),
+        )
+        self.assertEqual(result.eval_cp, 35)
+        self.assertFalse(result.is_mate)
+        self.assertIsNone(result.mate_in)
+
+    def test_mate_score_sets_mate_flag_with_number(self):
+        result = normalize_move(
+            {"move": "e2e4", "eval_cp": chess.engine.Mate(3)},
+            bot_id="b",
+            board=chess.Board(),
+        )
+        self.assertTrue(result.is_mate)
+        self.assertEqual(result.mate_in, 3)
+        self.assertIsNone(result.eval_cp)
+
+    def test_flag_only_dict_keeps_its_flag(self):
+        """No score key: the flag path is untouched by the numeric-score rule."""
+        result = normalize_move(
+            {"move": "e2e4", "is_mate": True, "mate_in": 5},
+            bot_id="b",
+            board=chess.Board(),
+        )
+        self.assertTrue(result.is_mate)
+        self.assertEqual(result.mate_in, 5)
+
 
 class TestClampTimeLimit(unittest.TestCase):
     def test_normal_value_is_untouched(self):

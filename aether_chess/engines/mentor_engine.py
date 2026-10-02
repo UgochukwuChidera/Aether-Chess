@@ -1177,11 +1177,6 @@ _HAS_NUMBA = True
 # ── End numba JIT section ────────────────────────────────────────────────
 
 
-_HAS_NUMBA = True
-
-# ── End numba JIT section ────────────────────────────────────────────────
-
-
 @dataclass
 class SearchConfig:
     max_depth: int = 8  # Increased from 6

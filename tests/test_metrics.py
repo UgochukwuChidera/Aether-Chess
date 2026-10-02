@@ -28,6 +28,16 @@ class MetricsTests(unittest.TestCase):
         high = estimate_bayesian_elo([0.75, 0.7, 0.8])
         self.assertLess(low.rating, high.rating)
 
+    def test_extreme_mate_scores_stay_finite(self):
+        """P2-T19(i): math.exp overflows for very negative mate-mapped scores."""
+        import math
+
+        for cp in (-100000.0, -10000.0, 100000.0):
+            val = cp_to_win_pct(cp)
+            self.assertTrue(math.isfinite(val), f"non-finite for cp={cp}")
+        self.assertAlmostEqual(cp_to_win_pct(-100000.0), 0.0, places=6)
+        self.assertAlmostEqual(cp_to_win_pct(100000.0), 100.0, places=6)
+
 
 if __name__ == "__main__":
     unittest.main()

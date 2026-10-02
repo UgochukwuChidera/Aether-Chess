@@ -94,17 +94,20 @@ export const MoveHistory: React.FC<Props> = ({
                 {white.san}
               </button>
 
-              {/* Black move */}
-              <button
-                data-current={isBlackCurrent || undefined}
-                onClick={() => black && onMoveClick?.(blackIdx)}
-                className={`flex-1 text-left px-1 py-0.5 truncate transition-colors
+              {/* Black move — no cell at all on odd plies (P2-T19): an
+                  empty clickable button is a phantom stop for SR/keyboard. */}
+              {black ? (
+                <button
+                  data-current={isBlackCurrent || undefined}
+                  onClick={() => onMoveClick?.(blackIdx)}
+                  className={`flex-1 text-left px-1 py-0.5 truncate transition-colors
                             ${isBlackCurrent
                               ? 'text-accent border-l-2 border-accent bg-accent-dim'
                               : 'text-muted hover:text-accent'}`}
-              >
-                {black?.san ?? ''}
-              </button>
+                >
+                  {black.san}
+                </button>
+              ) : null}
             </div>
           );
         })}

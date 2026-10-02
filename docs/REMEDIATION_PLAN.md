@@ -644,7 +644,7 @@ engines mid-analysis never takes effect.
 
 - **Change:** drop the direct call at `:105`; add `settings.playEngine` to the deps.
 
-### P2-T19 — Misc latent defects
+### P2-T19 — Misc latent defects ✅ DONE
 
 - `aether_chess/bots/base.py:272-275` — a numeric score overwrites the value while
   `is_mate` stays `True`, so a position can report "mate in N" with a centipawn score.

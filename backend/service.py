@@ -486,13 +486,31 @@ def handle_calculate_accuracy_from_pgn(params: Dict[str, Any]) -> Any:
     return result
 
 
+# P2-T19: num_games feeds `range(estimated_games)` in analysis.estimate_elo,
+# so it is an IPC-fed loop bound — clamp it (a huge value is a CPU-DoS vector
+# in the handler thread).
+_MAX_ESTIMATE_ELO_GAMES = 100
+
+
 def handle_estimate_elo(params: Dict[str, Any]) -> Any:
     accuracy = float(params["accuracy"])
     blunder_rate = float(params.get("blunder_rate", 0.0))
     avg_cp_loss = float(params.get("avg_cp_loss", 0.0))
-    num_games = params.get("num_games")
-    if num_games is not None:
-        num_games = int(num_games)
+    raw_num_games = params.get("num_games")
+    num_games: Any = None
+    if raw_num_games is not None:
+        try:
+            num_games = int(raw_num_games)
+        except (TypeError, ValueError):
+            raise ValueError(
+                f"Invalid num_games: {raw_num_games!r} (expected an integer)"
+            ) from None
+        if num_games < 1:
+            # analysis.py treats < 1 the same way (accuracy-based heuristic),
+            # so normalize to None and let the heuristic path own it.
+            num_games = None
+        else:
+            num_games = min(num_games, _MAX_ESTIMATE_ELO_GAMES)
     print(
         f"[Elo] estimate_elo — acc:{accuracy:.1f} blunder:{blunder_rate:.3f} cpl:{avg_cp_loss:.1f} games:{num_games}",
         file=sys.stderr,

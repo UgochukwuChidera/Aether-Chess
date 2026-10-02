@@ -6,7 +6,7 @@ import io
 import os
 import sys
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Optional
 
 import chess
 import chess.engine  # noqa: F401  (used via `chess.engine.*` below)
@@ -16,6 +16,58 @@ from aether_chess.think_profile import get_profile, sample_think_time
 
 class Maia3UnavailableError(RuntimeError):
     pass
+
+
+class _ThreadLocalCapture:
+    """Capture only this thread's stdout/stderr (P2-T19, same class as P1-T02).
+
+    The old `contextlib.redirect_stdout` rebound `sys.stdout` process-wide,
+    so a concurrent request's JSON-RPC reply landed in this thread's throwaway
+    buffer and the client hung. Instead this bumps the per-thread depth
+    counters on the `ThreadLocalStream` proxies `backend/service.py:main()`
+    installs: other threads keep depth 0 and write through to the real stream.
+
+    No import of service.py here on purpose — service -> chess_engine ->
+    maia3_proxy -> service would be an import cycle (verified: service.py
+    imports chess_engine, backend/chess_engine.py:40 imports this module), so
+    the proxy is duck-typed via its `_local` depth/buffer counters. A tiny
+    documented duplication beats a cycle. With no proxies installed (unit
+    tests, direct use) it falls back to redirect_stdout/redirect_stderr, which
+    is safe single-threaded. The P2-T10 budget clamp below is untouched.
+    """
+
+    def __init__(self) -> None:
+        self._locals: list[tuple[Any, Any, int]] = []
+        self._fallback: contextlib.ExitStack | None = None
+
+    def __enter__(self) -> _ThreadLocalCapture:
+        for name in ("stdout", "stderr"):
+            stream = getattr(sys, name)
+            local = getattr(stream, "_local", None)
+            if local is None:
+                continue
+            self._locals.append(
+                (local, getattr(local, "buffer", None), getattr(local, "depth", 0))
+            )
+            local.buffer = io.StringIO()
+            local.depth = getattr(local, "depth", 0) + 1
+        if not self._locals:
+            stack = contextlib.ExitStack()
+            stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
+            stack.enter_context(contextlib.redirect_stderr(io.StringIO()))
+            self._fallback = stack
+        return self
+
+    # Returns None (never suppresses): an in-body exception must propagate
+    # to the caller, and it lets type checkers see try-body bindings below.
+    def __exit__(self, *exc_info: Any) -> None:
+        for local, prev_buffer, prev_depth in reversed(self._locals):
+            local.buffer = prev_buffer
+            local.depth = prev_depth
+        self._locals = []
+        if self._fallback is not None:
+            self._fallback.close()
+            self._fallback = None
 
 
 @dataclass
@@ -236,7 +288,7 @@ class Maia3Proxy:
         limit = chess.engine.Limit(time=min(sampled, budget))
 
         try:
-            with contextlib.redirect_stdout(io.StringIO()):
+            with _ThreadLocalCapture():
                 result = engine.play(board, limit)
         except Exception as exc:
             import traceback

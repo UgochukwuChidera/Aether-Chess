@@ -522,7 +522,15 @@ function loadGameIndex(): {
       max_entries: raw.max_entries ?? 1000,
       games: (raw.games ?? []).map((g) => ({
         ...g,
-        meta: { ...g.meta, tags: g.meta?.tags ?? [] },
+        // P2-T19: legacy/hand-edited entries may lack played_at; default it
+        // here so `played_at.localeCompare(...)` below never throws on
+        // undefined. (Static-review proof: main.ts is unimportable in
+        // node:test — P0-T09 precedent; tsc build typechecks this.)
+        meta: {
+          ...g.meta,
+          tags: g.meta?.tags ?? [],
+          played_at: g.meta?.played_at ?? "",
+        },
       })),
     };
   } catch {
