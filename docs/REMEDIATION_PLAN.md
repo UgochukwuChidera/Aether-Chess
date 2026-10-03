@@ -681,7 +681,7 @@ reported an attribute-aliasing bug). But if `configure()` raises, the local is n
 - **Status:** this file is **deleted** in Phase 3 (P3-T06), so the defect disappears with
   it. No action. If P3-T06 is descoped, add `try: ... except: engine.quit(); raise`.
 
-### P2-T21 — Renderer build output never reaches the packaged path
+### P2-T21 — Renderer build output never reaches the packaged path ✅ DONE
 
 **Defect.** `package.json:12` runs `vite build renderer`, which sets the Vite root to
 `renderer/` — so the bundle lands in `renderer/dist/`, empirically verified
@@ -703,6 +703,18 @@ production path is additionally untested by e2e.
 - **Done when:** the packaged app loads its renderer, and e2e covers the
   `file://` path. Schedule with the P2-T14/P2-T15 packaging cluster, which
   already opens the builder config.
+- **Verification (2026-10-03):** mechanism proven by `resolveConfig`: the
+  `renderer` CLI root arg makes Vite discard the config's absolute outDir
+  for the default relative `dist` (root `…/renderer`, outDir `dist` —
+  lands `renderer/dist/`); no arg honors `…/dist/renderer`. Fix: drop the
+  arg (`vite build`; config already sets `root`), plus `base: './'` (the
+  packaged probe showed absolute `/assets/…` 404 under file://). Fresh
+  `dist/renderer/index.html` post-`npm run build`; `--linux --dir` asar
+  contains it; packaged binary boots
+  `file://…/app.asar/dist/renderer/index.html` with the board rendered
+  (backend handshake still blocked — no backend binary exists here, P2-T15).
+  All 4 e2e specs serve the canonical artifact with a path-equality
+  pre-flight pin; :5173 narrowed to dev-transport only. Full gate green.
 
 ### P2-T22 — `backendConnected` never restores after backend respawn
 

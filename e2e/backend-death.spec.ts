@@ -43,8 +43,9 @@
  *
  * Conventions (P0-T12/P2-T03): built main (`dist/electron/main.js`,
  * rebuild mandatory before running), stdlib fixture via
- * `AETHER_BACKEND_SCRIPT`, built renderer bundle served on :5173 (the
- * P2-T21 file:// gap workaround), unique mkdtemp userData dir, existing
+ * `AETHER_BACKEND_SCRIPT`, built renderer bundle served on :5173
+ * (dev-transport stand-in serving the canonical dist/renderer artifact
+ * — P2-T21), unique mkdtemp userData dir, existing
  * `data-sq` board attribute (zero testids added).
  */
 import { test, expect, _electron } from "@playwright/test";
@@ -59,9 +60,10 @@ const MAIN_JS = path.join(ROOT, "dist", "electron", "main.js");
 // P0-T09 override: the backend script the app spawns is chosen by this env
 // var (guarded by fs.existsSync in getBackendScript()).
 const FIXTURE_BACKEND = path.join(ROOT, "e2e", "fixtures", "fake-backend.py");
-// Actual `build:renderer` output dir (see smoke.spec.ts header: the file://
-// branch points elsewhere — P2-T21 — so e2e serves the built bundle).
-const RENDERER_DIST = path.join(ROOT, "renderer", "dist");
+// Canonical `build:renderer` output dir (P2-T21 — config outDir, honored
+// because the build script passes no CLI root arg; same artifact the
+// packaged file:// branch loads — see smoke.spec.ts header).
+const RENDERER_DIST = path.join(ROOT, "dist", "renderer");
 const START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 // Prompt-reject bound: well under the 30s standard IPC tier (and far under
 // the 300s LONG_RUNNING tier) — a kill must fail fast, not time out.
@@ -110,7 +112,7 @@ function serveRendererBundle(port: number): Promise<http.Server> {
       if (err.code === "EADDRINUSE") {
         reject(
           new Error(
-            `port ${port} is already in use — stop the vite dev server so the spec serves the BUILT bundle (renderer/dist/) instead of testing the wrong renderer`,
+            `port ${port} is already in use — stop the vite dev server so the spec serves the BUILT bundle (dist/renderer/) instead of testing the wrong renderer`,
           ),
         );
       } else {
@@ -156,6 +158,12 @@ test("backend death rejects in-flight promptly and the app recovers", async () =
   expect(
     fs.existsSync(FIXTURE_BACKEND),
     `fixture backend missing (${FIXTURE_BACKEND})`,
+  ).toBe(true);
+  // P2-T21 path-equality pin: the packaged file:// branch (main.ts:309)
+  // loads <__dirname>/../renderer/index.html === dist/renderer/index.html.
+  expect(
+    fs.existsSync(path.join(RENDERER_DIST, "index.html")),
+    `canonical renderer artifact missing — run npm run build first (${path.join(RENDERER_DIST, "index.html")})`,
   ).toBe(true);
 
   const server = await serveRendererBundle(5173);

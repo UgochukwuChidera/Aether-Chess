@@ -9,7 +9,7 @@
     "dev:renderer": "vite renderer",
     "dev:electron": "wait-on http://localhost:5173 && tsc -p tsconfig.electron.json && electron .",
     "build": "npm run build:renderer && npm run build:electron",
-    "build:renderer": "vite build renderer",
+    "build:renderer": "vite build",
     "build:electron": "tsc -p tsconfig.electron.json",
     "dist": "npm run build && electron-builder",
     "dist:win": "npm run build && electron-builder --win",

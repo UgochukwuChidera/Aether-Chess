@@ -26,13 +26,16 @@
  * !app.isPackaged`, and an unpackaged `electron dist/electron/main.js`
  * launch always reports `isPackaged === false` (probed 2026-09-28) — so
  * the app loads `http://localhost:5173`, never the `file://` bundle.
- * Additionally the `file://` branch points at `dist/renderer/index.html`
- * while `npm run build:renderer` actually emits `renderer/dist/` — a real
- * path mismatch, but fixing main/vite config is OUT OF SCOPE for P0-T12
- * (no main/preload/renderer source changes). Serving the BUILT bundle
- * (`renderer/dist/`) on :5173 exercises built output without touching
- * sources. If a `vite dev` server already occupies :5173 the spec fails
- * fast instead of testing the wrong bundle.
+ * Serving over HTTP is therefore a dev-transport stand-in ONLY: the
+ * server root is the CANONICAL build artifact `dist/renderer/` (P2-T21 —
+ * `vite build` with no CLI root arg, so the config's absolute outDir is
+ * honored), which is byte-for-byte what the packaged `file://` branch
+ * (`main.ts:309`, `file://<__dirname>/../renderer/index.html` where
+ * `__dirname` is `dist/electron/`) loads. The pre-flight assertion below
+ * pins that path equality: if the build ever stops emitting
+ * `dist/renderer/index.html`, this spec fails instead of testing a
+ * stale/missing bundle. If a `vite dev` server already occupies :5173
+ * the spec fails fast instead of testing the wrong bundle.
  *
  * Handshake definition (what "backend-ready" observably means):
  * `window.electronAPI.newGame(...)` invoked from the renderer resolves
@@ -65,8 +68,10 @@ const MAIN_JS = path.join(ROOT, "dist", "electron", "main.js");
 // P0-T09 proof: the backend script the app spawns is chosen by this env
 // override (guarded by fs.existsSync in getBackendScript()).
 const FIXTURE_BACKEND = path.join(ROOT, "e2e", "fixtures", "fake-backend.py");
-// Actual `build:renderer` output dir (see header comment).
-const RENDERER_DIST = path.join(ROOT, "renderer", "dist");
+// Canonical `build:renderer` output dir (P2-T21 — config outDir, honored
+// because the build script passes no CLI root arg). This is the same
+// artifact the packaged file:// branch loads (main.ts:309).
+const RENDERER_DIST = path.join(ROOT, "dist", "renderer");
 const START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
 const MIME: Record<string, string> = {
@@ -109,7 +114,7 @@ function serveRendererBundle(port: number): Promise<http.Server> {
       if (err.code === "EADDRINUSE") {
         reject(
           new Error(
-            `port ${port} is already in use — stop the vite dev server so the spec serves the BUILT bundle (renderer/dist/) instead of testing the wrong renderer`,
+            `port ${port} is already in use — stop the vite dev server so the spec serves the BUILT bundle (dist/renderer/) instead of testing the wrong renderer`,
           ),
         );
       } else {
@@ -128,6 +133,13 @@ test("boot smoke: window opens, backend handshake completes, 8x8 board renders",
   expect(
     fs.existsSync(FIXTURE_BACKEND),
     `fixture backend missing (${FIXTURE_BACKEND})`,
+  ).toBe(true);
+  // P2-T21 path-equality pin: the packaged file:// branch (main.ts:309)
+  // loads <__dirname>/../renderer/index.html === dist/renderer/index.html.
+  // Fail here — not on a blank window — if the build stopped emitting it.
+  expect(
+    fs.existsSync(path.join(RENDERER_DIST, "index.html")),
+    `canonical renderer artifact missing — run npm run build first (${path.join(RENDERER_DIST, "index.html")})`,
   ).toBe(true);
 
   const server = await serveRendererBundle(5173);

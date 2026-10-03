@@ -59,9 +59,10 @@ const MAIN_JS = path.join(ROOT, "dist", "electron", "main.js");
 // P0-T09 override: the backend script the app spawns is chosen by this env
 // var (guarded by fs.existsSync in getBackendScript()).
 const FIXTURE_BACKEND = path.join(ROOT, "e2e", "fixtures", "fake-backend.py");
-// Actual `build:renderer` output dir (see smoke.spec.ts header: the file://
-// branch points elsewhere — P2-T21 — so e2e serves the built bundle).
-const RENDERER_DIST = path.join(ROOT, "renderer", "dist");
+// Canonical `build:renderer` output dir (P2-T21 — config outDir, honored
+// because the build script passes no CLI root arg; same artifact the
+// packaged file:// branch loads — see smoke.spec.ts header).
+const RENDERER_DIST = path.join(ROOT, "dist", "renderer");
 const SWITCH_ROUNDS = 10;
 
 const MIME: Record<string, string> = {
@@ -104,7 +105,7 @@ function serveRendererBundle(port: number): Promise<http.Server> {
       if (err.code === "EADDRINUSE") {
         reject(
           new Error(
-            `port ${port} is already in use — stop the vite dev server so the spec serves the BUILT bundle (renderer/dist/) instead of testing the wrong renderer`,
+            `port ${port} is already in use — stop the vite dev server so the spec serves the BUILT bundle (dist/renderer/) instead of testing the wrong renderer`,
           ),
         );
       } else {
@@ -150,6 +151,12 @@ test("tab switches do not accumulate backend listeners", async () => {
   expect(
     fs.existsSync(FIXTURE_BACKEND),
     `fixture backend missing (${FIXTURE_BACKEND})`,
+  ).toBe(true);
+  // P2-T21 path-equality pin: the packaged file:// branch (main.ts:309)
+  // loads <__dirname>/../renderer/index.html === dist/renderer/index.html.
+  expect(
+    fs.existsSync(path.join(RENDERER_DIST, "index.html")),
+    `canonical renderer artifact missing — run npm run build first (${path.join(RENDERER_DIST, "index.html")})`,
   ).toBe(true);
 
   const server = await serveRendererBundle(5173);
