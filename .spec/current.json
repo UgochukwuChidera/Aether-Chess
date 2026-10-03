@@ -1,58 +1,59 @@
 {
   "$schemaNote": "Coordinator-owned phase ledger for the AetherChess remediation. Shape follows the pre-flight-protocol skill: status, phase, workItems, decisions, session.os. Sub-agent outcomes live in commit bodies + coordinator chat (subagent depth limit forbids nested .spec/agents writes). workItem statuses: completed | active | todo. P1-T01 is flagged next:true.",
   "status": "executing",
-  "phase": "phase-2",
-  "phaseLabel": "Phase 2 \u2014 High severity (next up)",
+  "phase": "phase-3",
+  "phaseLabel": "Phase 3 — Structural (next up)",
   "phases": [
     {
       "id": "phase-0",
-      "label": "Phase 0 \u2014 Test harness",
+      "label": "Phase 0 — Test harness",
       "status": "completed",
       "note": "P0-T01..P0-T14 all committed. Gate now includes test:renderer, typecheck:renderer, test:e2e (hermetic)."
     },
     {
       "id": "phase-1",
-      "label": "Phase 1 \u2014 Criticals",
+      "label": "Phase 1 — Criticals",
       "status": "completed",
-      "note": "P1-T01..P1-T04 committed. Python suite 122\u2192130."
+      "note": "P1-T01..P1-T04 committed. Python suite 122→130."
     },
     {
       "id": "phase-2",
-      "label": "Phase 2 \u2014 High severity",
-      "status": "active",
-      "note": "P2-T01..P2-T21 (P2-T20 cancelled/no-action, P2-T21 added from P0-T12 finding)."
+      "label": "Phase 2 — High severity",
+      "status": "completed",
+      "note": "P2-T01..P2-T26 all committed (P2-T20 no-action). Python suite 146->164."
     },
     {
       "id": "phase-3",
-      "label": "Phase 3 \u2014 Structural",
-      "status": "todo",
+      "label": "Phase 3 — Structural",
+      "status": "active",
       "note": "P3-T01..P3-T07."
     },
     {
       "id": "phase-4",
-      "label": "Phase 4 \u2014 Unfinished features",
+      "label": "Phase 4 — Unfinished features",
       "status": "todo",
-      "note": "P4-T01..P4-T05. P4-T03 Tier 3 gated on \u00a72c portability precondition."
+      "note": "P4-T01..P4-T05. P4-T03 Tier 3 gated on §2c portability precondition."
     }
   ],
   "session": {
     "os": {
       "platform": "linux",
       "arch": "x86_64",
-      "shell": "bash (tool workdir; interactive shell is fish \u2014 non-portable syntax stays out of committed files)"
+      "shell": "bash (tool workdir; interactive shell is fish — non-portable syntax stays out of committed files)"
     },
     "repo": "/home/carapace/Documents/Projects/Games/AetherChess",
-    "toolchain": "venv/bin/python (never bare python); node v26 vs engines 20.x (warnings only); DISPLAY=:0 live, no xvfb-run locally; gcc/g++/make/cmake + Python.h present (P4-T03 Tier 3 still needs the \u00a72c shim first)",
-    "authority": "docs/VERIFICATION_REGISTER.md outranks docs/REMEDIATION_PLAN.md where they disagree (register \u00a75 adjudication)."
+    "toolchain": "venv/bin/python (never bare python); node v26 vs engines 20.x (warnings only); DISPLAY=:0 live, no xvfb-run locally; gcc/g++/make/cmake + Python.h present (P4-T03 Tier 3 still needs the §2c shim first)",
+    "authority": "docs/VERIFICATION_REGISTER.md outranks docs/REMEDIATION_PLAN.md where they disagree (register §5 adjudication)."
   },
   "gate": {
-    "baseline": "python 146 passed \u00b7 ruff clean \u00b7 pyright 0 errors \u00b7 electron 45 passed \u00b7 lint clean \u00b7 build succeeds",
+    "baseline": "python 164 passed · ruff clean · pyright 0 errors · electron 45 passed · lint clean · build succeeds",
     "phaseExits": {
       "phase-0": "python 122 passed",
       "phase-1": "python 130 passed",
-      "phase-2-open": "python 133 passed (P2-T01, P1-T05)"
+      "phase-2-open": "python 133 passed (P2-T01, P1-T05)",
+      "phase-2": "python 164 passed"
     },
-    "addedInPhase0": "test:renderer 1 passed \u00b7 typecheck:renderer 0 errors \u00b7 test:e2e 1 passed (hermetic, stdlib fixture)",
+    "addedInPhase0": "test:renderer 1 passed · typecheck:renderer 0 errors · test:e2e 1 passed (hermetic, stdlib fixture)",
     "commands": [
       "venv/bin/python -m unittest discover -s tests",
       "ruff check .",
@@ -88,7 +89,7 @@
       "phase": "phase-0",
       "status": "completed",
       "commit": "3c29a78b00bb30768f5e6d5885913157f8272159",
-      "note": "jest-dom import + ResizeObserver stub ONLY (no matchMedia \u2014 register \u00a72b). Genuine fail-first via setup load error."
+      "note": "jest-dom import + ResizeObserver stub ONLY (no matchMedia — register §2b). Genuine fail-first via setup load error."
     },
     {
       "id": "P0-T04",
@@ -96,7 +97,7 @@
       "phase": "phase-0",
       "status": "completed",
       "commit": "2ba2e1338faa95072e685d7e12f9a1e5504271dd",
-      "note": "test:renderer added; P0-T10 e2e tier scripts installed early; test chain electron\u2192renderer\u2192python."
+      "note": "test:renderer added; P0-T10 e2e tier scripts installed early; test chain electron→renderer→python."
     },
     {
       "id": "P0-T05",
@@ -120,7 +121,7 @@
       "phase": "phase-0",
       "status": "completed",
       "commit": "d26536898ce7a862c4a8224c9b780104b2257744",
-      "note": "Plugin 6.1.1 (v7 needs eslint 10). 27 violations \u2192 27 scoped suppressions, 0 fixes; P2-T01/T02/T03/T18 + P3-T01 deferred with owner tags for later removal."
+      "note": "Plugin 6.1.1 (v7 needs eslint 10). 27 violations → 27 scoped suppressions, 0 fixes; P2-T01/T02/T03/T18 + P3-T01 deferred with owner tags for later removal."
     },
     {
       "id": "P0-T08",
@@ -160,7 +161,7 @@
       "phase": "phase-0",
       "status": "completed",
       "commit": "9e053d3103ff872ab27159af6472506b6ddcbe34",
-      "note": "Stdlib fixture + smoke (positive + killer-fixture negative control). Delivered P0-T09 proof. Surfaced build-output-path defect \u2192 new item P2-T21; :5173 workaround stands until then."
+      "note": "Stdlib fixture + smoke (positive + killer-fixture negative control). Delivered P0-T09 proof. Surfaced build-output-path defect → new item P2-T21; :5173 workaround stands until then."
     },
     {
       "id": "P0-T13",
@@ -327,7 +328,7 @@
       "title": "Packaged app ships all devDependencies",
       "phase": "phase-2",
       "status": "completed",
-      "note": "Glob removed; premise contradicted on builder 24.13.3 (pre/post byte-identical) \u2014 footgun-removal.",
+      "note": "Glob removed; premise contradicted on builder 24.13.3 (pre/post byte-identical) — footgun-removal.",
       "commit": "e4d432e1c97a912286eeec9223250c4068f33d04"
     },
     {
@@ -350,72 +351,88 @@
       "id": "P2-T17",
       "title": "Canvas overlay not redrawn on flip",
       "phase": "phase-2",
-      "status": "todo",
-      "note": "flippedRef identity is the mechanism; no P0-T07 suppression exists here \u2014 test-driven.",
-      "next": true
+      "status": "completed",
+      "note": "Effect-array only [drawCanvas, flipped] (drawCanvas half redundant+lint-tripping); accidental-repaint made guaranteed.",
+      "commit": "2bbb9c57ce32aac9fa5bbd19199168d985922fa1"
     },
     {
       "id": "P2-T18",
       "title": "Duplicate analysis start + missing dep",
       "phase": "phase-2",
-      "status": "todo",
-      "note": "Drop direct call; add playEngine dep. Removes 2 suppressions."
+      "status": "completed",
+      "note": "Single start/nav + playEngine dep; -2 suppressions, +2 honest warnings (accepted residual, UNOWNED stabilization candidate).",
+      "commit": "18190f0f9920031dcab1b842caaf1625443e64c9"
     },
     {
       "id": "P2-T19",
       "title": "Misc latent defects",
       "phase": "phase-2",
-      "status": "todo",
-      "note": "SCOPED: _phase sub-point OUT (called at chess_engine.py:664); main.ts:87-132 reads JSON (P3-T02 has 4 sources); normalize_score residue is is_mate=True/mate_in=None (fix flag); MoveHistory renders-but-no-ops; num_games at service.py:389-391 IS a loop bound (register \u00a72a reversed)."
+      "status": "completed",
+      "note": "Ten bullets incl. num_games clamp, load_pgn raise, proxy capture; book deferred to P4-T05; _phase untouched.",
+      "commit": "ebec8ece1cbb5a8d1453b9a7457315a93def61c2"
     },
     {
       "id": "P2-T20",
       "title": "cancelled (orphaned UCI subprocess)",
       "phase": "phase-2",
       "status": "todo",
-      "note": "No action \u2014 file deleted by P3-T06. If P3-T06 descoped, try/except quit."
+      "note": "No action — file deleted by P3-T06. If P3-T06 descoped, try/except quit."
     },
     {
       "id": "P2-T22",
       "title": "backendConnected never restores after respawn",
       "phase": "phase-2",
-      "status": "todo",
-      "note": "P2-T05 follow-up: backend-ready event + flag restore + extended death-spec."
+      "status": "completed",
+      "note": "backend-ready from stderr ready-line + flag restore; App correctly untouched; 4th guard :796 noted.",
+      "commit": "ea3e8d8c996e39bba88784b488aad68634bca2bf"
     },
     {
       "id": "P2-T23",
       "title": "Maia proxy double-discounts the resolved budget",
       "phase": "phase-2",
-      "status": "todo",
-      "note": "min() of two rolls; proxy must use budget directly. Challenge-confirmed."
+      "status": "completed",
+      "note": "Proxy Limit from budget directly; zero sample_think_time; B=3.0 fail-first design.",
+      "commit": "685ebf69b1f962a65cb7e719b7aa09d50977176b"
     },
     {
       "id": "P2-T24",
       "title": "Classical think profile collapses to constant 5s",
       "phase": "phase-2",
-      "status": "todo",
-      "note": "Rescale bucket to vary within the ceiling; ceiling stays."
+      "status": "completed",
+      "note": "Classical bucket 2-5s within ceiling; ceiling stays; other buckets byte-identical.",
+      "commit": "8a4aee5a3788e1f98f23e853747dec355f20b570"
     },
     {
       "id": "P2-T25",
       "title": "Board rank labels mirrored when flipped",
       "phase": "phase-2",
-      "status": "todo",
-      "note": "P2-T16 follow-up: String(8 - displayRank); left out by one-expression rule."
+      "status": "completed",
+      "note": "String(8 - displayRank); both-orientation assertions.",
+      "commit": "d154ddb6550d3b507afefc66a477a18c80e9ff0b"
+    },
+    {
+      "id": "P2-T26",
+      "title": "Classical UI copy still promises 5-120s",
+      "phase": "phase-2",
+      "status": "completed",
+      "note": "Classical copy 5-120s -> 2-5s; vacuous fail-first stated.",
+      "commit": "b3d5d625506f7106750583c193b5d19822b6935a"
     },
     {
       "id": "P2-T21",
       "title": "Renderer build output never reaches packaged path",
       "phase": "phase-2",
-      "status": "todo",
-      "note": "Added from P0-T12 finding (docs commit e6630c9). Reconcile vite outDir vs build root arg vs main.ts:269; retire :5173 workaround; e2e the file:// branch. With P2-T14/T15 cluster."
+      "status": "completed",
+      "note": "Dropped vite CLI root arg; base ./; packaged file:// proven via --dir; e2e serves shipped artifact.",
+      "commit": "f07ab06b8a50235a448295a0840ef373930ed1d3"
     },
     {
       "id": "P3-T01",
       "title": "Backend owns clock + termination",
       "phase": "phase-3",
       "status": "todo",
-      "note": "Clock state, flag-fall, resign/draw, snapshot clock, delete setInterval. Removes 1 suppression."
+      "note": "Clock state, flag-fall, resign/draw, snapshot clock, delete setInterval. Removes 1 suppression.",
+      "next": true
     },
     {
       "id": "P3-T02",
@@ -450,7 +467,7 @@
       "title": "Delete the superseded stack",
       "phase": "phase-3",
       "status": "todo",
-      "note": "~390 lines + dead tests (count DROPS ~200 \u2014 expected, state in body). Also closes P2-T20."
+      "note": "~390 lines + dead tests (count DROPS ~200 — expected, state in body). Also closes P2-T20."
     },
     {
       "id": "P3-T07",
@@ -478,7 +495,7 @@
       "title": "C++ evaluation engine",
       "phase": "phase-4",
       "status": "todo",
-      "note": "HARD PRECONDITION (register \u00a72c): MSVC-intrinsic shim + clean gcc -Wall -Wextra build before Tier 3. Tiers 1-2 independent; benchmark before enabling."
+      "note": "HARD PRECONDITION (register §2c): MSVC-intrinsic shim + clean gcc -Wall -Wextra build before Tier 3. Tiers 1-2 independent; benchmark before enabling."
     },
     {
       "id": "P4-T04",
@@ -499,25 +516,25 @@
     "Register outranks plan (Phase A closeout 1f37857).",
     "Subagent depth limit is 1: workers cannot nest oracle/explorer/git-wrangler; git ops stay direct + staged-only, hooks intact.",
     "vitest pinned v2 (peer conflict with vite 5); eslint-plugin-react-hooks 6.1.1 (v7 needs eslint 10).",
-    "P0-T03 stubs ResizeObserver only \u2014 matchMedia has zero consumers (register \u00a72b).",
+    "P0-T03 stubs ResizeObserver only — matchMedia has zero consumers (register §2b).",
     "tsconfig.e2e.json orphan adopted by P0-T08.",
-    "Deferral precedent (P0-T09/P0-T10): verify now, prove runnable with P0-T12 \u2014 both delivered.",
+    "Deferral precedent (P0-T09/P0-T10): verify now, prove runnable with P0-T12 — both delivered.",
     "xvfb-run -a wraps CI e2e (ubuntu-latest); CI-log green pending push.",
-    "Register \u00a72a reversed with analysis.py:250 evidence \u2014 num_games IS an IPC-fed loop bound; P2-T19 clamps per plan wording.",
+    "Register §2a reversed with analysis.py:250 evidence — num_games IS an IPC-fed loop bound; P2-T19 clamps per plan wording.",
     "P2-T19 scoped: _phase used (chess_engine.py:664); P3-T02 has 4 sources (main.ts reads JSON); normalize_score residue is_mate=True/mate_in=None; MoveHistory renders-but-no-ops.",
-    "P4-T03 Tier 3 blocked until MSVC-intrinsic shim + clean gcc build (register \u00a72c).",
+    "P4-T03 Tier 3 blocked until MSVC-intrinsic shim + clean gcc build (register §2c).",
     "P2-T21 created from P0-T12 build-path finding (docs commit e6630c9); P0-T12 :5173 workaround stands until then.",
     "Suppression removals owed to later items: P2-T01 x1, P2-T02 x2, P2-T03 x1, P2-T18 x2, P3-T01 x1.",
     "Appendix B do-not-touch list respected throughout (phase blend, legal_moves.count, single-mount teardown, uci aliasing, no XSS sink, polyglot, isolation flags).",
-    "Ledger maintenance: coordinator updates this file in docs-style commits at phase boundaries (not inside item commits \u2014 one-item-one-commit rule). Pre-existing M cpp_engine/build_msvc.bat (stat-dirty phantom, hash equals HEAD) is never staged."
+    "Ledger maintenance: coordinator updates this file in docs-style commits at phase boundaries (not inside item commits — one-item-one-commit rule). Pre-existing M cpp_engine/build_msvc.bat (stat-dirty phantom, hash equals HEAD) is never staged."
   ],
   "standingThreads": [
     "CI-log green pending push (P0-T13 steps verified locally only).",
     "P2-T21 file:// gap: production load path untested until packaging cluster.",
     "package.json test:python uses bare python (works with venv activated; noted, unowned).",
-    "Phase A verification table + register \u00a75 adjudication are the audit trail (chat 2026-09-28 + commit bodies).",
-    "P2-T18 lint trade (accepted): removed 2 suppressions, surfacing 2 honest exhaustive-deps warnings in AnalysisView.tsx (per-render handleStartAnalysis + snapshot reads cannot join deps without restart loops); accepted over re-suppression (hides truth) and over callback-stabilization refactor (unowned scope \u2014 useCallback+getState stabilization declined).",
-    "UNOWNED cleanup candidate (no owner, not scheduled \u2014 no item created): AnalysisView.tsx useCallback+getState stabilization to silence the 2 residual P2-T18 exhaustive-deps warnings; do not re-litigate inside item scope."
+    "Phase A verification table + register §5 adjudication are the audit trail (chat 2026-09-28 + commit bodies).",
+    "P2-T18 lint trade (accepted): removed 2 suppressions, surfacing 2 honest exhaustive-deps warnings in AnalysisView.tsx (per-render handleStartAnalysis + snapshot reads cannot join deps without restart loops); accepted over re-suppression (hides truth) and over callback-stabilization refactor (unowned scope — useCallback+getState stabilization declined).",
+    "UNOWNED cleanup candidate (no owner, not scheduled — no item created): AnalysisView.tsx useCallback+getState stabilization to silence the 2 residual P2-T18 exhaustive-deps warnings; do not re-litigate inside item scope."
   ],
-  "maintenance": "Coordinator-owned. Update statuses in docs-style commits at phase boundaries or when decisions change \u2014 never inside item commits (would violate staged-only rule). Sub-agent prompt template: read plan item + register \u00a75 + this ledger; test-first; full expanded gate; staged-only commit with Closes: trailer; plan DONE mark in same commit."
+  "maintenance": "Coordinator-owned. Update statuses in docs-style commits at phase boundaries or when decisions change — never inside item commits (would violate staged-only rule). Sub-agent prompt template: read plan item + register §5 + this ledger; test-first; full expanded gate; staged-only commit with Closes: trailer; plan DONE mark in same commit."
 }
