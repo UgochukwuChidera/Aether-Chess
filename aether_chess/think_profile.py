@@ -64,19 +64,15 @@ RAPID = ThinkProfile(
 CLASSICAL = ThinkProfile(
     name="classical",
     label="Classical",
-    description="Deep calculation (5–120s typical)",
+    description="Deep thinking (2–5s typical, shaped to vary within the 5.0s ceiling)",
     buckets=[
-        TimeBucket(2, 1),
-        TimeBucket(5, 5),
-        TimeBucket(8, 8),
-        TimeBucket(10, 12),
-        TimeBucket(15, 18),
-        TimeBucket(20, 20),
-        TimeBucket(25, 14),
-        TimeBucket(30, 10),
-        TimeBucket(40, 7),
-        TimeBucket(60, 4),
-        TimeBucket(120, 1),
+        TimeBucket(2.0, 4),
+        TimeBucket(2.5, 6),
+        TimeBucket(3.0, 12),
+        TimeBucket(3.5, 16),
+        TimeBucket(4.0, 22),
+        TimeBucket(4.5, 22),
+        TimeBucket(5.0, 18),
     ],
 )
 
@@ -116,6 +112,7 @@ def get_profile(name: str) -> ThinkProfile:
 
 # ── Budget-constrained sampling ──────────────────────────────────────────────
 
+
 def _compute_safe_cap(
     time_remaining: float | None,
     time_increment: float | None,
@@ -140,7 +137,9 @@ def _compute_safe_cap(
 
     # Safe cap: allow occasional deep thought, but not reckless
     safe_max = max(budget_per_move * 2, budget_per_move + 10)
-    safe_max = min(safe_max, time_remaining * 0.5)  # Never burn >50% of clock on one move
+    safe_max = min(
+        safe_max, time_remaining * 0.5
+    )  # Never burn >50% of clock on one move
     return safe_max
 
 

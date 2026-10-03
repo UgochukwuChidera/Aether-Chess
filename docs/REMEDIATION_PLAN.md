@@ -781,7 +781,7 @@ said to remove the independent resample.
   min()d the budget); post-fix `seen_limits=[3.0]` under both profiles,
   elapsed 3.00s/3.01s, proxy-side `sample_think_time` calls 0 (wraps-spy with
   create=True, since the fixed code drops the import). `rg sample_think_time
-  aether_chess/engines/maia3_proxy.py` returns zero (whole import line dropped;
+aether_chess/engines/maia3_proxy.py` returns zero (whole import line dropped;
   both names served only the removed resample). `think_profile` /
   `time_remaining` / `time_increment` params KEPT with comment (keyword callers
   in `maia3_bot.py:73` + `backend/chess_engine.py` proxy call; the
@@ -797,7 +797,7 @@ Note (no item): classical's "5–120s typical" doc vs the 5.0s ceiling is GLOBAL
 (`clamp_time_limit` caps every bot) and the ceiling serves comparability — doc
 describes pre-clamp buckets. Product copy, out of this track.
 
-### P2-T24 — Classical think profile collapses to a constant 5s
+### P2-T24 — Classical think profile collapses to a constant 5s ✅ DONE
 
 Conceded on challenge: raw classical samples measure 9–35s (mean ~22s), so the
 global 5.0s ceiling (`clamp_time_limit`) clips EVERY classical roll — classical
@@ -814,6 +814,24 @@ Blitz varies (~1–5s); classical is a constant. Not Maia-specific.
   sample within budget/ceiling.
 - **Done when:** classical elapsed varies run to run while never exceeding the
   aligned budget.
+
+- **Verification (2026-10-03):** test-first `tests/test_classical_profile.py`
+  (new, 3 tests, seeded N=100 with RNG save/restore): pre-fix FAIL recorded
+  (`only 3 distinct classical budgets in 100 samples`, raw median 20.50s >
+  5.0s; 98/100 resolved budgets parked exactly on the ceiling) and the
+  within-ceiling guard already green (the clamp held even before the fix).
+  Post-fix all 3 green (65 distinct, 36/100 at ceiling, raw median ~4.6s,
+  resolved mean 4.21s). Reshaping is bucket parameters only — sampler,
+  `MAX_TIME_LIMIT_SEC`, manager and bots untouched; blitz/rapid/human_like
+  seeded sequences byte-identical pre/post (BLITZ30/RAPID30 exact match).
+  Classical description words corrected to the new shaping
+  (`2–5s typical ... within the 5.0s ceiling`); renderer `SettingsPanel`
+  `Classical (deep, 5-120s)` option copy left as product-copy follow-up
+  (same track as the line-796 note). Full gate green except one
+  HEAD-pre-existing e2e UI flake (`listener-leak.spec.ts` Settings-tab click
+  timeout — fails identically on stashed clean HEAD `685ebf6`, hermetic
+  fixture/renderer path loads no `aether_chess` code, so out of this item's
+  scope by construction).
 
 ### P2-T25 — Board rank labels are mirrored when flipped
 
