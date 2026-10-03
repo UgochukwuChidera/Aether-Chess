@@ -845,6 +845,16 @@ labels `8`, i.e. the right column reads 8…1 top-to-bottom for squares 1…8.
 - **Test:** extend `Board.test.tsx` — flipped rank assertions both columns.
 - **Done when:** rank labels match their squares in both orientations.
 
+### P2-T26 — Classical UI copy still promises 5–120s ✅ DONE
+
+Left stale by P2-T24 (one line): `SettingsPanel.tsx:627` offers
+`Classical (deep, 5-120s)` while the bucket now shapes 2–5s.
+
+- **Change:** copy to `Classical (deep, 2-5s)`.
+- **Test:** vacuous for copy — fail-first cannot apply; verification is the
+  renderer suite staying green + the string matching the profile desc.
+- **Done when:** no `120s` claim remains user-facing.
+
 ---
 
 # Phase 3 — Structural

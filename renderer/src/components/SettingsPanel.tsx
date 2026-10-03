@@ -624,7 +624,7 @@ export const SettingsPanel: React.FC = () => {
           >
             <option value="blitz">Blitz (fast, 1-8s)</option>
             <option value="rapid">Rapid (balanced, 2-15s)</option>
-            <option value="classical">Classical (deep, 5-120s)</option>
+            <option value="classical">Classical (deep, 2-5s)</option>
             <option value="human_like">Human-like (natural varied)</option>
           </select>
         </Row>
