@@ -129,11 +129,17 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
   useEffect(() => {
     const handleBackendClosed = () => setBackendConnected(false);
     const handleBackendError = () => setBackendConnected(false);
+    // P2-T22: main emits `backend-ready` when the backend's ready signal
+    // is observed (boot spawn re-asserts the initial true — a no-op; the
+    // P2-T05 lazy respawn flips the flag back after a death).
+    const handleBackendReady = () => setBackendConnected(true);
     const unsubscribeClosed = window.electronAPI.onBackendClosed(handleBackendClosed);
     const unsubscribeError = window.electronAPI.onBackendError(handleBackendError);
+    const unsubscribeReady = window.electronAPI.onBackendReady(handleBackendReady);
     return () => {
       unsubscribeClosed();
       unsubscribeError();
+      unsubscribeReady();
     };
   }, []);
 

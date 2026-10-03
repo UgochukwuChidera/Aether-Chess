@@ -133,6 +133,7 @@ declare global {
       // Backend events
       onBackendError: (callback: (msg: string) => void) => () => void;
       onBackendClosed: (callback: () => void) => () => void;
+      onBackendReady: (callback: () => void) => () => void;
 
       // Settings
       loadSettings: () => Promise<unknown>;

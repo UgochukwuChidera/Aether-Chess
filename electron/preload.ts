@@ -105,6 +105,17 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.removeListener("backend-closed", wrapped);
     };
   },
+  // P2-T22: emitted by main when the backend's ready signal is observed
+  // (boot spawn and P2-T05 lazy respawn alike). Same unsubscribe-handle
+  // shape as onBackendClosed/onBackendError (P2-T03) — no
+  // removeAllListeners, no ref-keyed removal.
+  onBackendReady: (callback: () => void) => {
+    const wrapped = () => callback();
+    ipcRenderer.on("backend-ready", wrapped);
+    return () => {
+      ipcRenderer.removeListener("backend-ready", wrapped);
+    };
+  },
 
   // ── Settings persistence ─────────────────────────────────────────────────
   loadSettings: () => ipcRenderer.invoke("settings-load"),

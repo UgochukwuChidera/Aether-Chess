@@ -144,6 +144,18 @@ function startPython(mainWindow: BrowserWindow): void {
     pythonPath,
     stderrParser: (line: string) => {
       console.error("[Python stderr]", line);
+      // P2-T22: the backend prints "[aether_backend] ready" (fixture:
+      // "[fake-backend] ready") once its stdin loop is up. Forward it as
+      // `backend-ready` so the renderer can re-assert `backendConnected`
+      // after a (re)spawn. Fires on BOTH the boot spawn (harmless
+      // re-assert of the initial true) and the P2-T05 lazy respawn. This
+      // is a post-ready signal, not fire-and-forget at spawn: a spawn
+      // that dies before printing ready emits nothing here, so close/error
+      // still drive the flag false (respawn -> ready -> flag true;
+      // spawn-fail -> closed -> flag false).
+      if (!mainWindow.isDestroyed() && line.includes("] ready")) {
+        mainWindow.webContents.send("backend-ready");
+      }
       return line;
     },
   };

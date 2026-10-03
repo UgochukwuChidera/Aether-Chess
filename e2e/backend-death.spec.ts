@@ -40,6 +40,16 @@
  * - Recovery signal is the post-respawn `newGame` resolving (existing
  *   renderer handling untouched; `backendConnected` staying false in the
  *   UI is recorded as a follow-up, not fixed here).
+  *
+  * P2-T22 extension (step iv): `backendConnected` (PlayView local state,
+  * set false on backend-closed) was never restored, so the export guards
+  * (`handleExportPgn`/`handleExportFen`/`handleExportFenCollection` - each
+  * gates with a "Backend not connected" toast before invoking IPC) kept
+  * gating for the rest of the session after IPC-level recovery. The spec
+  * drives the FEN export button post-recovery: gated -> "Backend not
+  * connected" toast with no IPC; restored -> `exportFen` IPC resolves and
+  * "FEN copied to clipboard" toasts. The clicks poll (respawn->ready races
+  * the recovery reply - stderr vs stdout pipes, no contractual order).
  *
  * Conventions (P0-T12/P2-T03): built main (`dist/electron/main.js`,
  * rebuild mandatory before running), stdlib fixture via
@@ -264,6 +274,44 @@ test("backend death rejects in-flight promptly and the app recovers", async () =
     expect(snapshot.fen).toBe(START_FEN);
     expect(snapshot.turn).toBe("white");
     expect(snapshot.legal_moves.length).toBeGreaterThan(0);
+
+    // (iv) P2-T22: the export guards must no longer gate post-recovery.
+    // Drives the FEN export button (PlayView handleExportFen, guarded on
+    // backendConnected): gated -> "Backend not connected" toast, no IPC;
+    // restored -> exportFen IPC resolves, "FEN copied to clipboard".
+    // Pre-fix this fails: the flag is stuck false, every click gates, and
+    // the success toast never appears. Polls absorb the respawn->ready
+    // delivery race (ready travels the stderr pipe, the recovery newGame
+    // reply the stdout pipe).
+    const fenButton = page.getByRole("button", { name: "FEN" });
+    await expect(fenButton).toHaveCount(1);
+    let exported = false;
+    for (let attempt = 0; attempt < 8 && !exported; attempt++) {
+      await fenButton.click();
+      try {
+        await expect(
+          page.getByText("FEN copied to clipboard"),
+        ).toBeVisible({ timeout: 1500 });
+        exported = true;
+      } catch {
+        await page.waitForTimeout(1000);
+      }
+    }
+    const gatedVisible = await page
+      .getByText("Backend not connected")
+      .count();
+    console.log(
+      `[P2-T22 evidence] export-after-recovery exported=${exported} gatedToastsVisible=${gatedVisible}`,
+    );
+    expect(
+      exported,
+      "FEN export must work post-recovery without reload " +
+        "(pre-fix: backendConnected stuck false -> 'Backend not connected' toast, no IPC)",
+    ).toBe(true);
+    // Past the 4s toast auto-dismiss (gameStore pushToast), no gate toast
+    // may remain from an early raced attempt.
+    await page.waitForTimeout(4500);
+    await expect(page.getByText("Backend not connected")).toHaveCount(0);
   } finally {
     await app.close();
     server.close();

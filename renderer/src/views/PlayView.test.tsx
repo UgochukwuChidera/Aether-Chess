@@ -87,6 +87,7 @@ function createFakeBackend(): FakeBackend {
     },
     onBackendClosed: () => () => undefined,
     onBackendError: () => () => undefined,
+    onBackendReady: () => () => undefined,
     exportPgn: async () => ({ pgn: "" }),
     saveGameHistory: async () => ({ ok: true }),
     computeAndCacheElo: async () => ({ ok: true }),

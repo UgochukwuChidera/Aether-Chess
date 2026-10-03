@@ -716,7 +716,7 @@ production path is additionally untested by e2e.
   All 4 e2e specs serve the canonical artifact with a path-equality
   pre-flight pin; :5173 narrowed to dev-transport only. Full gate green.
 
-### P2-T22 — `backendConnected` never restores after backend respawn
+### P2-T22 — `backendConnected` never restores after backend respawn ✅ DONE
 
 Gap left by P2-T05 (found during its verification): `PlayView.tsx:119` holds
 `backendConnected` in local state, set `false` on `backend-closed`/`backend-error`
@@ -731,6 +731,28 @@ keep gating with "Backend not connected" for the rest of the session.
   export guards no longer gate (or the flag-observable equivalent the
   implementation chooses).
 - **Done when:** kill → respawn → export path works without reload.
+- **Verification (2026-10-03):** emission point is the post-spawn ready
+  signal, not the spawn call — `stderrParser` (`main.ts`) forwards
+  `backend-ready` only on a stderr line containing `"] ready"` (real:
+  `[aether_backend] ready`; fixture: `[fake-backend] ready`), so a spawn
+  that dies before printing ready emits nothing and close/error still
+  drive the flag false (respawn → ready → flag true; spawn-fail → closed
+  → flag false). Boot spawn re-asserts the initial `true` (no-op, no new
+  toast, happy path unchanged). Preload `onBackendReady` mirrors the
+  P2-T03 unsubscribe-handle shape (no removeAllListeners, no ref-keyed
+  removal); `electron.d.ts` + PlayView flag wiring in the same commit.
+  App owns no flag (toast-only block) — deliberately no subscription
+  there (a no-op listener for zero effect, a toast would break the
+  no-new-toasts rule). Test-first: extended `backend-death.spec.ts` step
+  (iv) drives the FEN export button post-recovery — pre-fix FAIL recorded
+  (`exported=false gatedToastsVisible=1`, "Backend not connected" toast,
+  no IPC), post-fix green (`exported=true gatedToastsVisible=0`, first
+  click). Fallout (same commit, test-only): `PlayView.test.tsx` electronAPI
+  stub gains `onBackendReady` noop (9 renderer tests threw without it).
+  Full gate green: python 160 OK, ruff clean, pyright 0, electron 45 pass,
+  lint 0 errors (5 pre-existing warnings, byte-identical on HEAD),
+  build succeeds, typecheck:renderer clean, test:renderer 23 pass,
+  test:e2e 4 pass.
 
 ### P2-T23 — Maia proxy double-discounts the resolved budget
 
