@@ -13,6 +13,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("new_game", params),
   makeMove: (params: { move: string }) =>
     ipcRenderer.invoke("make_move", params),
+  // P3-T01: termination commands. Same shape as the other chess commands
+  // above (`ipcRenderer.invoke` on the snake_case channel); the backend is
+  // the single termination authority, the renderer only forwards intent.
+  resign: (params: { side: string }) => ipcRenderer.invoke("resign", params),
+  draw: () => ipcRenderer.invoke("draw"),
   getLegalMoves: (params: { fen: string }) =>
     ipcRenderer.invoke("get_legal_moves", params),
   undoMove: () => ipcRenderer.invoke("undo_move"),
@@ -114,6 +119,15 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.on("backend-ready", wrapped);
     return () => {
       ipcRenderer.removeListener("backend-ready", wrapped);
+    };
+  },
+  // P3-T01: backend clock tick (1 Hz while a clock runs). Same
+  // unsubscribe-handle shape as the backend-lifecycle events above.
+  onClockTick: (callback: (data: unknown) => void) => {
+    const wrapped = (_event: unknown, data: unknown) => callback(data);
+    ipcRenderer.on("clock-tick", wrapped);
+    return () => {
+      ipcRenderer.removeListener("clock-tick", wrapped);
     };
   },
 

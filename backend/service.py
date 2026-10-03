@@ -92,22 +92,22 @@ _REQUEST_POOL = ThreadPoolExecutor(max_workers=8)
 
 
 class ThreadLocalStream:
-    '''A per-thread routing proxy around a real text stream.
+    """A per-thread routing proxy around a real text stream.
 
     Installed once over sys.stdout / sys.stderr at startup. While the calling
     thread holds a capture (see _ThreadCapture), write/flush go to that
     thread's buffer; otherwise they go to the wrapped real stream. Threads
     never observe each other's captures, so one request's download chatter
     cannot swallow another request's JSON-RPC reply.
-    '''
+    """
 
     def __init__(self, wrapped: Any) -> None:
         self._wrapped = wrapped
         self._local: Any = threading.local()
 
     def _route(self) -> Any:
-        if getattr(self._local, 'depth', 0) > 0:
-            buf = getattr(self._local, 'buffer', None)
+        if getattr(self._local, "depth", 0) > 0:
+            buf = getattr(self._local, "buffer", None)
             if buf is not None:
                 return buf
         return self._wrapped
@@ -126,12 +126,12 @@ class ThreadLocalStream:
 
 
 class _ThreadCapture:
-    '''Capture this thread's stdout/stderr on the installed proxies.
+    """Capture this thread's stdout/stderr on the installed proxies.
 
     A plain with-block (no contextlib needed): __exit__ always runs, so the
     depth counter resets even when the captured call raises. The captured
     stderr text stays available for the tqdm pass-through filter.
-    '''
+    """
 
     def __init__(self) -> None:
         self.stdout_buf = io.StringIO()
@@ -139,19 +139,21 @@ class _ThreadCapture:
         self._entered: list[Any] = []
 
     def __enter__(self) -> _ThreadCapture:
-        for stream, buf in ((sys.stdout, self.stdout_buf),
-                            (sys.stderr, self.stderr_buf)):
+        for stream, buf in (
+            (sys.stdout, self.stdout_buf),
+            (sys.stderr, self.stderr_buf),
+        ):
             if isinstance(stream, ThreadLocalStream):
                 local = stream._local
-                local.depth = getattr(local, 'depth', 0) + 1
-                self._entered.append((local, getattr(local, 'buffer', None)))
+                local.depth = getattr(local, "depth", 0) + 1
+                self._entered.append((local, getattr(local, "buffer", None)))
                 local.buffer = buf
         return self
 
     def __exit__(self, *exc_info: Any) -> bool:
         for local, prev in reversed(self._entered):
             local.buffer = prev
-            local.depth = getattr(local, 'depth', 1) - 1
+            local.depth = getattr(local, "depth", 1) - 1
         self._entered = []
         return False
 
@@ -227,14 +229,39 @@ def handle_new_game(params: Dict[str, Any]) -> Any:
         multipv=multipv,
         fen=fen,
     )
+    # P3-T01 tick-push lifecycle (called under _board_lock by the
+    # dispatcher): a live clock gets a 1 Hz `clock_tick` push loop so the
+    # renderer needs no client-side timer; Unlimited (or a missing control)
+    # stops any previous loop. `_send` is stdout-locked, safe from the thread.
+    if engine_mgr._white_ms is not None:
+        engine_mgr.start_clock_push(_send)
+    else:
+        engine_mgr.stop_clock_push()
     return engine_mgr._state_snapshot()
 
 
 def handle_make_move(params: Dict[str, Any]) -> Any:
-    move_uci = str(params['move'])
+    move_uci = str(params["move"])
     success, info = engine_mgr.make_move(move_uci)
     if not success:
-        raise ValueError(info.get('reason') or f'Illegal move: {move_uci}')
+        raise ValueError(info.get("reason") or f"Illegal move: {move_uci}")
+    return info
+
+
+def handle_resign(params: Dict[str, Any]) -> Any:
+    """Record a resignation. `params["side"]` is the LOSING side."""
+    side = str(params.get("side", ""))
+    success, info = engine_mgr.resign(side)
+    if not success:
+        raise ValueError(info.get("reason") or f"Resign failed: {side!r}")
+    return info
+
+
+def handle_draw(_params: Dict[str, Any]) -> Any:
+    """Record an agreed draw (1/2-1/2)."""
+    success, info = engine_mgr.draw()
+    if not success:
+        raise ValueError(info.get("reason") or "Draw failed")
     return info
 
 
@@ -270,7 +297,7 @@ def handle_navigate_to_move(params: Dict[str, Any]) -> Any:
 def handle_get_engine_move(params: Dict[str, Any]) -> Any:
     # Snapshot the shared-board FEN under _board_lock, then release before
     # the search so board traffic never blocks on the engine.
-    fen = params.get('fen')
+    fen = params.get("fen")
     if not fen:
         with _board_lock:
             fen = engine_mgr.fen()
@@ -317,7 +344,7 @@ def handle_get_bot_move(params: Dict[str, Any]) -> Any:
     reaching into MentorEngine directly, so there is one move path with one
     result shape rather than two that could drift.
     """
-    fen = params.get('fen')
+    fen = params.get("fen")
     if not fen:
         with _board_lock:
             fen = engine_mgr.fen()
@@ -398,7 +425,7 @@ def handle_maia3_cache(params: Dict[str, Any]) -> Any:
         except SystemExit:
             pass
     for line in cap.stderr_text.splitlines():
-        if '%' in line:
+        if "%" in line:
             print(line, file=sys.stderr)
 
     return {"ok": True, "model": model}
@@ -410,6 +437,7 @@ def handle_export_pgn(_params: Dict[str, Any]) -> Any:
 
 def handle_import_pgn(params: Dict[str, Any]) -> Any:
     pgn_text = str(params["pgn"])
+    engine_mgr.stop_clock_push()
     engine_mgr.import_pgn(pgn_text)
     san_history = engine_mgr.move_history_san()
     last_san = san_history[-1] if san_history else ""
@@ -536,7 +564,7 @@ def handle_get_book_moves(params: Dict[str, Any]) -> Any:
 
 def handle_get_eval(params: Dict[str, Any]) -> Any:
     """Get evaluation from MentorEngine's evaluation function (custom eval)."""
-    fen = params.get('fen')
+    fen = params.get("fen")
     if not fen:
         with _board_lock:
             fen = engine_mgr.fen()
@@ -547,7 +575,7 @@ def handle_get_eval(params: Dict[str, Any]) -> Any:
 
 
 def handle_start_analysis(params: Dict[str, Any]) -> Any:
-    fen = params.get('fen')
+    fen = params.get("fen")
     if not fen:
         with _board_lock:
             fen = engine_mgr.fen()
@@ -581,6 +609,8 @@ def handle_stop_analysis(_params: Dict[str, Any]) -> Any:
 HANDLERS: Dict[str, Any] = {
     "new_game": handle_new_game,
     "make_move": handle_make_move,
+    "resign": handle_resign,
+    "draw": handle_draw,
     "get_legal_moves": handle_get_legal_moves,
     "undo_move": handle_undo_move,
     "navigate_to_move": handle_navigate_to_move,
@@ -610,6 +640,8 @@ _BOARD_MUTATION_CMDS = frozenset(
         "undo_move",
         "navigate_to_move",
         "import_pgn",
+        "resign",
+        "draw",
     }
 )
 

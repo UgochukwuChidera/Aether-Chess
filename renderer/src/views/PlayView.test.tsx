@@ -11,7 +11,13 @@
  * Real timers: the loop sleeps 400 ms between plies, so two plies take <1 s.
  */
 import { describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { PlayView } from "./PlayView";
 import { useGameStore, type BackendMoveResult } from "../stores/gameStore";
 import { useSettingsStore } from "../stores/settingsStore";
@@ -88,6 +94,9 @@ function createFakeBackend(): FakeBackend {
     onBackendClosed: () => () => undefined,
     onBackendError: () => () => undefined,
     onBackendReady: () => () => undefined,
+    onClockTick: () => () => undefined,
+    resign: async () => moveResult(INITIAL_FEN, [], false),
+    draw: async () => moveResult(INITIAL_FEN, [], false),
     exportPgn: async () => ({ pgn: "" }),
     saveGameHistory: async () => ({ ok: true }),
     computeAndCacheElo: async () => ({ ok: true }),
@@ -771,6 +780,218 @@ describe("P2-T13 capture-sound condition", () => {
       expect(useGameStore.getState().fen).toBe(PROMO_NEW_FEN);
     } finally {
       h.cleanup();
+    }
+  }, 15000);
+});
+
+/**
+ * P3-T01: backend owns the clock and game termination.
+ *
+ * Renderer proof: resign/draw forward intent over IPC (losing side for
+ * resign) and the backend snapshot sets the result; the player cards render
+ * the backend clock mirror; a clock_tick push updates the clock and ends the
+ * game without disturbing the current square selection.
+ */
+function renderHumanGameWithClock(opts: {
+  resignResult?: BackendMoveResult;
+  drawResult?: BackendMoveResult;
+}): {
+  unmount: () => void;
+  resignCalls: Array<unknown>;
+  drawCalls: Array<unknown>;
+  tickCb: () => ((raw: unknown) => void) | null;
+  newGameDone: () => boolean;
+} {
+  const backend = createFakeBackend();
+  const resignCalls: Array<unknown> = [];
+  const drawCalls: Array<unknown> = [];
+  let tickCb: ((raw: unknown) => void) | null = null;
+  let done = false;
+  const clocked = (
+    fen: string,
+    historyUci: string[],
+    gameOver: boolean,
+  ): BackendMoveResult => ({
+    ...moveResult(fen, historyUci, gameOver),
+    clock: { white_ms: 180_000, black_ms: 180_000, increment_ms: 2_000 },
+  });
+  backend.api.newGame = async () => {
+    done = true;
+    return clocked(INITIAL_FEN, [], false);
+  };
+  backend.api.resign = async (params: unknown) => {
+    resignCalls.push(params);
+    return (
+      opts.resignResult ??
+      ({
+        ...clocked(INITIAL_FEN, [], true),
+        result: "0-1",
+        termination: "RESIGN",
+      } as BackendMoveResult)
+    );
+  };
+  backend.api.draw = async (params: unknown) => {
+    drawCalls.push(params);
+    return (
+      opts.drawResult ??
+      ({
+        ...clocked(INITIAL_FEN, [], true),
+        result: "1/2-1/2",
+        termination: "DRAW_AGREEMENT",
+      } as BackendMoveResult)
+    );
+  };
+  backend.api.onClockTick = (cb: (raw: unknown) => void) => {
+    tickCb = cb;
+    return () => undefined;
+  };
+  window.electronAPI = backend.api as unknown as Window["electronAPI"];
+
+  useGameStore.getState().resetGame();
+  useGameStore.setState({
+    mode: "human_vs_human",
+    humanColor: "white",
+    flipped: false,
+    engineBusy: false,
+    toasts: [],
+  });
+  useSettingsStore.setState({
+    loaded: true,
+    useOpeningBook: false,
+    showEvalBar: false,
+    soundEnabled: false,
+    autoSaveGameHistory: false,
+    playEngine: "stockfish",
+    botStrength: 5,
+    thinkProfile: "rapid",
+    timeControl: { seconds: 180, increment: 2, label: "Blitz 3|2" },
+  });
+
+  const { unmount } = render(<PlayView onTabChange={() => undefined} />);
+  return {
+    unmount,
+    resignCalls,
+    drawCalls,
+    tickCb: () => tickCb,
+    newGameDone: () => done,
+  };
+}
+
+describe("P3-T01 backend-owned clock and termination", () => {
+  it("player cards render the backend clock mirror (03:00 from snapshot)", async () => {
+    const h = renderHumanGameWithClock({});
+    try {
+      await waitFor(
+        () => {
+          expect(h.newGameDone()).toBe(true);
+        },
+        { timeout: 4000, interval: 50 },
+      );
+      expect(useGameStore.getState().clock).toEqual({
+        white_ms: 180_000,
+        black_ms: 180_000,
+        increment_ms: 2_000,
+      });
+      await waitFor(
+        () => {
+          const times = document.body.textContent ?? "";
+          expect(times).toContain("03:00");
+        },
+        { timeout: 4000, interval: 50 },
+      );
+    } finally {
+      h.unmount();
+    }
+  }, 15000);
+
+  it("resign forwards the losing side; backend snapshot sets the result", async () => {
+    const h = renderHumanGameWithClock({});
+    try {
+      await waitFor(
+        () => {
+          expect(h.newGameDone()).toBe(true);
+        },
+        { timeout: 4000, interval: 50 },
+      );
+      // White to move in human_vs_human: white resigns.
+      fireEvent.click(screen.getByRole("button", { name: "flagResign" }));
+      fireEvent.click(screen.getByRole("button", { name: "Resign" }));
+      await waitFor(
+        () => {
+          expect(h.resignCalls).toEqual([{ side: "white" }]);
+        },
+        { timeout: 4000, interval: 50 },
+      );
+      await waitFor(
+        () => {
+          expect(useGameStore.getState().gameResult).toBe("black_wins");
+        },
+        { timeout: 4000, interval: 50 },
+      );
+      expect(useGameStore.getState().termination).toBe("RESIGN");
+    } finally {
+      h.unmount();
+    }
+  }, 15000);
+
+  it("draw forwards; backend snapshot records 1/2-1/2", async () => {
+    const h = renderHumanGameWithClock({});
+    try {
+      await waitFor(
+        () => {
+          expect(h.newGameDone()).toBe(true);
+        },
+        { timeout: 4000, interval: 50 },
+      );
+      fireEvent.click(screen.getByRole("button", { name: "handshakeDraw" }));
+      fireEvent.click(screen.getByRole("button", { name: "Offer" }));
+      await waitFor(
+        () => {
+          expect(h.drawCalls.length).toBe(1);
+        },
+        { timeout: 4000, interval: 50 },
+      );
+      await waitFor(
+        () => {
+          expect(useGameStore.getState().gameResult).toBe("draw");
+        },
+        { timeout: 4000, interval: 50 },
+      );
+      expect(useGameStore.getState().termination).toBe("DRAW_AGREEMENT");
+    } finally {
+      h.unmount();
+    }
+  }, 15000);
+
+  it("clock_tick ends the game without disturbing square selection", async () => {
+    const h = renderHumanGameWithClock({});
+    try {
+      await waitFor(
+        () => {
+          expect(h.newGameDone()).toBe(true);
+        },
+        { timeout: 4000, interval: 50 },
+      );
+      const cb = h.tickCb();
+      if (!cb) throw new Error("clock-tick listener was not registered");
+      act(() => {
+        useGameStore.setState({ selectedSquare: "e2" });
+      });
+      act(() => {
+        cb({
+          clock: { white_ms: 0, black_ms: 180_000, increment_ms: 2_000 },
+          game_over: true,
+          result: "0-1",
+          termination: "TIME_FORFEIT",
+        });
+      });
+      expect(useGameStore.getState().gameResult).toBe("black_wins");
+      expect(useGameStore.getState().termination).toBe("TIME_FORFEIT");
+      expect(useGameStore.getState().clock?.white_ms).toBe(0);
+      // A tick never moves: the pending selection survives it.
+      expect(useGameStore.getState().selectedSquare).toBe("e2");
+    } finally {
+      h.unmount();
     }
   }, 15000);
 });

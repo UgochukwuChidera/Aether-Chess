@@ -182,6 +182,17 @@ function startPython(mainWindow: BrowserWindow): void {
       return;
     }
 
+    // P3-T01: backend clock tick (1 Hz while a clock runs). The clock is not
+    // subscribed per-window like analysis — every window shows the same game,
+    // so broadcast to all live windows. Push, not poll: the renderer keeps no
+    // client-side timer; the backend alone advances and ends the game.
+    if (msg.type === "clock_tick") {
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) win.webContents.send("clock-tick", msg);
+      }
+      return;
+    }
+
     // Regular JSON-RPC response
     const id = msg.id as string | undefined;
     if (!id) return;
@@ -407,6 +418,8 @@ ipcMain.handle("window-is-maximized", (event) => {
 const CHESS_COMMANDS = [
   "new_game",
   "make_move",
+  "resign",
+  "draw",
   "get_legal_moves",
   "undo_move",
   "navigate_to_move",

@@ -865,7 +865,7 @@ Left stale by P2-T24 (one line): `SettingsPanel.tsx:627` offers
 
 # Phase 3 — Structural
 
-### P3-T01 — Backend owns the clock and game termination
+### P3-T01 — Backend owns the clock and game termination ✅ DONE
 
 Today the renderer counts down a cosmetic `setInterval` (`PlayView.tsx:262-272`) that
 clamps at `00:00` and does nothing else — no flag detection, so a game continues

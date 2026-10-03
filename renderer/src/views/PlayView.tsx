@@ -54,9 +54,6 @@ const setupSelectClass =
 export const PlayView: React.FC<Props> = ({ onTabChange }) => {
   const store = useGameStore();
   const settings = useSettingsStore();
-  const [whiteTime, setWhiteTime] = useState<number | null>(null);
-  const [blackTime, setBlackTime] = useState<number | null>(null);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const autoSaveRef = useRef(false);
   const boardAreaRef = useRef<HTMLDivElement>(null);
   const [boardSize, setBoardSize] = useState(0);
@@ -224,11 +221,26 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
     settings.hashMb,
   ]);
 
+  // P3-T01: backend clock push (1 Hz while a clock runs). This
+  // subscription is the only clock tick in the client - no client-side timer
+  // remains anywhere in the renderer. The tick carries a full snapshot;
+  // applyClockTick refreshes the clock mirror and terminal state without
+  // disturbing selection/highlights (a tick never moves).
   useEffect(() => {
-    if (!store.gameResult) return;
-    if (timerRef.current) clearInterval(timerRef.current);
-  }, [store.gameResult]);
+    const handleClockTick = (raw: unknown) => {
+      useGameStore.getState().applyClockTick(raw as BackendMoveResult);
+    };
+    const unsubscribe = window.electronAPI.onClockTick(handleClockTick);
+    return () => {
+      unsubscribe();
+    };
+  }, []);
 
+  // P3-T01 change 6: autosave keys off the BACKEND's result.
+  // store.gameResult/termination now originate only from backend snapshots
+  // (applyMoveResult via IPC, applyClockTick via push) - handleResign /
+  // handleDraw no longer write local state, so observing store.gameResult
+  // IS observing the backend's result.
   useEffect(() => {
     if (!store.gameResult || !settings.autoSaveGameHistory || autoSaveRef.current) return;
     if (store.fullMoveHistoryUCI.length === 0) return;
@@ -294,27 +306,17 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
   // P2-T02: async continuations above re-read via getState(); the sync reads justify the retrigger deps below.
   }, [store.gameResult, store.fullMoveHistoryUCI.length, store.termination, store.mode, store.humanColor, settings.autoSaveGameHistory, settings.playEngine, settings.timeControl]);
 
-  useEffect(() => {
-    const tc = useSettingsStore.getState().timeControl;
-    if (tc.seconds === 0 || !whiteTime) return;
-    if (timerRef.current) clearInterval(timerRef.current);
-    timerRef.current = setInterval(() => {
-      // P2-T02: re-read via getState(); interval structure untouched (P3-T01 owns it).
-      const gs = useGameStore.getState();
-      if (gs.gameResult) { clearInterval(timerRef.current!); return; }
-      if (gs.turn === 'white') setWhiteTime((t) => t !== null ? Math.max(0, t - 1) : null);
-      else setBlackTime((t) => t !== null ? Math.max(0, t - 1) : null);
-    }, 1000);
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
-    // P3-T01 owns this interval (deleted when the backend owns the clock); deps untouched.
-  }, [store.turn, store.gameResult]);
-
   // ── AI move helper — reads fresh state so it's safe in async loops ──────────
   const makeAiMove = useCallback(async (fen: string): Promise<BackendMoveResult | null> => {
     const cfg = useSettingsStore.getState();
     const gs = useGameStore.getState();
     const isWhiteTurn = gs.turn === 'white';
-    const timeRemaining = isWhiteTurn ? whiteTime : blackTime;
+    // P3-T01: engine budgets read the backend clock mirror, never local
+    // countdown state (deleted with the client-side countdown). Null = Unlimited.
+    const clock = gs.clock;
+    const timeRemaining = clock
+      ? (isWhiteTurn ? clock.white_ms : clock.black_ms) / 1000
+      : undefined;
     const totalMoves = gs.fullMoveHistoryUCI.length;
     const requestedEngine = cfg.playEngine;
     // P2-T07: captured on entry; a superseded call discards its result.
@@ -325,7 +327,17 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
     const playAndApply = async (uci: string): Promise<BackendMoveResult | null> => {
       const r = await window.electronAPI.makeMove({ move: uci }) as BackendMoveResult;
       if (gen !== gameGenerationRef.current) return null;
+      // P3-T01: a flag/resign/draw may have ended the game (via tick or
+      // IPC) while this move was in flight. The move was legal when sent
+      // so the position still advances, but a stale non-terminal response
+      // must not resurrect the backend-recorded terminal state.
+      const prev = useGameStore.getState();
+      const prevResult = prev.gameResult;
+      const prevTermination = prev.termination;
       useGameStore.getState().applyMoveResult(r);
+      if (prevResult && !r.game_over) {
+        useGameStore.setState({ gameResult: prevResult, termination: prevTermination });
+      }
       return r;
     };
 
@@ -448,7 +460,7 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
     toast(reply._fallback_msg, 'warning');
   }
   return playAndApply(reply.move);
-  }, [whiteTime, blackTime]);
+  }, []);
 
   // ── AI vs AI autonomous loop ──────────────────────────────────────────────
   const runAiVsAiLoop = useCallback(async () => {
@@ -507,6 +519,7 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
         threads: settings.threads,
         hash_mb: settings.hashMb,
         multipv: settings.multipv,
+        time_control: settings.timeControl,
       }) as BackendMoveResult;
 
       // P2-T07: a second New Game superseded this one mid-flight — stay silent.
@@ -518,11 +531,6 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
       // Flip board if human is playing as black
       store.setFlipped(resolvedColor === 'black');
       store.applyMoveResult(result);
-
-      if (settings.timeControl.seconds > 0) {
-        setWhiteTime(settings.timeControl.seconds);
-        setBlackTime(settings.timeControl.seconds);
-      }
 
       // Orchestrate first AI move(s) depending on mode
       if (setupMode === 'ai_vs_ai') {
@@ -566,7 +574,14 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
         (board.match(/[pnbrqkPNBRQK]/g) ?? []).length;
       const isCapture = countPieces(newBoard) < countPieces(oldBoard);
       
+      // P3-T01: same stale-terminal guard as playAndApply above - a flag
+      // tick may have ended the game while the human move was in flight.
+      const prevResult = useGameStore.getState().gameResult;
+      const prevTermination = useGameStore.getState().termination;
       store.applyMoveResult(result);
+      if (prevResult && !result.game_over) {
+        useGameStore.setState({ gameResult: prevResult, termination: prevTermination });
+      }
       Sound.move();
       if (isCapture) Sound.capture();
       if (result.in_check) Sound.check();
@@ -764,27 +779,42 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
   // P2-T02: store.flipBoard via getState(); handleUndo left as-is (P2-T07 owns its rewrite).
   }, [handleNavFirst, handleNavPrev, handleNavNext, handleNavLast, zenMode, toggleZenMode]);
 
-  const handleResign = () => {
-    const mode = useGameStore.getState().mode;
-    if (mode === 'ai_vs_ai') return;
-    if (mode === 'human_vs_human') {
-      // Resign for the active player (whoever's turn it is)
-      const loser = store.turn;
-      store.pushToast(`${loser === 'white' ? 'White' : 'Black'} resigned.`, 'info');
-      useGameStore.setState({
-        gameResult: loser === 'white' ? 'black_wins' : 'white_wins',
-        termination: 'RESIGN',
-      });
-    } else {
-      store.pushToast('You resigned.', 'info');
-      useGameStore.setState({
-        gameResult: store.humanColor === 'white' ? 'black_wins' : 'white_wins',
-        termination: 'RESIGN',
-      });
+  // P3-T01: resign/draw are backend commands now. The renderer forwards
+  // intent (losing side for resign); result/termination come back in the
+  // snapshot, so the backend stays the single termination authority and
+  // autosave (keyed off store.gameResult) observes backend truth.
+  const handleResign = async () => {
+    const gs = useGameStore.getState();
+    if (gs.gameResult || gs.mode === 'ai_vs_ai') return;
+    // P2-T07 generation bump: resign supersedes any in-flight AI reply,
+    // whose late apply must not resurrect the terminal position.
+    gameGenerationRef.current += 1;
+    const loser = gs.mode === 'human_vs_human' ? gs.turn : gs.humanColor;
+    try {
+      const result = await window.electronAPI.resign({ side: loser }) as BackendMoveResult;
+      const st = useGameStore.getState();
+      st.applyMoveResult(result);
+      st.setEngineBusy(false);
+      st.pushToast(`${loser === 'white' ? 'White' : 'Black'} resigned.`, 'info');
+    } catch (err) {
+      useGameStore.getState().pushToast(`Resign failed: ${err}`, 'error');
     }
   };
 
-  const handleDraw = () => store.pushToast('Draw offered (not accepted by engine)', 'info');
+  const handleDraw = async () => {
+    const gs = useGameStore.getState();
+    if (gs.gameResult || gs.mode === 'ai_vs_ai') return;
+    gameGenerationRef.current += 1;
+    try {
+      const result = await window.electronAPI.draw() as BackendMoveResult;
+      const st = useGameStore.getState();
+      st.applyMoveResult(result);
+      st.setEngineBusy(false);
+      st.pushToast('Draw agreed.', 'info');
+    } catch (err) {
+      useGameStore.getState().pushToast(`Draw failed: ${err}`, 'error');
+    }
+  };
 
   const handleExportPgn = async () => {
     if (!backendConnected) { store.pushToast('Backend not connected', 'error'); return; }
@@ -885,6 +915,11 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
   let topThinking = false;
 let showResignDraw: boolean;
 
+  // P3-T01: cards render the backend clock mirror (whole seconds, ceil so
+  // a fresh 180 s clock reads 03:00). Null clock (Unlimited) -> '--:--'.
+  const whiteSecs = store.clock ? Math.max(0, Math.ceil(store.clock.white_ms / 1000)) : null;
+  const blackSecs = store.clock ? Math.max(0, Math.ceil(store.clock.black_ms / 1000)) : null;
+
   const flipped = store.flipped;
   const mode = store.mode;
 
@@ -893,23 +928,23 @@ let showResignDraw: boolean;
   let blackCard: { name: string; elo?: number; isUser: boolean; time: number | null; active: boolean };
 
   if (mode === 'human_vs_human') {
-    whiteCard = { name: 'White', elo: undefined, isUser: true, time: whiteTime, active: store.turn === 'white' };
-    blackCard = { name: 'Black', elo: undefined, isUser: true, time: blackTime, active: store.turn === 'black' };
+    whiteCard = { name: 'White', elo: undefined, isUser: true, time: whiteSecs, active: store.turn === 'white' };
+    blackCard = { name: 'Black', elo: undefined, isUser: true, time: blackSecs, active: store.turn === 'black' };
     showResignDraw = true;
   } else if (mode === 'ai_vs_ai') {
-    whiteCard = { name: `${engineName} (White)`, elo: engineElo, isUser: false, time: whiteTime, active: store.turn === 'white' };
-    blackCard = { name: `${engineName} (Black)`, elo: engineElo, isUser: false, time: blackTime, active: store.turn === 'black' };
+    whiteCard = { name: `${engineName} (White)`, elo: engineElo, isUser: false, time: whiteSecs, active: store.turn === 'white' };
+    blackCard = { name: `${engineName} (Black)`, elo: engineElo, isUser: false, time: blackSecs, active: store.turn === 'black' };
     showResignDraw = false;
     topThinking = store.engineBusy;
   } else {
     // human_vs_ai
     const humanIsWhite = store.humanColor === 'white';
     whiteCard = humanIsWhite
-      ? { name: 'You', elo: undefined, isUser: true, time: whiteTime, active: store.turn === 'white' }
-      : { name: engineName, elo: engineElo, isUser: false, time: whiteTime, active: store.turn === 'white' };
+      ? { name: 'You', elo: undefined, isUser: true, time: whiteSecs, active: store.turn === 'white' }
+      : { name: engineName, elo: engineElo, isUser: false, time: whiteSecs, active: store.turn === 'white' };
     blackCard = humanIsWhite
-      ? { name: engineName, elo: engineElo, isUser: false, time: blackTime, active: store.turn === 'black' }
-      : { name: 'You', elo: undefined, isUser: true, time: blackTime, active: store.turn === 'black' };
+      ? { name: engineName, elo: engineElo, isUser: false, time: blackSecs, active: store.turn === 'black' }
+      : { name: 'You', elo: undefined, isUser: true, time: blackSecs, active: store.turn === 'black' };
     showResignDraw = true;
     topThinking = store.engineBusy;
   }

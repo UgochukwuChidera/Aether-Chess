@@ -76,6 +76,30 @@ class ChessEngineManager:
             "hash_mb": 128,
             "multipv": 3,
         }
+        # P3-T01: backend-owned game clock (milliseconds). None == Unlimited:
+        # no clock installed, no flag possible. The turn stamp is
+        # `time.monotonic`, NOT wall clock — wall time jumps (NTP, DST, manual
+        # changes) and would cause false flags or grant free time; monotonic
+        # is guaranteed non-decreasing, which is all a countdown needs.
+        self._white_ms: Optional[float] = None
+        self._black_ms: Optional[float] = None
+        self._increment_ms: float = 0
+        self._clock_stamp: Optional[float] = None
+        # Terminal latch set by flag-fall / resign / draw when the board
+        # itself is not over. The snapshot prefers a board outcome, then this.
+        self._terminal_result: Optional[str] = None
+        self._terminal_termination: Optional[str] = None
+        # Guards the clock scalars + terminal latch below. The service
+        # serialises all IPC handlers under its own `_board_lock`, but the
+        # tick-push thread reads/writes these fields outside it, so they get
+        # their own lock. Never nested with any other lock: no lock order.
+        self._clock_lock = threading.Lock()
+        # Tick-push loop (P3-T01): forwards `_state_snapshot` at 1 Hz while a
+        # clock runs so the renderer needs no client-side timer. Started by
+        # the service on `new_game` with a live clock, never by unit tests.
+        self._clock_push_fn: Optional[Callable[[Dict[str, Any]], None]] = None
+        self._clock_push_thread: Optional[threading.Thread] = None
+        self._clock_push_stop = threading.Event()
         self.board = self.game_state.board
 
         # Custom MentorEngine (pure Python chess AI - no Stockfish needed!)
@@ -142,8 +166,17 @@ class ChessEngineManager:
             human_color=human_color,
             strength=strength,
         )
+        # P3-T01: `time_control` was stored-but-never-consumed (and the
+        # renderer never sent it). It is now the clock authority: seconds<=0
+        # or absent means Unlimited (clocks cleared, never re-armed stale).
         if time_control:
             self.settings["time_control"] = time_control
+        else:
+            self.settings.pop("time_control", None)
+        self._install_clock(time_control)
+        with self._clock_lock:
+            self._terminal_result = None
+            self._terminal_termination = None
         if stockfish_path:
             self.settings["stockfish_path"] = stockfish_path
         if maia3_path is not None:
@@ -163,12 +196,223 @@ class ChessEngineManager:
         if multipv is not None:
             self.settings["multipv"] = max(1, min(5, int(multipv)))
 
+    # ── Game clock (P3-T01: backend is the clock/termination authority) ──
+
+    def _install_clock(self, time_control: Optional[Dict[str, Any]]) -> None:
+        """(Re)arm the clock from a `new_game` time control.
+
+        `{"seconds": N, "increment": I}` installs N seconds per side plus an
+        I-second increment. Seconds <= 0 (or no control at all) is Unlimited:
+        both clocks are cleared to None so no flag can ever latch.
+        """
+        seconds = 0
+        increment = 0
+        if time_control:
+            try:
+                seconds = int(time_control.get("seconds", 0))
+            except (TypeError, ValueError):
+                seconds = 0
+            try:
+                increment = int(time_control.get("increment", 0))
+            except (TypeError, ValueError):
+                increment = 0
+        with self._clock_lock:
+            if seconds <= 0:
+                self._white_ms = None
+                self._black_ms = None
+                self._increment_ms = 0
+                self._clock_stamp = None
+                return
+            self._white_ms = float(seconds * 1000)
+            self._black_ms = float(seconds * 1000)
+            self._increment_ms = float(max(0, increment) * 1000)
+            self._clock_stamp = time.monotonic()
+
+    def _live_ms(self) -> tuple[Optional[float], Optional[float]]:
+        """Current remaining ms (white, black) with elapsed applied live.
+
+        Pure read: the elapsed time is computed, never stored. Clamped at 0
+        so the snapshot is never internally inconsistent. None pair when
+        Unlimited.
+        """
+        with self._clock_lock:
+            if self._white_ms is None or self._black_ms is None:
+                return None, None
+            white_ms, black_ms = self._white_ms, self._black_ms
+            stamp, latched = self._clock_stamp, self._terminal_result
+        if stamp is not None and latched is None:
+            elapsed_ms = max(0.0, (time.monotonic() - stamp) * 1000)
+            if self.board.turn == chess.WHITE:
+                white_ms = max(0.0, white_ms - elapsed_ms)
+            else:
+                black_ms = max(0.0, black_ms - elapsed_ms)
+        return white_ms, black_ms
+
+    def _clock_snapshot(self) -> Optional[Dict[str, Any]]:
+        """The `clock` object every snapshot carries (P3-T01 change 4).
+
+        `{"white_ms", "black_ms", "increment_ms"}` as whole-millisecond ints
+        with elapsed applied live and clamped at 0 — never inconsistent.
+        None when Unlimited, so old producers (and the e2e fixture, which
+        omits the key) mean "no clock" downstream without any fixture touch.
+        """
+        white_ms, black_ms = self._live_ms()
+        if white_ms is None or black_ms is None:
+            return None
+        return {
+            "white_ms": int(round(white_ms)),
+            "black_ms": int(round(black_ms)),
+            "increment_ms": int(self._increment_ms),
+        }
+
+    def _check_flag(self) -> None:
+        """Latch a terminal result if the side to move has run out of time.
+
+        Called at the top of every snapshot, so even a player who sits idle
+        without moving is flagged by the next snapshot — the same snapshot
+        the 1 Hz tick-push loop forwards. Idempotent: once latched (or when
+        Unlimited) it is a no-op. The plan's "Flag falls" maps to the
+        `TIME_FORFEIT` termination: the codebase vocabulary is SCREAMING
+        (`CHECKMATE`, …, plus the custom `RESIGN`), and python-chess 1.11.2
+        has no time member in its `Termination` enum, so a custom uppercase
+        string is the consistent choice (the modal lowercases it for display).
+        """
+        with self._clock_lock:
+            if (
+                self._terminal_result is not None
+                or self._white_ms is None
+                or self._black_ms is None
+                or self._clock_stamp is None
+            ):
+                return
+            elapsed_ms = max(0.0, (time.monotonic() - self._clock_stamp) * 1000)
+            white_to_move = self.board.turn == chess.WHITE
+            mover_ms = self._white_ms if white_to_move else self._black_ms
+            if mover_ms - elapsed_ms <= 0:
+                if white_to_move:
+                    self._white_ms = 0.0
+                    self._terminal_result = "0-1"
+                else:
+                    self._black_ms = 0.0
+                    self._terminal_result = "1-0"
+                self._terminal_termination = "TIME_FORFEIT"
+                self._clock_stamp = None
+
+    def _debit_and_credit(self, mover_is_white: bool) -> None:
+        """Debit the mover's elapsed thinking time, then add the increment.
+
+        Debit happens before the move is applied; the increment after. A
+        flag (debited value <= 0) latches the terminal result and skips the
+        increment — a flagged player earns no bonus time.
+        """
+        with self._clock_lock:
+            if self._white_ms is None or self._black_ms is None:
+                return
+            now = time.monotonic()
+            if self._clock_stamp is not None:
+                elapsed_ms = max(0.0, (now - self._clock_stamp) * 1000)
+                if mover_is_white:
+                    self._white_ms = max(0.0, self._white_ms - elapsed_ms)
+                else:
+                    self._black_ms = max(0.0, self._black_ms - elapsed_ms)
+            if mover_is_white:
+                remaining = self._white_ms
+            else:
+                remaining = self._black_ms
+            if remaining <= 0:
+                self._terminal_result = "0-1" if mover_is_white else "1-0"
+                self._terminal_termination = "TIME_FORFEIT"
+                self._clock_stamp = None
+                return
+            if mover_is_white:
+                self._white_ms = remaining + self._increment_ms
+            else:
+                self._black_ms = remaining + self._increment_ms
+            self._clock_stamp = now
+
+    def _game_is_over(self) -> bool:
+        return self.board.is_game_over() or self._terminal_result is not None
+
+    def resign(self, side: str) -> tuple[bool, Dict[str, Any]]:
+        """Record a resignation. `side` is the LOSING side.
+
+        Mirrors the `make_move` return shape. Rejected when the game is
+        already over — the backend stays the single termination authority.
+        """
+        if side not in ("white", "black"):
+            return False, {"reason": f"Invalid resign side: {side!r}"}
+        with self._clock_lock:
+            if self._game_is_over():
+                return False, {"reason": "Game is already over"}
+            self._terminal_result = "0-1" if side == "white" else "1-0"
+            # Matches the termination string the renderer already used for
+            # local resigns, so the modal copy is unchanged by the move.
+            self._terminal_termination = "RESIGN"
+            self._clock_stamp = None
+        return True, self._state_snapshot()
+
+    def draw(self) -> tuple[bool, Dict[str, Any]]:
+        """Record an agreed draw. Rejected when the game is already over."""
+        with self._clock_lock:
+            if self._game_is_over():
+                return False, {"reason": "Game is already over"}
+            self._terminal_result = "1/2-1/2"
+            self._terminal_termination = "DRAW_AGREEMENT"
+            self._clock_stamp = None
+        return True, self._state_snapshot()
+
+    def start_clock_push(
+        self,
+        push_fn: Callable[[Dict[str, Any]], None],
+        interval_sec: float = 1.0,
+    ) -> None:
+        """Forward a `clock_tick` snapshot every `interval_sec` seconds.
+
+        P3-T01 tick-source decision: PUSH, not poll. A renderer poll would
+        need its own client-side timer — the very thing this item deletes —
+        while the service already forwards id-less pushes (`analysis_update`)
+        through main to the renderer, so a clock push reuses proven plumbing
+        with no new channel shape. The tick carries a full snapshot (plus
+        `type: clock_tick`) so the renderer applies it like any IPC result.
+        Only one loop runs at a time; restarting replaces the previous one.
+        """
+        self.stop_clock_push()
+        self._clock_push_fn = push_fn
+        self._clock_push_stop.clear()
+
+        def _run() -> None:
+            while not self._clock_push_stop.wait(interval_sec):
+                try:
+                    snap = self._state_snapshot()
+                except Exception:
+                    continue
+                snap["type"] = "clock_tick"
+                try:
+                    push_fn(snap)
+                except Exception:
+                    break
+                if snap.get("game_over"):
+                    # Terminal state delivered — no reason to tick forever.
+                    break
+
+        self._clock_push_thread = threading.Thread(target=_run, daemon=True)
+        self._clock_push_thread.start()
+
+    def stop_clock_push(self) -> None:
+        self._clock_push_stop.set()
+        self._clock_push_fn = None
+        thread, self._clock_push_thread = self._clock_push_thread, None
+        if thread is not None and thread is not threading.current_thread():
+            thread.join(timeout=3.0)
+
     # ── Move operations ───────────────────────────────────────────────────────
 
     def make_move(self, move_uci: str) -> tuple[bool, Dict[str, Any]]:
         """Push a UCI move. Returns (success, state_snapshot)."""
         if self._nav_index is not None:
             return False, {"reason": "Return to the live position before moving"}
+        if self._terminal_result is not None:
+            return False, {"reason": "Game is already over"}
         try:
             move = chess.Move.from_uci(move_uci)
         except ValueError:
@@ -185,6 +429,8 @@ class ChessEngineManager:
         if move not in self.board.legal_moves:
             return False, {}
 
+        mover_is_white = self.board.turn == chess.WHITE
+        self._debit_and_credit(mover_is_white)
         san = self.board.san(move)
         self.game_state.push(move)
         self._full_history = list(self.board.move_stack)
@@ -198,6 +444,14 @@ class ChessEngineManager:
         self.game_state.pop()
         self._full_history = list(self.board.move_stack)
         self._nav_index = None
+        # Undo reopens a latched game (flag/resign/draw): the position is live
+        # again. Time spent stays spent — only the latch clears — and the turn
+        # clock restarts now so the side to move is not instantly re-flagged.
+        with self._clock_lock:
+            self._terminal_result = None
+            self._terminal_termination = None
+            if self._white_ms is not None and self._black_ms is not None:
+                self._clock_stamp = time.monotonic()
         return self._state_snapshot()
 
     def _board_from_full_history(self) -> chess.Board:
@@ -283,9 +537,26 @@ class ChessEngineManager:
         return replayed
 
     def _state_snapshot(self, last_san: str = "") -> Dict[str, Any]:
+        # Idle-flag path: a player who sits without moving is still on the
+        # clock — latch before reading anything, so the snapshot (and the
+        # tick-push loop that forwards it) ends the game all by itself.
+        self._check_flag()
         board = self.board
-        is_over = board.is_game_over()
         outcome = board.outcome()
+        if outcome is not None:
+            result = outcome.result()
+            termination = outcome.termination.name
+            is_over = True
+        else:
+            with self._clock_lock:
+                latched = (self._terminal_result, self._terminal_termination)
+            if latched[0] is not None:
+                result, termination = latched
+                is_over = True
+            else:
+                result = None
+                termination = None
+                is_over = False
 
         if self._nav_index is not None and 0 <= self._nav_index < len(
             self._full_history
@@ -316,9 +587,10 @@ class ChessEngineManager:
             "last_move_uci": last_uci,
             "nav_index": -1 if self._nav_index is None else self._nav_index,
             "game_over": is_over,
-            "result": outcome.result() if outcome else None,
-            "termination": outcome.termination.name if outcome else None,
+            "result": result,
+            "termination": termination,
             "in_check": board.is_check(),
+            "clock": self._clock_snapshot(),
         }
 
     # ── SINGLE SHARED ENGINE ACCESS ──────────────────────────────────────────
@@ -806,9 +1078,18 @@ class ChessEngineManager:
         self._initial_fen = chess.STARTING_FEN
         self._full_history = list(self.board.move_stack)
         self._nav_index = None
+        # An imported game carries no time control: Unlimited, latch cleared.
+        with self._clock_lock:
+            self._white_ms = None
+            self._black_ms = None
+            self._increment_ms = 0
+            self._clock_stamp = None
+            self._terminal_result = None
+            self._terminal_termination = None
 
     def close(self) -> None:
         """Clean up all engine resources."""
+        self.stop_clock_push()
         self.stop_analysis()
         if self._manager is not None:
             self._manager.close()

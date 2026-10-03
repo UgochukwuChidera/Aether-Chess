@@ -58,6 +58,8 @@ declare global {
         time_control?: Record<string, unknown>;
       }) => Promise<unknown>;
       makeMove: (params: { move: string }) => Promise<unknown>;
+      resign: (params: { side: string }) => Promise<unknown>;
+      draw: () => Promise<unknown>;
       getLegalMoves: (params: { fen: string }) => Promise<unknown>;
       undoMove: () => Promise<unknown>;
       navigateToMove: (params: { index: number }) => Promise<unknown>;
@@ -134,6 +136,7 @@ declare global {
       onBackendError: (callback: (msg: string) => void) => () => void;
       onBackendClosed: (callback: () => void) => () => void;
       onBackendReady: (callback: () => void) => () => void;
+      onClockTick: (callback: (data: unknown) => void) => () => void;
 
       // Settings
       loadSettings: () => Promise<unknown>;

@@ -32,6 +32,17 @@ export interface AnalysisData {
 
 export type GameResult = "white_wins" | "black_wins" | "draw" | null;
 
+/**
+ * P3-T01: backend-owned clock, mirrored as received. Milliseconds remaining
+ * per side plus the increment. Null when Unlimited (or when the producer —
+ * old backend, e2e fixture, unit mocks — omits the key).
+ */
+export interface ClockState {
+  white_ms: number;
+  black_ms: number;
+  increment_ms: number;
+}
+
 export interface Toast {
   id: string;
   message: string;
@@ -63,6 +74,10 @@ export interface GameState {
   termination: string | null;
   inCheck: boolean;
 
+  // P3-T01: backend clock mirror. Set from every IPC snapshot and every
+  // clock_tick push; never computed locally (no client-side timer remains).
+  clock: ClockState | null;
+
   // Analysis
   analysis: AnalysisData;
 
@@ -76,6 +91,7 @@ export interface GameState {
   // Actions
   setFen: (fen: string) => void;
   applyMoveResult: (result: BackendMoveResult) => void;
+  applyClockTick: (tick: BackendMoveResult) => void;
   selectSquare: (sq: string | null) => void;
   setLegalMoves: (moves: string[]) => void;
   flipBoard: () => void;
@@ -109,6 +125,9 @@ export interface BackendMoveResult {
   result: string | null;
   termination: string | null;
   in_check: boolean;
+  // P3-T01: present on new backends; absent on old ones, the e2e fixture and
+  // unit mocks — always read via `?? null`, never assumed.
+  clock?: ClockState | null;
 }
 
 export interface AccuracyMoveResult {
@@ -145,6 +164,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   gameResult: null,
   termination: null,
   inCheck: false,
+  clock: null,
   analysis: { pvs: [], fen: INITIAL_FEN, running: false },
   pendingPromotion: null,
   toasts: [],
@@ -174,11 +194,26 @@ export const useGameStore = create<GameState>((set, get) => ({
       gameResult: parseResult(result.result),
       termination: result.termination,
       inCheck: result.in_check,
+      clock: result.clock ?? null,
       lastMoveFrom: lastUCI ? lastUCI.slice(0, 2) : null,
       lastMoveTo: lastUCI ? lastUCI.slice(2, 4) : null,
       selectedSquare: null,
       highlightedSquares: [],
       pendingPromotion: null,
+    });
+  },
+
+  applyClockTick: (tick) => {
+    // P3-T01: 1 Hz backend push. Selection, highlights and pending
+    // promotions survive a tick — unlike applyMoveResult, which resets them
+    // because a move genuinely changed the position. A tick never moves.
+    // Terminal state only ever advances towards over (a stale in-flight move
+    // response must not resurrect a flagged game either — callers guard that
+    // path; here the backend push IS the newest truth, so apply it whole).
+    set({
+      clock: tick.clock ?? null,
+      gameResult: parseResult(tick.result),
+      termination: tick.termination,
     });
   },
 
@@ -276,6 +311,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       gameResult: null,
       termination: null,
       inCheck: false,
+      clock: null,
       analysis: { pvs: [], fen: INITIAL_FEN, running: false },
       pendingPromotion: null,
     }),
