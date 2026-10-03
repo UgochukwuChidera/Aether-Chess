@@ -833,7 +833,7 @@ Blitz varies (~1–5s); classical is a constant. Not Maia-specific.
   fixture/renderer path loads no `aether_chess` code, so out of this item's
   scope by construction).
 
-### P2-T25 — Board rank labels are mirrored when flipped
+### P2-T25 — Board rank labels are mirrored when flipped ✅ DONE
 
 Follow-up to P2-T16 (found during its verification, left out by the
 one-expression rule): `Board.tsx` `rankLabel` uses `String(8 - rank)` — the
@@ -844,6 +844,12 @@ labels `8`, i.e. the right column reads 8…1 top-to-bottom for squares 1…8.
 - **Change:** `String(8 - displayRank)` (symmetric with the P2-T16 fix).
 - **Test:** extend `Board.test.tsx` — flipped rank assertions both columns.
 - **Done when:** rank labels match their squares in both orientations.
+- **Verification (2026-10-03):** test-first `Board.test.tsx` P2-T25 block
+  (unflipped left column 8…1, flipped right column 1…8, per-square
+  label-equals-rank plus absent-label checks on the unlabeled column):
+  pre-fix flipped FAIL recorded (`8,7,6,5,4,3,2,1` vs expected
+  `1,2,3,4,5,6,7,8`), unflipped green throughout. One-expression fix at
+  `Board.tsx:127`, nothing else in `Board.tsx`. Full gate green.
 
 ### P2-T26 — Classical UI copy still promises 5–120s ✅ DONE
 

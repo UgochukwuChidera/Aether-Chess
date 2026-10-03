@@ -39,6 +39,16 @@ function fileLabelText(container: HTMLElement, sq: string): string | null {
   return fileSpan ? (fileSpan.textContent ?? "").trim() : null;
 }
 
+/** The rank-coordinate label (`top-…` span) inside square `sq` (null when absent). */
+function rankLabelText(container: HTMLElement, sq: string): string | null {
+  const el = container.querySelector(`[data-sq="${sq}"]`);
+  if (!el) throw new Error(`square ${sq} not rendered (Board missing?)`);
+  const rankSpan = Array.from(el.querySelectorAll("span")).find((s) =>
+    s.className.includes("top-"),
+  );
+  return rankSpan ? (rankSpan.textContent ?? "").trim() : null;
+}
+
 /** All coordinate-label texts (`top-…` rank span, `bottom-…` file span). */
 function labelTexts(container: HTMLElement, sq: string): string[] {
   const el = container.querySelector(`[data-sq="${sq}"]`);
@@ -73,6 +83,56 @@ describe("P2-T16 board file labels under flip", () => {
       ).toBe("h1");
       // Pre-fix this reads `a`: fileLabel ignores the 180° flip mapping.
       expect(fileLabelText(container, "h1")).toBe("h");
+    } finally {
+      unmount();
+    }
+  });
+});
+
+describe("P2-T25 board rank labels under flip", () => {
+  it("unflipped: left-column rank labels read 8…1 top-to-bottom, matching squares", () => {
+    const { container, unmount } = renderBoard(false);
+    try {
+      const squares = ["a8", "a7", "a6", "a5", "a4", "a3", "a2", "a1"];
+      const labels = squares.map((sq) => rankLabelText(container, sq));
+      expect(labels).toEqual(["8", "7", "6", "5", "4", "3", "2", "1"]);
+      for (const sq of squares) {
+        expect(rankLabelText(container, sq)).toBe(sq.slice(1));
+      }
+      // Right column carries no rank labels unflipped (showRank gates file === 0).
+      expect(rankLabelText(container, "h8")).toBeNull();
+      expect(rankLabelText(container, "h1")).toBeNull();
+    } finally {
+      unmount();
+    }
+  });
+
+  it("flipped: right-column rank labels read 1…8 top-to-bottom, matching squares", () => {
+    const { container, unmount } = renderBoard(true);
+    try {
+      // Labeled column is grid file 7 (visual right): a1 at top … a8 at bottom.
+      const squaresTopToBottom = [
+        "a1",
+        "a2",
+        "a3",
+        "a4",
+        "a5",
+        "a6",
+        "a7",
+        "a8",
+      ];
+      const labels = squaresTopToBottom.map((sq) =>
+        rankLabelText(container, sq),
+      );
+      // Pre-fix this reads 8…1: rankLabel uses grid rank, not displayRank.
+      expect(labels).toEqual(["1", "2", "3", "4", "5", "6", "7", "8"]);
+      for (const sq of squaresTopToBottom) {
+        expect(rankLabelText(container, sq)).toBe(sq.slice(1));
+      }
+      // Flipped top-left (h1) and bottom-left (h8) carry no rank labels
+      // (showRank gates file === 7 when flipped).
+      expect(rankLabelText(container, "h1")).toBeNull();
+      expect(rankLabelText(container, "h8")).toBeNull();
     } finally {
       unmount();
     }

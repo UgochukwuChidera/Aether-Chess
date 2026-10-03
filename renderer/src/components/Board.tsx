@@ -124,7 +124,7 @@ export const Board: React.FC<React.PropsWithChildren<Props>> = ({
       const showFile = flipped ? rank === 0 : rank === 7;
       const showRank = flipped ? file === 7 : file === 0;
       const fileLabel = 'abcdefgh'[displayFile];
-      const rankLabel = String(8 - rank);
+      const rankLabel = String(8 - displayRank);
 
       return (
         <div
