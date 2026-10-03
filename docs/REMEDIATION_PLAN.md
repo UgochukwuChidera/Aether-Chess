@@ -754,7 +754,7 @@ keep gating with "Backend not connected" for the rest of the session.
   build succeeds, typecheck:renderer clean, test:renderer 23 pass,
   test:e2e 4 pass.
 
-### P2-T23 — Maia proxy double-discounts the resolved budget
+### P2-T23 — Maia proxy double-discounts the resolved budget ✅ DONE
 
 Follow-up to P2-T10 (found on challenge): `manager.resolve_budget` samples the
 think profile ONCE (`manager.py:185-192`), and Stockfish (`Limit(time=budget)`)
@@ -773,6 +773,25 @@ said to remove the independent resample.
   samples would differ → engine sees `Limit(time=B)` exactly, both profiles.
 - **Done when:** Maia's elapsed matches the manager budget like the other bots;
   `rg sample_think_time aether_chess/engines/maia3_proxy.py` returns zero.
+
+- **Verification (2026-10-03):** test-first `TestMaia3BudgetExactUnderProfiles`
+  (B=3.0, time_remaining=10s, so the proxy-side safe_cap is 2.0s): pre-fix FAIL
+  on both profiles (`[blitz] engine saw limit 1.2678, not caller budget 3.0`;
+  `[classical] engine saw limit 2.0, not caller budget 3.0` -- the second roll
+  min()d the budget); post-fix `seen_limits=[3.0]` under both profiles,
+  elapsed 3.00s/3.01s, proxy-side `sample_think_time` calls 0 (wraps-spy with
+  create=True, since the fixed code drops the import). `rg sample_think_time
+  aether_chess/engines/maia3_proxy.py` returns zero (whole import line dropped;
+  both names served only the removed resample). `think_profile` /
+  `time_remaining` / `time_increment` params KEPT with comment (keyword callers
+  in `maia3_bot.py:73` + `backend/chess_engine.py` proxy call; the
+  `_ensure_engine` key never used the profile; temperature/top_p/model/elo
+  untouched). Full gate green: python 161 OK, ruff clean, pyright 0, electron
+  45 pass, lint 0 errors (5 pre-existing warnings), build succeeds,
+  typecheck:renderer clean, test:renderer 23 pass, test:e2e 4 pass (two earlier
+  full-run UI-click flakes under memory pressure; every spec also passes solo
+  and in pairs, and no e2e path executes the proxy -- fixture/renderer only
+  mention maia3 in comments).
 
 Note (no item): classical's "5–120s typical" doc vs the 5.0s ceiling is GLOBAL
 (`clamp_time_limit` caps every bot) and the ceiling serves comparability — doc

@@ -18,6 +18,7 @@ from __future__ import annotations
 import threading
 import time
 import unittest
+from unittest import mock
 
 import chess
 
@@ -115,6 +116,97 @@ class TestMaia3BudgetClamp(unittest.TestCase):
             "time_limit_sec", seen, "bot must forward the resolved budget to the proxy"
         )
         self.assertAlmostEqual(seen["time_limit_sec"], BUDGET, delta=0.05)
+
+
+class TestMaia3BudgetExactUnderProfiles(unittest.TestCase):
+    """P2-T23: the proxy drives ``Limit`` from the resolved budget directly.
+
+    Fail-first design: explicit budget B=3.0 with a tight clock
+    (``time_remaining=10s``). The OLD proxy re-samples the profile under that
+    clock (proxy-side ``safe_cap=2.0s``: classical collapses to its 2s bucket,
+    blitz to 1-2s -- at the startpos both land <= 2.0s after the ~1.16x
+    complexity factor and jitter) and takes ``min(sampled, B)``, so the
+    engine sees ~2s instead of B: the double-discount the plan measured as
+    3.23 -> 1.05. A raw classical sample (2s floor, ~9-35s typical) can never
+    equal a sub-second B either, so ``Limit(time=B)`` under BOTH profiles --
+    plus zero proxy-side samples -- is observed exactly only when the proxy
+    stops rolling its own dice. Profile shaping lives in
+    ``manager.resolve_budget`` alone; the clamp stays.
+    """
+
+    EXACT_BUDGET = 3.0
+    TIGHT_CLOCK = 10.0
+
+    def _play_with_spied_resample(self, profile):
+        from aether_chess.engines import maia3_proxy as proxy_mod
+        from aether_chess.think_profile import sample_think_time as orig_sample
+
+        proxy = Maia3Proxy()
+        engine = HonestEngine()
+        proxy._ensure_engine = lambda req: engine  # type: ignore[method-assign]
+        bot = Maia3Bot(proxy=proxy)
+        try:
+            # create=True: fixed code drops the proxy-side import, so the
+            # attribute is ABSENT (patch creates + removes a placeholder the
+            # proxy never calls -> count 0). Old code HAS it (wraps delegates
+            # to the real sampler -> count 1, and the seen_limits assert
+            # below already failed first). Either way the count is meaningful.
+            with mock.patch.object(
+                proxy_mod,
+                "sample_think_time",
+                wraps=orig_sample,
+                create=True,
+            ) as spy:
+                request = MoveRequest(
+                    fen=START,
+                    time_limit_sec=self.EXACT_BUDGET,
+                    think_profile=profile,
+                    time_remaining=self.TIGHT_CLOCK,
+                )
+                t0 = time.perf_counter()
+                move = bot.play(request)
+                elapsed = time.perf_counter() - t0
+        finally:
+            bot.close()
+        return move, engine, elapsed, spy
+
+    def test_resolved_budget_reaches_limit_exactly_under_both_profiles(self):
+        for profile in ("blitz", "classical"):
+            with self.subTest(think_profile=profile):
+                move, engine, elapsed, spy = self._play_with_spied_resample(
+                    profile
+                )
+                self.assertIsNotNone(move.uci, "move must still return")
+                self.assertEqual(len(engine.seen_limits), 1)
+                self.assertAlmostEqual(
+                    engine.seen_limits[0],
+                    self.EXACT_BUDGET,
+                    delta=0.05,
+                    msg=(
+                        f"[{profile}] engine saw limit "
+                        f"{engine.seen_limits[0]!r}, not caller budget "
+                        f"{self.EXACT_BUDGET}: the proxy's second roll "
+                        f"min()d the budget"
+                    ),
+                )
+                self.assertGreaterEqual(
+                    elapsed,
+                    self.EXACT_BUDGET - 0.15,
+                    f"[{profile}] elapsed {elapsed:.2f}s under budget "
+                    f"{self.EXACT_BUDGET}s: proxy cut thinking short",
+                )
+                self.assertLessEqual(
+                    elapsed,
+                    self.EXACT_BUDGET + TOLERANCE,
+                    f"[{profile}] elapsed {elapsed:.2f}s blew past budget "
+                    f"{self.EXACT_BUDGET}s + {TOLERANCE}s",
+                )
+                self.assertEqual(
+                    spy.call_count,
+                    0,
+                    f"[{profile}] proxy re-sampled the profile "
+                    f"{spy.call_count}x; shaping lives in resolve_budget alone",
+                )
 
 
 class TestMaia3PingBound(unittest.TestCase):

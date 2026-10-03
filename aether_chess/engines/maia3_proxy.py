@@ -11,8 +11,6 @@ from typing import Any, Optional
 import chess
 import chess.engine  # noqa: F401  (used via `chess.engine.*` below)
 
-from aether_chess.think_profile import get_profile, sample_think_time
-
 
 class Maia3UnavailableError(RuntimeError):
     pass
@@ -275,17 +273,14 @@ class Maia3Proxy:
         board = chess.Board(fen)
         # Single budget source: the manager resolves one aligned budget per
         # move (resolve_budget -> request.time_limit_sec) and the bot forwards
-        # it here. The profile sample only sets the human-like pace; the
-        # caller's budget always wins (clamp, not replace), sampled once —
-        # never an independent post-play resample-and-sleep that blows past it.
+        # it here. Drive Limit from that budget directly -- never re-sample
+        # the profile here: min(sampled, budget) double-discounts whenever
+        # the second roll lands lower (P2-T23 measured 3.23 -> 1.05).
+        # think_profile / time_remaining / time_increment stay in the
+        # signature (forwarded clock context; callers pass them by keyword)
+        # but no longer shape the limit. The clamp stays.
         budget = clamp_time_limit(time_limit_sec)
-        sampled = sample_think_time(
-            get_profile(think_profile),
-            board=board,
-            time_remaining=time_remaining,
-            time_increment=time_increment,
-        )
-        limit = chess.engine.Limit(time=min(sampled, budget))
+        limit = chess.engine.Limit(time=budget)
 
         try:
             with _ThreadLocalCapture():
