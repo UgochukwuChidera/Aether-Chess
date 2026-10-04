@@ -1028,6 +1028,22 @@ every `unittest discover` process pays the numba JIT cold-compile of the three
 - **Done when:** python suite measurably faster with zero result changes. Estimate
   20–40s per run; if measurement disproves the saving, record and close anyway.
 
+### P3-T09 — Renderer never calls settings_defaults
+
+Gap from P3-T02 (found in P3-T04 verification): the backend serves
+`settings_defaults` (`service.py:385-392, :639`) but zero renderer callers
+exist — boot always uses the mirrored fallback constants, so P3-T02 Change 2
+("DEFAULTS comes from the backend at boot") is half-done.
+
+- **Change:** preload + `settingsStore.loadFromBackend`: fetch
+  `settings_defaults` when the backend is reachable (with/before load), apply
+  defaults + caps, fall back silently otherwise (existing behavior preserved).
+  Fixture answers with canned defaults + caps (fixture touch, recorded) unless
+  the fallback provably covers e2e boot — pick by reading.
+- **Test:** extend `settingsStore.test.ts` — reachable backend → caps from the
+  command; unreachable → fallback constants; junk still clamped.
+- **Done when:** boot uses backend caps when available; exactly one caller.
+
 ---
 
 # Phase 4 — Unfinished features and loose ends

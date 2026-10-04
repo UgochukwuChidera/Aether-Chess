@@ -2,7 +2,7 @@
   "$schemaNote": "Coordinator-owned phase ledger for the AetherChess remediation. Shape follows the pre-flight-protocol skill: status, phase, workItems, decisions, session.os. Sub-agent outcomes live in commit bodies + coordinator chat (subagent depth limit forbids nested .spec/agents writes). workItem statuses: completed | active | todo. P1-T01 is flagged next:true.",
   "status": "executing",
   "phase": "phase-3",
-  "phaseLabel": "Phase 3 — Structural (next up)",
+  "phaseLabel": "Phase 3 — Structural (P3-T05 next)",
   "phases": [
     {
       "id": "phase-0",
@@ -46,12 +46,13 @@
     "authority": "docs/VERIFICATION_REGISTER.md outranks docs/REMEDIATION_PLAN.md where they disagree (register §5 adjudication)."
   },
   "gate": {
-    "baseline": "python 164 passed · ruff clean · pyright 0 errors · electron 45 passed · lint clean · build succeeds",
+    "baseline": "python 193 passed · ruff clean · pyright 0 errors · electron 76 passed · lint clean · build succeeds",
     "phaseExits": {
       "phase-0": "python 122 passed",
       "phase-1": "python 130 passed",
       "phase-2-open": "python 133 passed (P2-T01, P1-T05)",
-      "phase-2": "python 164 passed"
+      "phase-2": "python 164 passed",
+      "phase-3-open": "python 182 passed (P3-T01)"
     },
     "addedInPhase0": "test:renderer 1 passed · typecheck:renderer 0 errors · test:e2e 1 passed (hermetic, stdlib fixture)",
     "commands": [
@@ -430,37 +431,41 @@
       "id": "P3-T01",
       "title": "Backend owns clock + termination",
       "phase": "phase-3",
-      "status": "todo",
-      "note": "Clock state, flag-fall, resign/draw, snapshot clock, delete setInterval. Removes 1 suppression.",
-      "next": true
+      "status": "completed",
+      "note": "Backend clock/termination + push ticks; TIME_FORFEIT; tick takes clock-lock only (no deadlock).",
+      "commit": "c8c198617ae0502fd882b5babbd9411b52fa550e"
     },
     {
       "id": "P3-T02",
       "title": "One settings schema",
       "phase": "phase-3",
-      "status": "todo",
-      "note": "backend/settings_schema.py canonical; 4 sources (not 5); version + migration; debounce save."
+      "status": "completed",
+      "note": "Canonical settings_schema.py; renderer caps live w/ fallback; service boundary clamps.",
+      "commit": "4e1ceaa405c31b962f7e34700ffa459eb4c75f25"
     },
     {
       "id": "P3-T03",
       "title": "Schema for the IPC surface",
       "phase": "phase-3",
-      "status": "todo",
-      "note": "Validate at ipcMain.handle boundary; proportional (no codegen)."
+      "status": "completed",
+      "note": "Pure ipcValidation module + boundary wiring; proportional (no chess semantics). Electron 45->76.",
+      "commit": "c08e70b78d47d755efb953fddd41eac2ea43f689"
     },
     {
       "id": "P3-T04",
       "title": "Record ownership change in docs",
       "phase": "phase-3",
-      "status": "todo",
-      "note": "BACKEND_API + ARCHITECTURE updates."
+      "status": "completed",
+      "note": "Pure docs: resign/draw/clock/settings_defaults documented; ownership section; zero-drift audit.",
+      "commit": "b09c873f61844eb9c453b094f3b5d2b570ff5a41"
     },
     {
       "id": "P3-T05",
       "title": "Narrow hot-path store subscriptions",
       "phase": "phase-3",
       "status": "todo",
-      "note": "Selectors in PlayView/Board/App."
+      "note": "Selectors in PlayView/Board/App.",
+      "next": true
     },
     {
       "id": "P3-T06",
@@ -475,6 +480,20 @@
       "phase": "phase-3",
       "status": "todo",
       "note": "'Planned, not wired' ARCHITECTURE section."
+    },
+    {
+      "id": "P3-T08",
+      "title": "Enable numba compile caching for the test suite",
+      "phase": "phase-3",
+      "status": "todo",
+      "note": "cache=True + NUMBA_CACHE_DIR; measure before/after; from test-suite audit."
+    },
+    {
+      "id": "P3-T09",
+      "title": "Renderer never calls settings_defaults",
+      "phase": "phase-3",
+      "status": "todo",
+      "note": "P3-T02 Change 2 half-done: command exists, zero callers. Preload + loadFromBackend wiring + fixture answer."
     },
     {
       "id": "P4-T01",
@@ -534,7 +553,8 @@
     "package.json test:python uses bare python (works with venv activated; noted, unowned).",
     "Phase A verification table + register §5 adjudication are the audit trail (chat 2026-09-28 + commit bodies).",
     "P2-T18 lint trade (accepted): removed 2 suppressions, surfacing 2 honest exhaustive-deps warnings in AnalysisView.tsx (per-render handleStartAnalysis + snapshot reads cannot join deps without restart loops); accepted over re-suppression (hides truth) and over callback-stabilization refactor (unowned scope — useCallback+getState stabilization declined).",
-    "UNOWNED cleanup candidate (no owner, not scheduled — no item created): AnalysisView.tsx useCallback+getState stabilization to silence the 2 residual P2-T18 exhaustive-deps warnings; do not re-litigate inside item scope."
+    "UNOWNED cleanup candidate (no owner, not scheduled — no item created): AnalysisView.tsx useCallback+getState stabilization to silence the 2 residual P2-T18 exhaustive-deps warnings; do not re-litigate inside item scope.",
+    "listener-leak.spec flake watch: Settings-click/global timeouts under memory pressure (5-6/7.8GB, swap) on this dev machine; passes solo when quiet; proven pre-existing via stash twice (P2-T24, P3-T04 runs). Environmental, not code: DEBUG run showed all 20 clicks succeeding, total 59.4s vs ~20-27s historical. No stray processes. If it fails on quiet hardware or CI, file an item (spec timeout or boot-perf)."
   ],
   "maintenance": "Coordinator-owned. Update statuses in docs-style commits at phase boundaries or when decisions change — never inside item commits (would violate staged-only rule). Sub-agent prompt template: read plan item + register §5 + this ledger; test-first; full expanded gate; staged-only commit with Closes: trailer; plan DONE mark in same commit."
 }
