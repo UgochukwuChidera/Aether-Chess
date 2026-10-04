@@ -97,11 +97,79 @@ Budgets are clamped to 0.01–5.0 s.
 
 ---
 
+## State snapshot
+
+Most game commands return the same full snapshot. `new_game`, `make_move`,
+`resign`, `draw`, `undo_move`, `navigate_to_move` and `import_pgn` all return
+this shape (plus `last_move_san` where a move was just played):
+
+```json
+{
+  "fen": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1",
+  "turn": "black",
+  "legal_moves": ["e7e5", "c7c5", ...],
+  "move_history": ["e4", ...],
+  "full_move_history": ["e2e4", ...],
+  "move_colors": ["white", ...],
+  "last_move_san": "e4",
+  "last_move_uci": "e2e4",
+  "nav_index": -1,
+  "game_over": false,
+  "result": null,
+  "termination": null,
+  "in_check": false,
+  "clock": { "white_ms": 600000, "black_ms": 598250, "increment_ms": 0 }
+}
+```
+
+| Field               | Meaning                                                                                                |
+| ------------------- | ------------------------------------------------------------------------------------------------------ |
+| `move_history`      | SAN per ply, replayed from the retained start position.                                                |
+| `full_move_history` | UCI per ply, from the same single replay — the two arrays cannot desynchronise.                        |
+| `move_colors`       | The side that **moved** each ply (`board.turn` before the push), never index parity.                   |
+| `nav_index`         | `-1` means the live position; anything else is a history viewing window.                               |
+| `result`            | `"1-0"`, `"0-1"`, `"1/2-1/2"`, or `null` while the game is live. The backend latches this, not the UI. |
+| `termination`       | How the game ended (see below), or `null` while live.                                                  |
+| `clock`             | Remaining time per side (see below), or `null` when the game is Unlimited.                             |
+
+### Termination vocabulary
+
+Board outcomes come from `python-chess` (`CHECKMATE`, `STALEMATE`,
+`INSUFFICIENT_MATERIAL`, `SEVENTYFIVE_MOVES`, `FIVEFOLD_REPETITION`,
+`VARIANT_WIN`, `VARIANT_LOSS`, `VARIANT_DRAW`). Three more are latched by the
+backend when the board itself is not over:
+
+| `termination`    | `result`                   | Set by                                       |
+| ---------------- | -------------------------- | -------------------------------------------- |
+| `TIME_FORFEIT`   | `"1-0"` / `"0-1"` (winner) | Flag-fall: the side to move ran out of time. |
+| `RESIGN`         | `"1-0"` / `"0-1"` (winner) | `resign`: `side` names the **losing** side.  |
+| `DRAW_AGREEMENT` | `"1/2-1/2"`                | `draw`: the players agreed.                  |
+
+`TIME_FORFEIT` is a backend custom string, not a `python-chess` member
+(python-chess 1.11.2 has no time member in its `Termination` enum); the
+codebase vocabulary is SCREAMING so the custom value follows suit.
+
+### The `clock` object
+
+```json
+{ "white_ms": 600000, "black_ms": 598250, "increment_ms": 0 }
+```
+
+All fields are whole-millisecond ints. Elapsed thinking time for the side to
+move is applied live on every read and clamped at 0, so a snapshot is never
+internally inconsistent (no negative time, always the correct side debited).
+The stamp is `time.monotonic`, not wall clock, so NTP/DST/manual changes can
+neither flag falsely nor grant free time. When the game is Unlimited
+(`time_control` absent or `seconds <= 0`) the snapshot carries
+`"clock": null` — no clock installed, no flag possible.
+
+---
+
 ## Commands
 
 ### `new_game`
 
-Start a new game and reset the board.
+Start a new game, reset the board, and (re-)arm the game clock.
 
 **Request params:**
 
@@ -111,20 +179,27 @@ Start a new game and reset the board.
   "engine_type": "mentor",
   "human_color": "white",
   "strength": 7,
-  "time_control": { "seconds": 600, "increment": 0 }
+  "time_control": { "seconds": 600, "increment": 0 },
+  "fen": null
 }
 ```
 
-**Response result:**
+`time_control` is consumed by the backend (P3-T01): `{"seconds": N,
+"increment": I}` installs N seconds per side plus an I-second increment,
+resetting both clocks and clearing any latched result. `seconds <= 0` or an
+absent control means **Unlimited** — both clocks are cleared to `null` so no
+flag can ever latch, and any running `clock_tick` loop stops. A live clock
+starts a 1 Hz `clock_tick` push loop (see [Push events](#push-events)) so the
+renderer needs no client-side timer.
 
-```json
-{
-  "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
-  "turn": "white",
-  "legal_moves": ["e2e4", "d2d4", ...],
-  "game_over": false
-}
-```
+The engine numerics (`threads`, `hash_mb`, `multipv`, `maia3_elo`) are clamped
+at the IPC boundary through the canonical schema (`backend/settings_schema.py`:
+8 threads / 512 MB / 5 multipv max) — junk like `threads: 99999` becomes the
+cap here, before the engine stores anything. Only keys **present** are touched;
+absent keys stay absent. `fen` is an optional custom start position (e.g. a
+black-to-move load); absent means the standard startpos.
+
+**Response result:** full state snapshot (see [State snapshot](#state-snapshot)).
 
 ---
 
@@ -139,6 +214,48 @@ Push a UCI move onto the board.
 ```
 
 **Response result:** Full state snapshot (same as `new_game` result plus history fields).
+
+The mover's elapsed thinking time is debited **before** the move is applied,
+then the increment is added. A debit to ≤ 0 latches the terminal result
+(`TIME_FORFEIT`) and skips the increment — a flagged player earns no bonus
+time — while the move itself is still applied. A move is rejected — with the guard `reason` surfaced as the error,
+not a bare `Illegal move` — while history is being browsed (return to the
+live position first) or when the game is already over.
+
+---
+
+### `resign`
+
+Record a resignation. The backend is the single termination authority: only
+it can end a game, so the renderer never sets a result locally.
+
+**Request params:**
+
+```json
+{ "side": "white" }
+```
+
+`side` is the **losing** side (`"white"` or `"black"`).
+
+**Response result:** full state snapshot with `result` set to the winner
+(`"0-1"` when white resigns, `"1-0"` when black resigns) and `termination`
+`"RESIGN"`.
+
+**Errors:** an unknown `side`, or a game that is already over
+(`"Game is already over"`).
+
+---
+
+### `draw`
+
+Record an agreed draw.
+
+**Request params:** `{}` (ignored)
+
+**Response result:** full state snapshot with `result` `"1/2-1/2"` and
+`termination` `"DRAW_AGREEMENT"`.
+
+**Errors:** a game that is already over (`"Game is already over"`).
 
 ---
 
@@ -172,6 +289,10 @@ Pop the last move from the stack.
 **Request params:** `{}`
 
 **Response result:** State snapshot.
+
+Undo reopens a latched game: a flag/resign/draw latch clears so the position
+is live again. Time spent stays spent — only the latch clears — and the turn
+clock restarts now, so the side to move is not instantly re-flagged.
 
 ---
 
@@ -313,6 +434,48 @@ Stockfish build or a bot added later appears without frontend changes.
 > Discovery starts engines, so the first `list_bots` after launch is not
 > instant. The UI tracks a separate "still looking" state so a slow scan is not
 > shown as "no engine installed".
+
+---
+
+### `settings_defaults`
+
+The canonical settings defaults, limits and schema version
+(`backend/settings_schema.py` is the single authority — the 8-thread /
+512 MB / 5-multipv caps live there, not in the UI).
+
+**Request params:** `{}` (ignored — there is nothing to pass)
+
+**Response result:**
+
+```json
+{
+  "schemaVersion": 1,
+  "defaults": {
+    "threads": 1,
+    "hash_mb": 128,
+    "multipv": 3,
+    "strength": 7,
+    "think_profile": "human_like",
+    "maia3_elo": 1500,
+    "stockfish_path": "stockfish",
+    "maia3_model": "maia3-5m",
+    "maia3_device": "cpu"
+  },
+  "limits": {
+    "min_threads": 1,
+    "max_threads": 8,
+    "min_hash_mb": 16,
+    "max_hash_mb": 512,
+    "min_multipv": 1,
+    "max_multipv": 5
+  }
+}
+```
+
+The renderer treats this payload as the authority and mirrors the same
+numbers as static fallback constants (8 threads / 512 MB / 5 multipv,
+`schemaVersion` 1) so boot never blocks on the backend — no IPC channel wires
+the command through yet, so the fallback is what boot uses today.
 
 ---
 
@@ -461,6 +624,44 @@ Stop an ongoing analysis.
 
 ---
 
+## Push events
+
+Id-less messages the backend pushes at any time (forwarded by main to every
+live window — no per-window subscription, every window shows the same game).
+
+### `analysis_update`
+
+Streamed principal variations for a `start_analysis` request (see
+[`start_analysis`](#start_analysis) for the shape).
+
+### `clock_tick`
+
+A full state snapshot forwarded at 1 Hz while a game clock runs — the PUSH
+tick source P3-T01 chose over polling, so the renderer keeps no client-side
+timer (the old `setInterval` is gone; the UI renders `store.clock`):
+
+```json
+{
+  "type": "clock_tick",
+  "fen": "<FEN>",
+  "turn": "white",
+  "clock": { "white_ms": 598250, "black_ms": 600000, "increment_ms": 0 },
+  "game_over": false,
+  "result": null,
+  "termination": null,
+  "...": "every other state-snapshot field"
+}
+```
+
+The loop starts on `new_game` with a live clock (restarting replaces any
+previous loop — only one runs at a time) and stops when the game is Unlimited,
+when `import_pgn` clears the clock, or once a terminal snapshot has been
+delivered. A player who sits idle without moving is still flagged: the flag
+check runs at the top of every snapshot, so the next tick latches
+`TIME_FORFEIT` by itself.
+
+---
+
 ### `calculate_accuracy`
 
 Post-game accuracy scoring (requires Stockfish, may take several minutes).
@@ -497,8 +698,19 @@ Estimate Elo rating from accuracy metrics.
 **Request params:**
 
 ```json
-{ "accuracy": 87.4, "blunder_rate": 0.05 }
+{
+  "accuracy": 87.4,
+  "blunder_rate": 0.05,
+  "avg_cp_loss": 0.0,
+  "num_games": null
+}
 ```
+
+`avg_cp_loss` and `num_games` are optional. `num_games` is an IPC-fed loop
+bound (`range(estimated_games)` in `backend/analysis.py`), so it is clamped
+to at most 100 — a huge value would be a CPU-DoS vector in the handler thread.
+Values `< 1` normalize to `null` (the accuracy heuristic path owns them) and
+non-numeric input is rejected with `Invalid num_games`.
 
 **Response result:**
 
@@ -606,20 +818,28 @@ Set `hf_token` for gated repos. `HF_HOME` is honoured; it defaults to
 
 ## Threading & Concurrency
 
-Every request is dispatched to its own daemon thread, so **reading stdin is
-never blocked** and the UI stays responsive even while an engine is thinking.
+Every request is submitted to a bounded pool (`ThreadPoolExecutor`,
+`max_workers=8`), so **reading stdin is never blocked** and the UI stays
+responsive even while an engine is thinking.
 
 Commands are then grouped by what they need:
 
-| Group           | Commands                                                                                                                                                                 | Locking                                                                                                                    |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
-| Board mutation  | `new_game`, `make_move`, `undo_move`, `navigate_to_move`, `import_pgn`                                                                                                   | Serialized under one board lock, so the game state cannot be corrupted by interleaving.                                    |
-| Board read      | `get_legal_moves`, `export_pgn`, `export_fen`, `get_book_moves`                                                                                                          | Same board lock, but fast.                                                                                                 |
-| Everything else | `get_engine_move`, `get_bot_move`, `list_bots`, `get_eval`, `calculate_accuracy*`, `estimate_elo`, `start_analysis`, `stop_analysis`, `maia3_cache`, `check_maia3_cache` | **No board lock.** These take a FEN from params and may block for a long time, so holding the lock would freeze the board. |
+| Group           | Commands                                                                                                                                                                                      | Locking                                                                                                                    |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Board mutation  | `new_game`, `make_move`, `resign`, `draw`, `undo_move`, `navigate_to_move`, `import_pgn`                                                                                                      | Serialized under one board lock, so the game state cannot be corrupted by interleaving.                                    |
+| Board read      | `get_legal_moves`, `export_pgn`, `export_fen`, `get_book_moves`                                                                                                                               | Same board lock, but fast.                                                                                                 |
+| Everything else | `get_engine_move`, `get_bot_move`, `list_bots`, `settings_defaults`, `get_eval`, `calculate_accuracy*`, `estimate_elo`, `start_analysis`, `stop_analysis`, `maia3_cache`, `check_maia3_cache` | **No board lock.** These take a FEN from params and may block for a long time, so holding the lock would freeze the board. |
 
 `new_game` stops analysis _before_ taking the board lock, so waiting on
 analysis teardown cannot block board traffic.
 
-Because non-board commands are not serialized, **do not fire two
-`get_engine_move` calls concurrently** — they will compete for CPU and the
-same Stockfish binary. Board commands remain safe to send in any order.
+Engine searches are serialized under a separate `_uci_lock`, held for the
+whole search — `python-chess` handles are not safe for concurrent use, so two
+overlapping `get_engine_move` calls queue instead of interleaving the UCI
+protocol and corrupting replies. (Lock order is board-outer / UCI-inner; in
+practice no path holds both at once — handlers snapshot the FEN under the
+board lock, release it, then take the UCI lock for the search.)
+
+> Not yet commands: `probe_tablebase` (P4-T01) and `export_pdf_report` (P4-T02)
+> do not exist in `service.py` — they are deliberately undocumented here, not
+> missing.

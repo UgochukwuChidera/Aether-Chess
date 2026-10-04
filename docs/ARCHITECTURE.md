@@ -14,12 +14,14 @@
 │  │  Tailwind CSS UI     │◄─┤  Window management   │  │
 │  │  Board rendering     │  │  Settings I/O        │  │
 │  │  Analysis display    │  │  File dialogs        │  │
+│  │  Clock display       │  │  Game history + Elo  │  │
 │  │                      │  │                      │  │
 │  │  window.electronAPI  │  │  python-shell IPC    │  │
 │  └──────────┬───────────┘  └──────────┬───────────┘  │
 │             │ ipcRenderer.invoke       │              │
 │             └─────────────────────────┘              │
 │                                        │ stdin/stdout │
+│                                        │ pushes ▲     │
 └────────────────────────────────────────┼─────────────┘
                                          │
                                ┌─────────▼──────────┐
@@ -28,6 +30,7 @@
                                │                     │
                                │  service.py         │
                                │  chess_engine.py    │
+                               │  clock/termination  │
                                │  bots/ (manager +   │
                                │  stockfish, mentor, │
                                │  maia3 adapters)    │
@@ -37,6 +40,52 @@
                                │  Stockfish (UCI)    │
                                │  MentorEngine (PVS) |
                                └─────────────────────┘
+```
+
+---
+
+## Game state ownership
+
+The backend is the single authority over the game. Everything else mirrors.
+
+**Backend owns board, clock, termination and result.** `ChessEngineManager`
+(`backend/chess_engine.py`) holds the board, both clocks (milliseconds,
+`time.monotonic` stamp) and the terminal latch (`result` + `termination`).
+Only it can end a game: checkmate/stalemate via `python-chess`, flag-fall via
+the debit-and-credit on `make_move` (plus the idle-flag check at the top of
+every snapshot), resignation via `resign` (the `side` param names the loser),
+or agreement via `draw`. Every game command returns a full state snapshot
+carrying `clock`, `result` and `termination` (see
+[BACKEND_API](BACKEND_API.md#state-snapshot)). There is no second owner: the
+renderer never sets a result locally, and autosave keys off the backend's
+`result`, so a game the backend considers unfinished is never written as
+finished.
+
+**Renderer mirrors via snapshots and pushes.** The Zustand `gameStore` applies
+whatever the backend sends — `new_game` / `make_move` / `resign` / `draw`
+results, and two id-less push channels: `analysis_update` (streamed PVs) and
+`clock_tick`, a full snapshot forwarded at 1 Hz while a clock runs. The UI
+renders `store.clock` directly; no client-side timer remains (the old
+`setInterval` is gone — a renderer poll would need its own timer, which is
+exactly what the push replaced). `nav_index: -1` means live; anything else is
+a viewing window the backend refuses moves in.
+
+**Main routes and owns the disk.** The main process forwards chess commands to
+the backend (`CHESS_COMMANDS` loop plus dedicated `start_analysis` /
+`stop_analysis` / maia3-cache handlers, validated at the `ipcMain.handle`
+boundary) and broadcasts both push types to every live window — no per-window
+clock subscription, since every window shows the same game. It also owns all
+on-disk state the backend never touches: `userData/settings.json`
+(`settings-load` / `settings-save`), the game-history directory (`index.json`
+plus per-game PGN files), and the cached Elo estimates (`compute-and-cache-elo`).
+Settings _values and limits_ are still the backend's domain
+(`settings_defaults` command, canonical schema in
+`backend/settings_schema.py`); main just persists the bytes.
+
+```
+push path (no id, backend → all windows):
+  backend _state_snapshot ──► main stderrParser ──► clock-tick / analysis-update
+  1 Hz while a clock runs; stops at Unlimited / import / terminal delivery
 ```
 
 ---

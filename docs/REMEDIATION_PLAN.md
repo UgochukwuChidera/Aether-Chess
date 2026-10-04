@@ -947,7 +947,7 @@ unchecked.
   catches, so the new throw cannot become an unhandled rejection. Full gate
   green (see commit body).
 
-### P3-T04 — Record the ownership change in the docs
+### P3-T04 — Record the ownership change in the docs ✅ DONE
 
 - **Files:** `docs/BACKEND_API.md` (new `resign`/`draw`/`clock` commands, updated request
   shapes), `docs/ARCHITECTURE.md` (new "Game state ownership" section; the ASCII diagram at
