@@ -22,6 +22,7 @@ import {
   appEnginesDir,
 } from "./engineRegistry";
 import { isAllowedOpenUrl, isPathWithinRoots } from "./shellPolicy";
+import { validateIpcParams } from "./ipcValidation";
 
 type EloCache = {
   white_accuracy: number;
@@ -443,6 +444,13 @@ const CHESS_COMMANDS = [
 
 for (const cmd of CHESS_COMMANDS) {
   ipcMain.handle(cmd, async (_event, params: Record<string, unknown> = {}) => {
+    // P3-T03: shape/presence/primitive sanity at the boundary. Garbage fails
+    // here with a field-naming error and is never forwarded; valid shapes
+    // (including unknown extra keys) forward byte-identically. Throw so
+    // invoke() rejects — the same convention as the P2-T06 shell guards, and
+    // every renderer caller already catches (toast / .catch / ignore).
+    const validationError = validateIpcParams(cmd, params);
+    if (validationError) throw new Error(validationError);
     return sendCommand(cmd, params);
   });
 }
@@ -454,6 +462,10 @@ ipcMain.handle(
     event,
     params: { fen: string; multipv: number; callback_id: string },
   ) => {
+    // P3-T03: validate before touching params.callback_id — a null or
+    // primitive payload would otherwise throw a bare TypeError here.
+    const startValidationError = validateIpcParams("start_analysis", params);
+    if (startValidationError) throw new Error(startValidationError);
     return sendCommand(
       "start_analysis",
       params,
@@ -719,6 +731,8 @@ ipcMain.handle(
       hf_token?: string;
     },
   ) => {
+    const maiaValidationError = validateIpcParams("maia3-cache", params ?? {});
+    if (maiaValidationError) throw new Error(maiaValidationError);
     return sendCommand("maia3_cache", params ?? {});
   },
 );
@@ -726,6 +740,11 @@ ipcMain.handle(
 ipcMain.handle(
   "check-maia3-cache",
   async (_event, params: { model?: string }) => {
+    const checkValidationError = validateIpcParams(
+      "check-maia3-cache",
+      params ?? {},
+    );
+    if (checkValidationError) throw new Error(checkValidationError);
     return sendCommand("check_maia3_cache", params ?? {});
   },
 );

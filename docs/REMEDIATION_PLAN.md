@@ -927,7 +927,7 @@ hash (`:39`), while backend paths clamp to 8 and 512.
 - **Done when:** `rg "hashMb" backend/ renderer/src electron` shows the limit in exactly
   one place.
 
-### P3-T03 — Write a schema for the IPC surface
+### P3-T03 — Write a schema for the IPC surface ✅ DONE
 
 Every payload is `Record<string, unknown>` / `unknown` with zero validation
 (`electron/preload.ts:12-64`), so a malformed `maia3_model` or `fen` reaches the backend
@@ -936,6 +936,16 @@ unchecked.
 - **Change:** define a schema for the commands that take structured input, validate at the
   `ipcMain.handle` boundary, and return a clear error instead of forwarding garbage.
 - **Note:** keep this proportional. Do not build a full codegen pipeline.
+- **Verification (2026-10-04):** pure module `electron/ipcValidation.ts` (zero
+  electron deps, P2-T06 precedent) + `electron/ipcValidation.test.ts`; fail-first
+  recorded as `TS2307: Cannot find module './ipcValidation'` with the module
+  hidden. Wired thin in `electron/main.ts` only (CHESS_COMMANDS loop +
+  `start_analysis` + both maia3-cache handlers; validate → throw so `invoke()`
+  rejects, else forward byte-identically). Shape + presence + primitive sanity
+  only; extra keys ignored; no FEN/UCI semantics (backend owns chess truth).
+  Renderer, preload, and backend untouched; every renderer caller already
+  catches, so the new throw cannot become an unhandled rejection. Full gate
+  green (see commit body).
 
 ### P3-T04 — Record the ownership change in the docs
 
