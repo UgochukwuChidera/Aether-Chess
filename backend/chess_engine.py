@@ -23,12 +23,29 @@ _HERE = os.path.dirname(__file__)
 _ROOT = os.path.join(_HERE, "..")
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
+# P3-T02: also add this directory so `settings_schema` (the canonical
+# settings definition, a sibling module) imports the same way whether this
+# file loads as top-level `chess_engine` or as `backend.chess_engine`.
+if _HERE not in sys.path:
+    sys.path.insert(0, _HERE)
 
 # Point Hugging Face cache to a project-local directory instead of ~/.cache
 _HF_CACHE = os.path.normpath(os.path.join(_ROOT, "model_cache"))
 os.makedirs(_HF_CACHE, exist_ok=True)
 os.environ.setdefault("HF_HOME", _HF_CACHE)
 os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
+
+# P3-T02: every engine/memory limit lives in settings_schema.py — this
+# module clamps through it instead of restating 8/512/5 inline.
+from settings_schema import (
+    DEFAULT_HASH_MB,
+    DEFAULT_MULTIPV,
+    DEFAULT_THREADS,
+    clamp_hash_mb,
+    clamp_maia_elo,
+    clamp_multipv,
+    clamp_threads,
+)
 
 from aether_chess.bots import (
     AUTO_BOT_ID,
@@ -72,9 +89,9 @@ class ChessEngineManager:
             "maia3_device": "cpu",
             "maia3_elo": 1500,
             "think_profile": "human_like",
-            "threads": 1,
-            "hash_mb": 128,
-            "multipv": 3,
+            "threads": DEFAULT_THREADS,
+            "hash_mb": DEFAULT_HASH_MB,
+            "multipv": DEFAULT_MULTIPV,
         }
         # P3-T01: backend-owned game clock (milliseconds). None == Unlimited:
         # no clock installed, no flag possible. The turn stamp is
@@ -186,15 +203,17 @@ class ChessEngineManager:
         if maia3_device:
             self.settings["maia3_device"] = maia3_device
         if maia3_elo is not None:
-            self.settings["maia3_elo"] = max(0, min(5000, int(maia3_elo)))
+            self.settings["maia3_elo"] = clamp_maia_elo(maia3_elo)
         if think_profile is not None:
             self.settings["think_profile"] = think_profile
+        # P3-T02: single clamp implementation — bounds live in
+        # settings_schema.py, not here.
         if threads is not None:
-            self.settings["threads"] = max(1, min(8, int(threads)))  # Cap at 8
+            self.settings["threads"] = clamp_threads(threads)
         if hash_mb is not None:
-            self.settings["hash_mb"] = max(16, min(512, int(hash_mb)))  # Cap at 512MB
+            self.settings["hash_mb"] = clamp_hash_mb(hash_mb)
         if multipv is not None:
-            self.settings["multipv"] = max(1, min(5, int(multipv)))
+            self.settings["multipv"] = clamp_multipv(multipv)
 
     # ── Game clock (P3-T01: backend is the clock/termination authority) ──
 
@@ -634,15 +653,15 @@ class ChessEngineManager:
         """Configure engine options with memory-safe defaults."""
         options: Dict[str, int] = {}
 
-        # Cap threads to prevent memory issues
+        # P3-T02: single clamp implementation (bounds in settings_schema.py).
         if threads is not None:
-            options["Threads"] = max(1, min(8, int(threads)))
+            options["Threads"] = clamp_threads(threads)
         else:
             options["Threads"] = 1
 
         # Cap hash to prevent memory issues (default to 64MB if not provided)
         if hash_mb is not None:
-            options["Hash"] = max(16, min(512, int(hash_mb)))
+            options["Hash"] = clamp_hash_mb(hash_mb)
         else:
             options["Hash"] = 64
 

@@ -896,7 +896,7 @@ Zustand store alone; the backend still reports the game as live, and the autosav
   both clocks; the snapshot is never internally inconsistent (time ≥ 0, correct side).
 - **Done when:** no client-side timer remains and the backend alone can end a game.
 
-### P3-T02 — One settings schema
+### P3-T02 — One settings schema ✅ DONE
 
 Defaults are defined **five** times, with no validation and no version field:
 `resources/config/settings.defaults.json:1-26` (a strict _subset_ — no Maia3,

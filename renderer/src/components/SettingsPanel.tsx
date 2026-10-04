@@ -5,7 +5,6 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   useSettingsStore,
   TIME_CONTROLS,
-  MAX_HASH_MB,
   type Theme,
   type AnimationSpeed,
 } from '../stores/settingsStore';
@@ -225,7 +224,8 @@ export const SettingsPanel: React.FC = () => {
   };
 
   const handleExportSettings = () => {
-    const { loaded: _l, update: _u, loadFromBackend: _lf, saveToBackend: _sb, ...data } = settings;
+    // P3-T02: runtime-only store fields stay out of the exported file; schemaVersion travels with it.
+    const { loaded: _l, update: _u, loadFromBackend: _lf, saveToBackend: _sb, limits: _lim, saveError: _e, ...data } = settings;
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -464,11 +464,11 @@ export const SettingsPanel: React.FC = () => {
             </div>
           </Row>
         )}
-        <Row label={`Threads (1–${cpuCount})`} tooltip="CPU threads for Stockfish. More = faster but more CPU usage.">
+        <Row label={`Threads (1–${Math.min(cpuCount, settings.limits.maxThreads)})`} tooltip="CPU threads for Stockfish. More = faster but more CPU usage.">
           <input
             type="range"
             min={1}
-            max={cpuCount}
+            max={Math.min(cpuCount, settings.limits.maxThreads)}
             step={1}
             value={settings.threads}
             onChange={(e) => settings.update({ threads: Number(e.target.value) })}
@@ -482,11 +482,13 @@ export const SettingsPanel: React.FC = () => {
             value={settings.hashMb}
             onChange={(e) => settings.update({ hashMb: Number(e.target.value) })}
           >
-            {[16, 32, 64, 128, 256, 512, 1024, 2048].map((v) => (
-              <option key={v} value={v}>
-                {v} MB
-              </option>
-            ))}
+            {[16, 32, 64, 128, 256, 512, 1024, 2048]
+              .filter((v) => v <= settings.limits.maxHashMb)
+              .map((v) => (
+                <option key={v} value={v}>
+                  {v} MB
+                </option>
+              ))}
           </select>
         </Row>
         <p className="text-[10px] text-muted -mt-2 px-0.5">
@@ -494,10 +496,7 @@ export const SettingsPanel: React.FC = () => {
           faster re-analysis, at the cost of memory.
           <br />
           <span className="font-semibold">Presets:</span> low-end 64 MB / 1 thread · mid-range 256 MB / 2 threads ·
-          high-end 512 MB / 4+ threads. Max allowed: {MAX_HASH_MB} MB.
-          {settings.hashMb > 512 && (
-            <span className="text-yellow-400"> ⚠ Large cache — ensure you have enough free RAM.</span>
-          )}
+          high-end 512 MB / 4+ threads. Max allowed: {settings.limits.maxHashMb} MB.
         </p>
         <Row
           label="Multi-PV lines"

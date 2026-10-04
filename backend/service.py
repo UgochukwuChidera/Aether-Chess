@@ -64,6 +64,11 @@ from analysis import AccuracyAnalyser
 # PyInstaller they are included via hidden-imports in the .spec file).
 from chess_engine import ChessEngineManager
 
+# P3-T02: canonical settings schema — the service boundary clamps IPC
+# numerics through it before the engine stores them, and serves the
+# canonical defaults/limits to the renderer via `settings_defaults`.
+from settings_schema import settings_defaults, validate_settings
+
 # ── Global state ─────────────────────────────────────────────────────────────
 
 engine_mgr = ChessEngineManager()
@@ -192,6 +197,10 @@ def _err(request_id: str, message: str) -> None:
 
 
 def handle_new_game(params: Dict[str, Any]) -> Any:
+    # P3-T02: clamp the engine numerics at the IPC boundary (junk like
+    # threads=99999 becomes 8 here, before the engine stores anything).
+    # Absent keys stay absent (validate only touches present keys).
+    params = validate_settings(params)
     mode = params.get("mode", "human_vs_ai")
     engine_type = params.get("engine_type", "stockfish")
     human_color = params.get("human_color", "white")
@@ -371,6 +380,16 @@ def handle_list_bots(_params: Dict[str, Any]) -> Any:
     discovered Stockfish build or a new bot shows up without frontend changes.
     """
     return {"bots": engine_mgr.list_bots()}
+
+
+def handle_settings_defaults(_params: Dict[str, Any]) -> Any:
+    """Canonical settings defaults, limits and schema version (P3-T02).
+
+    The renderer reads its DEFAULTS/limits from here at boot instead of
+    restating them; when the backend is unreachable the renderer falls back
+    to mirrored static constants (same numbers) so boot never blocks.
+    """
+    return settings_defaults()
 
 
 def handle_check_maia3_cache(params: Dict[str, Any]) -> Any:
@@ -617,6 +636,7 @@ HANDLERS: Dict[str, Any] = {
     "get_engine_move": handle_get_engine_move,
     "get_bot_move": handle_get_bot_move,
     "list_bots": handle_list_bots,
+    "settings_defaults": handle_settings_defaults,
     "get_eval": handle_get_eval,
     "export_pgn": handle_export_pgn,
     "import_pgn": handle_import_pgn,
