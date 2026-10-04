@@ -1014,6 +1014,20 @@ Kept deliberately, with blockers recorded:
   `TODO.md`. Add a one-line note in `aether_chess/engines/__init__.py` explaining that
   `registry.py` **is** live.
 
+### P3-T08 — Enable numba compile caching for the test suite
+
+From the test-suite audit (no cuts approved — the suite is correctly sized):
+every `unittest discover` process pays the numba JIT cold-compile of the three
+`@njit` sites in `mentor_engine.py` (`:509,544,553`, no `cache=True`, no
+`NUMBA_CACHE_DIR` anywhere). Only structural speedup that keeps every assertion.
+
+- **Change:** `cache=True` on the three `@njit` decorators + `NUMBA_CACHE_DIR`
+  set in CI (`ci.yml`) and documented for local dev (`CONTRIBUTING.md` one line).
+- **Test:** cold run populates the cache dir; warm run is faster with byte-identical
+  test results (record both wall times; assert cache artifacts exist, not timing).
+- **Done when:** python suite measurably faster with zero result changes. Estimate
+  20–40s per run; if measurement disproves the saving, record and close anyway.
+
 ---
 
 # Phase 4 — Unfinished features and loose ends
