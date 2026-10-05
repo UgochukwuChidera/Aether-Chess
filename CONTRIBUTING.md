@@ -16,6 +16,8 @@ pip install -r requirements.txt
 npm run dev
 ```
 
+Set `NUMBA_CACHE_DIR="$HOME/.cache/numba"` (persist it in your shell rc) to reuse the numba compile cache across test runs.
+
 ---
 
 ## Code Standards

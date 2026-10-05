@@ -1015,7 +1015,23 @@ Kept deliberately, with blockers recorded:
   `TODO.md`. Add a one-line note in `aether_chess/engines/__init__.py` explaining that
   `registry.py` **is** live.
 
-### P3-T08 — Enable numba compile caching for the test suite
+### P3-T08 — Enable numba compile caching for the test suite ✅ DONE
+
+> Verification (2026-10-05): audit premise anchor-drifted — `_eval_numba`
+> (:553) already carried `cache=True` (since pre-remediation `5fbd9a5`), so
+> only `_bitscan` (:509) and `_popcount` (:544) gained the flag (decorator
+> lines only, compiled logic bit-identical). `_popcount` captures global
+> `np.uint64`; cache-compatibility proven empirically (its own artifact
+> family appears, results identical). `NUMBA_CACHE_DIR` set as backend-job
+> env in `ci.yml` (`${{ runner.temp }}/numba-cache`, no actions/cache step
+> — the file uses only action-native `cache:` options); one local-dev line
+> in `CONTRIBUTING.md`. No `.gitignore` change: unset `NUMBA_CACHE_DIR`
+> falls back to the user cache dir (outside the repo), verified by clean
+> `git status` after all runs. Measurement (`NUMBA_CACHE_DIR` cleared via
+> `rm -rf` then reused): cold 191 OK / 664.78s wall vs warm 191 OK /
+> 504.25s wall (~160s saved, zero result changes). New
+> `tests/test_numba_cache.py` (2 tests): fail-first recorded (empty
+> artifact globs for the two uncached sites), green after.
 
 From the test-suite audit (no cuts approved — the suite is correctly sized):
 every `unittest discover` process pays the numba JIT cold-compile of the three

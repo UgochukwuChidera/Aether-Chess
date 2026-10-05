@@ -506,7 +506,7 @@ PST = {
 _FILE_MASKS = [0x0101010101010101 << f for f in range(8)]
 
 
-@numba.njit(numba.types.int64(numba.types.uint64))
+@numba.njit(numba.types.int64(numba.types.uint64), cache=True)
 def _bitscan(bb):
     r = 0
     if bb & 0xFFFFFFFF:
@@ -541,7 +541,7 @@ def _bitscan(bb):
     return r
 
 
-@numba.njit(numba.types.int64(numba.types.uint64))
+@numba.njit(numba.types.int64(numba.types.uint64), cache=True)
 def _popcount(x):
     c = 0
     while x:

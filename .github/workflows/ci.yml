@@ -52,6 +52,12 @@ jobs:
   backend:
     name: Python Tests
     runs-on: ubuntu-latest
+    env:
+      # Pin numba's file cache out of the repo tree (default is the user
+      # cache dir, which is also fine -- this just makes it explicit).
+      # No actions/cache step: the runner is cold each time; the win is
+      # local (CONTRIBUTING.md), where the same dir is reused run to run.
+      NUMBA_CACHE_DIR: ${{ runner.temp }}/numba-cache
 
     steps:
       - uses: actions/checkout@v4
