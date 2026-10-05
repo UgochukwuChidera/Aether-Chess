@@ -1,17 +1,17 @@
 """P3-T08: numba compile caching for mentor_engine's three @njit sites.
 
-A cold python process run with a temp NUMBA_CACHE_DIR must leave one
-cache-artifact family per jitted function (_bitscan, _popcount,
-_eval_numba); a second (warm) process against the same dir must succeed
-with identical results. Wall time is deliberately NOT asserted (it is
-environment dependent); the suite-level cold-vs-warm measurement lives in
-the P3-T08 commit body instead.
-
-Note: the @njit decorators below carry explicit signatures, so numba
-compiles at decoration (import) time and the ~1 MB _eval_numba dominates
-cold-import cost -- subprocess timeouts are generous for that reason.
+Fails-first design (revised — the original used a fresh temp dir per run,
+so EVERY suite run paid full cold compiles: self-defeating):
+- test_njit_sites_enable_cache: AST assertion that all three decorators
+  carry cache=True. Instant, no compile, guards flag removal.
+- test_cached_probe_matches_and_populates: ONE subprocess probe against a
+  PERSISTENT cache dir (system temp, survives runs; numba auto-invalidates
+  on version/source change). First-ever run warms it; later runs are warm.
+  Wall time is deliberately NOT asserted; suite-level cold-vs-warm numbers
+  live in the P3-T08 commit body.
 """
 
+import ast
 import glob
 import os
 import subprocess
@@ -33,10 +33,32 @@ EXPECTED = "0 6 20039"
 
 JIT_FUNCS = ("_bitscan", "_popcount", "_eval_numba")
 
+# Persistent across runs: warms once, fast forever. Fresh-temp-dir-per-run
+# is what made the original version cost minutes on EVERY suite run.
+CACHE_DIR = os.path.join(tempfile.gettempdir(), "aether-numba-cache-test")
+
 PROBE_TIMEOUT_SEC = 900
 
 
+def _njit_sites_with_cache():
+    path = os.path.join(
+        os.path.dirname(__file__), "..", "aether_chess", "engines",
+        "mentor_engine.py",
+    )
+    tree = ast.parse(open(path).read())
+    found = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name in JIT_FUNCS:
+            for dec in node.decorator_list:
+                if isinstance(dec, ast.Call):
+                    for kw in dec.keywords:
+                        if kw.arg == "cache" and isinstance(kw.value, ast.Constant):
+                            found[node.name] = kw.value.value
+    return found
+
+
 def _probe(cache_dir):
+    os.makedirs(cache_dir, exist_ok=True)
     env = dict(os.environ)
     env["NUMBA_CACHE_DIR"] = cache_dir
     proc = subprocess.run(
@@ -56,26 +78,21 @@ def _artifacts(cache_dir, func):
 
 
 class NumbaCacheTests(unittest.TestCase):
-    def test_cold_import_populates_cache_for_all_three_sites(self):
-        with tempfile.TemporaryDirectory() as cache_dir:
-            self.assertEqual(_probe(cache_dir), EXPECTED)
-            for func in JIT_FUNCS:
-                self.assertTrue(
-                    _artifacts(cache_dir, func),
-                    f"no numba cache artifacts for {func} in {cache_dir}",
-                )
+    def test_njit_sites_enable_cache(self):
+        found = _njit_sites_with_cache()
+        for func in JIT_FUNCS:
+            self.assertTrue(
+                found.get(func) is True,
+                f"@{func} must carry cache=True",
+            )
 
-    def test_warm_import_reuses_cache_with_identical_results(self):
-        with tempfile.TemporaryDirectory() as cache_dir:
-            cold = _probe(cache_dir)
-            self.assertEqual(cold, EXPECTED)
-            warm = _probe(cache_dir)
-            self.assertEqual(warm, cold)
-            for func in JIT_FUNCS:
-                self.assertTrue(
-                    _artifacts(cache_dir, func),
-                    f"cache artifacts for {func} missing after warm import",
-                )
+    def test_cached_probe_matches_and_populates(self):
+        self.assertEqual(_probe(CACHE_DIR), EXPECTED)
+        for func in JIT_FUNCS:
+            self.assertTrue(
+                _artifacts(CACHE_DIR, func),
+                f"no numba cache artifacts for {func} in {CACHE_DIR}",
+            )
 
 
 if __name__ == "__main__":
