@@ -147,3 +147,129 @@ describe("P3-T02 settings schema (renderer)", () => {
     await expect(store().saveToBackend()).rejects.toThrow("disk full");
   });
 });
+
+describe("P3-T09 settings_defaults wiring (renderer)", () => {
+  // Distinctive backend answer: caps deliberately ABOVE the static fallback
+  // (8/512/5) and defaults deliberately OFF the static DEFAULTS (1/128/3),
+  // so every assertion below can only pass when the values came from the
+  // command — never from the fallback constants.
+  const DISTINCTIVE_PAYLOAD = {
+    schemaVersion: 1,
+    defaults: {
+      threads: 2,
+      hash_mb: 256,
+      multipv: 2,
+      strength: 9,
+      think_profile: "blitz",
+      maia3_elo: 1200,
+      stockfish_path: "stockfish",
+      maia3_model: "maia3-5m",
+      maia3_device: "cpu",
+    },
+    limits: {
+      min_threads: 1,
+      max_threads: 16,
+      min_hash_mb: 16,
+      max_hash_mb: 1024,
+      min_multipv: 1,
+      max_multipv: 9,
+    },
+  };
+
+  it("reachable backend -> caps AND defaults come from the command", async () => {
+    installApi({
+      loadSettings: async () => null,
+      getSettingsDefaults: async () => DISTINCTIVE_PAYLOAD,
+    });
+    resetStore();
+
+    await store().loadFromBackend();
+    const s = store();
+    expect(s.loaded).toBe(true);
+    // Caps from the command, not the fallback (8/512/5).
+    expect(s.limits).toEqual({
+      maxThreads: 16,
+      maxHashMb: 1024,
+      maxMultipv: 9,
+    });
+    // Defaults from the command, not the static DEFAULTS (1/128/3) —
+    // P3-T02 Change 2 ("DEFAULTS comes from the backend at boot"). FAILS
+    // pre-fix: the speculative read applies limits but ignores `defaults`.
+    expect(s.threads).toBe(2);
+    expect(s.hashMb).toBe(256);
+    expect(s.multipv).toBe(2);
+    expect(s.botStrength).toBe(9);
+    expect(s.thinkProfile).toBe("blitz");
+    expect(s.maia3Elo).toBe(1200);
+  });
+
+  it("reachable backend -> saved settings overlay backend defaults, junk clamps to the BACKEND cap", async () => {
+    installApi({
+      loadSettings: async () => ({ threads: 5, hashMb: 99999 }),
+      getSettingsDefaults: async () => DISTINCTIVE_PAYLOAD,
+    });
+    resetStore();
+
+    await store().loadFromBackend();
+    const s = store();
+    expect(s.loaded).toBe(true);
+    // Saved value under the backend cap survives…
+    expect(s.threads).toBe(5);
+    // …while junk clamps to the BACKEND cap (1024), not the fallback (512):
+    // boot uses backend caps when available.
+    expect(s.hashMb).toBe(1024);
+  });
+
+  it("unreachable backend (command throws) -> silent fallback, boot proceeds, no rejection", async () => {
+    installApi({
+      loadSettings: async () => null,
+      getSettingsDefaults: async () => {
+        throw new Error("backend exited");
+      },
+    });
+    resetStore();
+
+    // Must resolve (never reject): boot must never block on the backend.
+    await expect(store().loadFromBackend()).resolves.toBeUndefined();
+    const s = store();
+    expect(s.loaded).toBe(true);
+    expect(s.limits).toEqual({ maxThreads: 8, maxHashMb: 512, maxMultipv: 5 });
+    expect(s.threads).toBe(1);
+    expect(s.hashMb).toBe(128);
+    expect(s.multipv).toBe(3);
+  });
+
+  it("missing electronAPI -> silent fallback, boot proceeds", async () => {
+    (window as unknown as Record<string, unknown>).electronAPI = undefined;
+    resetStore();
+
+    await expect(store().loadFromBackend()).resolves.toBeUndefined();
+    const s = store();
+    expect(s.loaded).toBe(true);
+    expect(s.limits).toEqual({ maxThreads: 8, maxHashMb: 512, maxMultipv: 5 });
+  });
+
+  it("junk backend caps -> sanitized to fallback, boot proceeds", async () => {
+    installApi({
+      loadSettings: async () => null,
+      getSettingsDefaults: async () => ({
+        schemaVersion: NaN,
+        defaults: { threads: 99999, hash_mb: 99999, multipv: 99 },
+        limits: { max_threads: -4, max_hash_mb: "lots", max_multipv: null },
+      }),
+    });
+    resetStore();
+
+    await expect(store().loadFromBackend()).resolves.toBeUndefined();
+    const s = store();
+    expect(s.loaded).toBe(true);
+    // Junk caps sanitize to the static fallback (never NaN/negative)…
+    expect(s.limits).toEqual({ maxThreads: 8, maxHashMb: 512, maxMultipv: 5 });
+    // …and junk defaults clamp through those caps (never reach setoption).
+    // Junk *persisted-settings* clamping is P3-T02-covered (first test in
+    // this file) and deliberately not duplicated here.
+    expect(s.threads).toBe(8);
+    expect(s.hashMb).toBe(512);
+    expect(s.multipv).toBe(5);
+  });
+});

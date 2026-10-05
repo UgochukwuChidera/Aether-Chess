@@ -1045,7 +1045,7 @@ every `unittest discover` process pays the numba JIT cold-compile of the three
 - **Done when:** python suite measurably faster with zero result changes. Estimate
   20–40s per run; if measurement disproves the saving, record and close anyway.
 
-### P3-T09 — Renderer never calls settings_defaults
+### P3-T09 — Renderer never calls settings_defaults ✅ DONE
 
 Gap from P3-T02 (found in P3-T04 verification): the backend serves
 `settings_defaults` (`service.py:385-392, :639`) but zero renderer callers
@@ -1060,6 +1060,23 @@ exist — boot always uses the mirrored fallback constants, so P3-T02 Change 2
 - **Test:** extend `settingsStore.test.ts` — reachable backend → caps from the
   command; unreachable → fallback constants; junk still clamped.
 - **Done when:** boot uses backend caps when available; exactly one caller.
+
+> Verification (2026-10-05): preload `getSettingsDefaults` + main.ts
+> `CHESS_COMMANDS` entry (paramless — the default validator branch passes
+> it through, so no `ipcValidation` rule per the P3-T03 boundary rule) + d.ts
+> declaration + store `loadFromBackend` applies backend `defaults` UNDER saved
+> values through the same `validatePatch` (no validation-logic change, no
+> schema change, no backend change). Test-first in `settingsStore.test.ts`:
+> pre-fix 2 FAIL (distinctive backend defaults ignored — threads 1 vs 2;
+> junk backend caps left engine fields static) / 6 pass; post-fix 8/8. Drift
+> note: the caps half already applied in the jsdom mock env via the
+> speculative optional read — the production fail mode (caps always
+> fallback) held because preload had no such method, so the read was always
+> undefined outside tests. Fallback proven load-bearing: unreachable-throws +
+> missing-electronAPI tests resolve with `loaded:true`, and all 4 e2e specs
+> stay green while the fixture answers `settings_defaults` with an error —
+> NO fixture touch (fallback provably covers boot). Exactly one production
+> caller (`settingsStore.ts`). Full gate green (counts/times in commit body).
 
 ---
 

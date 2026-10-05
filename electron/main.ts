@@ -427,6 +427,11 @@ const CHESS_COMMANDS = [
   "get_engine_move",
   "get_bot_move",
   "list_bots",
+  // P3-T09: canonical settings defaults + caps for renderer boot
+  // (`settingsStore.loadFromBackend`). Paramless, so no ipcValidation rule
+  // is needed — the default branch passes it through (P3-T03 boundary rule:
+  // shape/presence/primitive sanity only, nothing to crash on here).
+  "settings_defaults",
   "get_eval",
   "export_pgn",
   "import_pgn",

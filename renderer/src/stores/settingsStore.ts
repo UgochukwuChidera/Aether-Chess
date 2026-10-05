@@ -45,8 +45,8 @@ export function botDisplayName(botId: string): string {
 // AUTHORITY: backend/settings_schema.py via the `settings_defaults`
 // command (max 8 threads / 512 MB / 5 lines — the setoption safety caps).
 // FALLBACK_LIMITS mirrors it for boot when the backend is unreachable
-// (no `getSettingsDefaults` channel yet, or the call rejects); the backend
-// remains the authority whenever reachable. If the caps ever change, update
+// (the call rejects, or the channel is absent); the backend remains the
+// authority whenever reachable. If the caps ever change, update
 // both here and there.
 export interface SettingsLimits {
   maxThreads: number;
@@ -192,16 +192,18 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   },
 
   loadFromBackend: async () => {
-    // 1. Limits from the backend when the channel exists, static fallback
-    // otherwise — boot must never block on the backend. (The channel is
-    // optional until the IPC surface is wired; see P3-T03.)
+    // 1. Defaults + limits from the backend when reachable, static fallback
+    // otherwise — boot must never block on the backend. (P3-T09: the
+    // `settings_defaults` channel is wired through preload + main; the
+    // optional call + catch below keep every fallback path — missing
+    // electronAPI, dead backend, unanswered channel — silently on fallback.)
     let limits: SettingsLimits = { ...FALLBACK_LIMITS };
     let schemaVersion = FALLBACK_SCHEMA_VERSION;
+    let backendDefaults: Record<string, unknown> = {};
     try {
-      const api = window.electronAPI as unknown as
-        | { getSettingsDefaults?: () => Promise<BackendSettingsDefaults> }
+      const info = (await window.electronAPI?.getSettingsDefaults?.()) as
+        | BackendSettingsDefaults
         | undefined;
-      const info = await api?.getSettingsDefaults?.();
       if (info && typeof info === 'object' && info.limits && typeof info.limits === 'object') {
         limits = {
           maxThreads: toPositiveInt(info.limits.max_threads, FALLBACK_LIMITS.maxThreads),
@@ -212,19 +214,28 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       if (typeof info?.schemaVersion === 'number' && Number.isFinite(info.schemaVersion)) {
         schemaVersion = Math.round(info.schemaVersion);
       }
+      // P3-T09: DEFAULTS comes from the backend at boot, not just the caps.
+      // Snake_case engine keys map onto the store shape; the merged result
+      // below runs through the SAME validation as update, so junk defaults
+      // clamp exactly like junk persisted settings.
+      if (info && typeof info === 'object' && info.defaults && typeof info.defaults === 'object') {
+        backendDefaults = mapBackendDefaults(info.defaults as Record<string, unknown>);
+      }
     } catch {
       /* unreachable backend — fallback covers boot */
     }
     // 2. Persisted settings through the SAME validation as update, so a
     // hand-edited settings.json with threads:99999 can never reach the
     // engine's setoption. Unknown keys are preserved (forward-compatible).
+    // Backend defaults sit UNDER the saved values, so a fresh boot takes
+    // the backend's DEFAULTS while any saved choice still wins.
     try {
       const saved = window.electronAPI
         ? await window.electronAPI.loadSettings()
         : null;
       if (saved && typeof saved === 'object') {
         const raw = saved as Record<string, unknown>;
-        const validated = validatePatch(raw, limits);
+        const validated = validatePatch({ ...backendDefaults, ...raw }, limits);
         // A newer file keeps its stamp (never re-migrate a future version).
         const savedVer = toPositiveInt(raw.schemaVersion, 0);
         set({
@@ -234,7 +245,13 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
           loaded: true,
         });
       } else {
-        set({ limits, schemaVersion, loaded: true });
+        const validated = validatePatch({ ...backendDefaults }, limits);
+        set({
+          ...(validated as Partial<AppSettings>),
+          limits,
+          schemaVersion,
+          loaded: true,
+        });
       }
     } catch {
       set({ limits, schemaVersion, loaded: true });
@@ -417,11 +434,32 @@ function validatePatch(
 // Shape served by the backend `settings_defaults` command (snake_case).
 interface BackendSettingsDefaults {
   schemaVersion?: unknown;
+  defaults?: Record<string, unknown> | null;
   limits?: {
     max_threads?: unknown;
     max_hash_mb?: unknown;
     max_multipv?: unknown;
   } | null;
+}
+
+/**
+ * Map the backend `settings_defaults().defaults` payload (snake_case
+ * engine keys) onto the store shape. Unknown keys are dropped here — the
+ * preserve-forward policy lives in loadFromBackend for *persisted* data;
+ * the backend only ever sends known engine keys.
+ */
+function mapBackendDefaults(defaults: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if ('threads' in defaults) out.threads = defaults.threads;
+  if ('hash_mb' in defaults) out.hashMb = defaults.hash_mb;
+  if ('multipv' in defaults) out.multipv = defaults.multipv;
+  if ('strength' in defaults) out.botStrength = defaults.strength;
+  if ('think_profile' in defaults) out.thinkProfile = defaults.think_profile;
+  if ('maia3_elo' in defaults) out.maia3Elo = defaults.maia3_elo;
+  if ('stockfish_path' in defaults) out.stockfishPath = defaults.stockfish_path;
+  if ('maia3_model' in defaults) out.maia3Model = defaults.maia3_model;
+  if ('maia3_device' in defaults) out.maia3Device = defaults.maia3_device;
+  return out;
 }
 
 function toPositiveInt(value: unknown, fallback: number): number {

@@ -130,6 +130,11 @@ declare global {
       // Settings
       loadSettings: () => Promise<unknown>;
       saveSettings: (data: unknown) => Promise<boolean>;
+      // P3-T09: canonical defaults + caps. Shape is whatever
+      // backend/settings_schema.py::settings_defaults() serves
+      // ({schemaVersion, defaults (snake_case), limits (snake_case)});
+      // the store reads it defensively and falls back silently.
+      getSettingsDefaults: () => Promise<unknown>;
 
       // Clipboard
       copyToClipboard: (text: string) => Promise<boolean>;

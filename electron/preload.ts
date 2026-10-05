@@ -125,6 +125,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
   // ── Settings persistence ─────────────────────────────────────────────────
   loadSettings: () => ipcRenderer.invoke("settings-load"),
   saveSettings: (data: unknown) => ipcRenderer.invoke("settings-save", data),
+  // P3-T09: canonical defaults + engine caps from the backend
+  // (`settings_defaults` command, single authority in
+  // backend/settings_schema.py). Paramless forward, same shape as the other
+  // chess commands above; the store falls back silently when the backend is
+  // unreachable, so boot never blocks on this.
+  getSettingsDefaults: () => ipcRenderer.invoke("settings_defaults"),
 
   // ── Clipboard ───────────────────────────────────────────────────────────
   copyToClipboard: (text: string) => ipcRenderer.invoke("clipboard-copy", text),
