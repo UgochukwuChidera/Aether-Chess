@@ -31,13 +31,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
     threads?: number;
     hash_mb?: number;
   }) => ipcRenderer.invoke("get_engine_move", params),
-  getBotMove: (params: {
-    fen: string;
-    strength?: number;
-    stockfish_path?: string;
-    threads?: number;
-    hash_mb?: number;
-  }) => ipcRenderer.invoke("get_bot_move", params),
   // The backend decides which bots exist (discovered Stockfish builds, Mentor,
   // Maia3, anything registered later), so the UI never hard-codes the list.
   listBots: () => ipcRenderer.invoke("list_bots"),
@@ -47,8 +40,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
   importPgn: (params: { pgn: string }) =>
     ipcRenderer.invoke("import_pgn", params),
   exportFen: () => ipcRenderer.invoke("export_fen"),
-  calculateAccuracy: (params: { fen_list: string[]; moves: string[] }) =>
-    ipcRenderer.invoke("calculate_accuracy", params),
   calculateAccuracyFromHistory: (params: { stockfish_path?: string }) =>
     ipcRenderer.invoke("calculate_accuracy_from_history", params),
   calculateAccuracyFromPgn: (params: {

@@ -109,15 +109,28 @@ class TestSingleDefinition(unittest.TestCase):
 
     START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 
-    def test_the_engine_controller_uses_the_shared_mapping(self):
-        from aether_chess.engines.controller import EngineController
+    def test_the_bot_layer_uses_the_shared_mapping(self):
+        # The superseded pre-BotManager caller this used to pin is deleted
+        # (P3-T06); the live asker is MentorBot via BotManager, which must
+        # resolve every strength through the same shared mapping,
+        # including the clamp at the endpoints.
+        from aether_chess.bots.base import MoveRequest
+        from aether_chess.bots.mentor_bot import MentorBot
 
-        controller = EngineController()
+        bot = MentorBot()
+        self.addCleanup(bot.close)
         for level in range(MIN_STRENGTH, MAX_STRENGTH + 1):
             with self.subTest(strength=level):
+                request = MoveRequest(fen=self.START_FEN, strength=level)
+                engine = bot._ensure_engine(request.strength_level())
+                engine.config = mentor_search_config(request.strength_level())
+                self.assertEqual(engine.config, mentor_search_config(level))
+        for raw, endpoint in ((0, MIN_STRENGTH), (99, MAX_STRENGTH)):
+            with self.subTest(raw=raw):
+                request = MoveRequest(fen=self.START_FEN, strength=raw)
                 self.assertEqual(
-                    controller._mentor_config_for_strength(level),
-                    mentor_search_config(level),
+                    mentor_search_config(request.strength_level()),
+                    mentor_search_config(endpoint),
                 )
 
     def test_the_bot_adapter_searches_with_the_shared_mapping(self):

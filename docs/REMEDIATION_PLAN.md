@@ -680,6 +680,7 @@ reported an attribute-aliasing bug). But if `configure()` raises, the local is n
 
 - **Status:** this file is **deleted** in Phase 3 (P3-T06), so the defect disappears with
   it. No action. If P3-T06 is descoped, add `try: ... except: engine.quit(); raise`.
+- **Closure (2026-10-05, with P3-T06):** `aether_chess/engines/uci_engine.py` deleted; P2-T20 closes with it — no `try/except` needed, orphan path gone with the file.
 
 ### P2-T21 — Renderer build output never reaches the packaged path ✅ DONE
 
@@ -965,7 +966,7 @@ the React analogue of heavy per-frame work.
 - **Change:** select only the fields each component reads, via `useGameStore(selector)`.
 - **Done when:** a board re-render no longer occurs on every analysis push.
 
-### P3-T06 — Delete the superseded stack
+### P3-T06 — Delete the superseded stack ✅ DONE
 
 Per the decision to keep unfinished work but remove what `BotManager` replaced. **~390
 lines**, plus their tests.

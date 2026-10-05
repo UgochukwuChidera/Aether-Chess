@@ -81,22 +81,11 @@ declare global {
         total_moves?: number;
         strength?: number;
       }) => Promise<unknown>;
-      getBotMove: (params: {
-        fen: string;
-        strength?: number;
-        stockfish_path?: string;
-        threads?: number;
-        hash_mb?: number;
-        time_remaining?: number;
-        time_increment?: number;
-        total_moves?: number;
-      }) => Promise<unknown>;
       listBots: () => Promise<{ bots: BotInfo[] }>;
       getEval: (params: { fen: string; use_mentor_eval?: boolean }) => Promise<unknown>;
       exportPgn: () => Promise<unknown>;
       importPgn: (params: { pgn: string }) => Promise<unknown>;
       exportFen: () => Promise<unknown>;
-      calculateAccuracy: (params: { fen_list: string[]; moves: string[] }) => Promise<unknown>;
       calculateAccuracyFromHistory: (params: {
         stockfish_path?: string;
         engine_type?: string;
