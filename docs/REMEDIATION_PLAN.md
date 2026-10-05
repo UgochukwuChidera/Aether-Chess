@@ -1001,7 +1001,7 @@ Must also change:
 
 - **Done when:** `rg -n "EngineController|UCIEngineManager|GameSettings|get_mentor_move|get_maia3_move|getBotMove|calculateAccuracy" backend/ aether_chess/ electron/ renderer/ tests/` returns only intentional hits.
 
-### P3-T07 — Document the retained dead code
+### P3-T07 — Document the retained dead code ✅ DONE
 
 Kept deliberately, with blockers recorded:
 

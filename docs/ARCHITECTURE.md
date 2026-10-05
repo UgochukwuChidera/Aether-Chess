@@ -222,6 +222,63 @@ Two Zustand stores:
 - All user preferences (appearance, engine config, gameplay)
 - Persists to/from `userData/settings.json` via Electron IPC
 
+## Planned, not wired
+
+Four modules ship in the tree but have no production caller. They are kept
+deliberately — each has a Phase 4 owner — so this section records what each one
+does, what would connect it, and what blocks it. Contrast
+`aether_chess/engines/registry.py`: Stockfish discovery **is** live, reached via
+`backend/analysis.py:24` (`resolve_engine_path`, used at `:155`) and
+`aether_chess/bots/stockfish_bot.py:28` (used at `:68`) plus `:173`
+(`discover_engines`, used at `:177`), flowing through `BotManager`
+(`aether_chess/bots/manager.py:31,79`) into `ChessEngineManager`
+(`backend/chess_engine.py:51,679-686`) and the service. Neither
+`backend/service.py` nor `backend/chess_engine.py` imports the registry
+directly — the reach is transitive, not a package re-export
+(`aether_chess/engines/__init__.py` only re-exports the mentor engine).
+
+- **Syzygy tablebases** — `aether_chess/io/tablebases.py` (37 lines).
+  `TablebaseProbe` (`:11`) carries an optional Syzygy `path` (`:12`); `best_move`
+  (`:14`) opens the tablebase (`:18`), declines positions with more than 6 pieces
+  (`:19`), probes DTZ after each legal move (`:26`), and maps missing-table / OS
+  errors to `None` (`:36`). Connecting it means a `tablebasePath` setting plus a
+  `probe_tablebase` command annotating endgames in the UI (detect-and-report while
+  unconfigured). Blocker: **P4-T01**, which also owns three selection-logic
+  defects in this file (inverted sign branches `:31-33`, `None` DTZ compared
+  against `int`, raw-DTZ minmax). No tablebase data ships in the repo.
+- **PDF game reports** — `aether_chess/analysis/reporting.py` (54 lines).
+  `ReportData` (`:15-25`) plus `generate_pdf_report` (`:28`), built on fpdf2's
+  `FPDF` (`:8`) with an explicit `RuntimeError` when the import is absent
+  (`:29-30`). Connecting it means uncommenting `fpdf2` in `requirements.txt:15`
+  (currently `# fpdf2>=2.8`), adding an `export_pdf_report` command with an
+  Export-PDF action, and sourcing `key_moments` from the `cp_loss` rows
+  `backend/analysis.py` already computes. Blocker: **P4-T02**.
+- **C++ evaluation engine** — `cpp_engine/` (7 files: `build_msvc.bat`,
+  `evaluate.cpp`, `evaluate.h`, `__init__.py`, `pymodule.c`, `search.h`,
+  `setup.py`). The native kernel exposes `evaluate(fen)` / `evaluate_batch`
+  (`pymodule.c:39-41`, kernel entry `evaluate.cpp:230`); the Python loader
+  (`cpp_engine/__init__.py:19-48`) tries the compiled module and falls back to
+  `MentorEngine` (`:58-66`), reporting which branch is active via `get_info()`
+  (`:53`). Nothing outside `cpp_engine/` imports it. Connecting it means a
+  `build:cpp` step, CI coverage on the Linux runner, a default-off setting flag
+  in the mentor path, packaging entries, and a benchmark proving the speedup.
+  Blocker: **P4-T03**, hard-gated on the register §2c portability shim
+  (`evaluate.h:23` `__popcnt64` and `:27` `_BitScanForward64` are MSVC-only and
+  unguarded — zero `_MSC_VER` / `__builtin_` hits in the directory). See also
+  TODO item 3.
+- **`estimate_bayesian_elo`** — `aether_chess/analysis/metrics.py:46-81`,
+  returning `BayesianEloResult` (`:40-43`). Its siblings `classify_move` (`:16`)
+  and `accuracy_from_losses` (`:30`) are live (`backend/analysis.py:21-22`, used
+  at `:196,207-208`); only this estimator is orphaned — the sole caller is
+  `tests/test_metrics.py:27-28`, while the README still advertises "Bayesian Elo
+  estimation ✅" (`README.md:87`). Connecting it means either wiring it into the
+  Elo panel as the primary estimator with a documented Glicko comparison, or
+  removing the README claim. Blocker: **P4-T04** (decision pending).
+
+Cross-reference: `TODO.md` (trailing block) maps each module above to its Phase 4
+owner. Phase 4 items live in `docs/REMEDIATION_PLAN.md` (Phase 4) and
+`docs/VERIFICATION_REGISTER.md` §2c (the P4-T03 precondition).
+
 ---
 
 ## Security Model
