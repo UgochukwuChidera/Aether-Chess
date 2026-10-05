@@ -18,17 +18,19 @@ const BOTTOM_NAV_H = 64;
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('play');
-  const settings = useSettingsStore();
+  // P3-T05: select only the field this component reads (theme). The game
+  // store is read via getState() only (no subscription here); the settings
+  // load goes through getState() so the mount-once load never re-fires.
+  const theme = useSettingsStore((s) => s.theme);
 
   // Load persisted settings on startup
   useEffect(() => {
-    settings.loadFromBackend();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional mount-once startup load; adding 'settings' (whole-store snapshot, new identity on every update) would re-fire loadFromBackend on each change
+    useSettingsStore.getState().loadFromBackend();
   }, []);
 
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', settings.theme);
-  }, [settings.theme]);
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
 
   // Wire backend lifecycle toasts (guard for non-Electron environments).
   // P2-T03: named callbacks (read via getState so no store dep is captured);

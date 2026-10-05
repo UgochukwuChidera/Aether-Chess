@@ -61,19 +61,23 @@ export const Board: React.FC<React.PropsWithChildren<Props>> = ({
     analysisAltPVs = [],
     showThreatPV = [],
   }) => {
-  const {
-    fen,
-    selectedSquare,
-    highlightedSquares,
-    lastMoveFrom,
-    lastMoveTo,
-    flipped,
-    inCheck,
-    turn,
-    selectSquare,
-  } = useGameStore();
+  // P3-T05: select only the fields this component reads. The analysis
+  // stream writes `analysis` many times/sec via setAnalysis - a whole-store
+  // subscription re-rendered this entire subtree per push. Every selector
+  // below is a primitive, a stable array identity, or a stable action, so no
+  // fresh-object selector can re-fire per push (no shallow wrapper needed).
+  const fen = useGameStore((s) => s.fen);
+  const selectedSquare = useGameStore((s) => s.selectedSquare);
+  const highlightedSquares = useGameStore((s) => s.highlightedSquares);
+  const lastMoveFrom = useGameStore((s) => s.lastMoveFrom);
+  const lastMoveTo = useGameStore((s) => s.lastMoveTo);
+  const flipped = useGameStore((s) => s.flipped);
+  const inCheck = useGameStore((s) => s.inCheck);
+  const turn = useGameStore((s) => s.turn);
+  const selectSquare = useGameStore((s) => s.selectSquare);
 
-  const { boardStyle, pieceSet } = useSettingsStore();
+  const boardStyle = useSettingsStore((s) => s.boardStyle);
+  const pieceSet = useSettingsStore((s) => s.pieceSet);
 
   // Tracks the square where a drag originated
   const dragFromRef = useRef<string | null>(null);

@@ -52,8 +52,50 @@ const setupSelectClass =
   ' hover:border-accent focus:border-accent focus:outline-none transition-colors flex-1';
 
 export const PlayView: React.FC<Props> = ({ onTabChange }) => {
-  const store = useGameStore();
-  const settings = useSettingsStore();
+  // P3-T05: select only the fields this component reads. The Stockfish
+  // stream writes `analysis` many times/sec via setAnalysis - the previous
+  // whole-store subscriptions re-rendered this view (and its Board subtree)
+  // per push although this view never reads `analysis`. Every selector below
+  // is a primitive, a stable array/object identity that analysis pushes never
+  // replace, or a stable store action - no fresh-object selector, so no
+  // shallow wrapper is needed for referential stability.
+  const mode = useGameStore((s) => s.mode);
+  const humanColor = useGameStore((s) => s.humanColor);
+  const turn = useGameStore((s) => s.turn);
+  const fen = useGameStore((s) => s.fen);
+  const clock = useGameStore((s) => s.clock);
+  const flipped = useGameStore((s) => s.flipped);
+  const engineBusy = useGameStore((s) => s.engineBusy);
+  const gameResult = useGameStore((s) => s.gameResult);
+  const termination = useGameStore((s) => s.termination);
+  const selectedSquare = useGameStore((s) => s.selectedSquare);
+  const legalMoves = useGameStore((s) => s.legalMoves);
+  const pendingPromotion = useGameStore((s) => s.pendingPromotion);
+  const fullMoveHistoryLength = useGameStore((s) => s.fullMoveHistoryUCI.length);
+  const resetGame = useGameStore((s) => s.resetGame);
+  const setFlipped = useGameStore((s) => s.setFlipped);
+  const applyMoveResult = useGameStore((s) => s.applyMoveResult);
+  const setEngineBusy = useGameStore((s) => s.setEngineBusy);
+  const pushToast = useGameStore((s) => s.pushToast);
+  const selectSquare = useGameStore((s) => s.selectSquare);
+  const setPendingPromotion = useGameStore((s) => s.setPendingPromotion);
+  const flipBoard = useGameStore((s) => s.flipBoard);
+  const loaded = useSettingsStore((s) => s.loaded);
+  const showEvalBar = useSettingsStore((s) => s.showEvalBar);
+  const stockfishPath = useSettingsStore((s) => s.stockfishPath);
+  const threads = useSettingsStore((s) => s.threads);
+  const hashMb = useSettingsStore((s) => s.hashMb);
+  const autoSaveGameHistory = useSettingsStore((s) => s.autoSaveGameHistory);
+  const playEngine = useSettingsStore((s) => s.playEngine);
+  const timeControl = useSettingsStore((s) => s.timeControl);
+  const botStrength = useSettingsStore((s) => s.botStrength);
+  const maia3Path = useSettingsStore((s) => s.maia3Path);
+  const maia3Model = useSettingsStore((s) => s.maia3Model);
+  const maia3Device = useSettingsStore((s) => s.maia3Device);
+  const maia3Elo = useSettingsStore((s) => s.maia3Elo);
+  const thinkProfile = useSettingsStore((s) => s.thinkProfile);
+  const multipv = useSettingsStore((s) => s.multipv);
+  const autoQueen = useSettingsStore((s) => s.autoQueen);
   const autoSaveRef = useRef(false);
   const boardAreaRef = useRef<HTMLDivElement>(null);
   const [boardSize, setBoardSize] = useState(0);
@@ -90,7 +132,7 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
   const toggleZenMode = useCallback(() => setZenMode((p) => !p), []);
 
   // ── Game setup state (applied on next "New Game") ─────────────────────────
-  const [setupMode, setSetupMode] = useState<GameMode>(store.mode);
+  const [setupMode, setSetupMode] = useState<GameMode>(mode);
   const [setupColor, setSetupColor] = useState<'white' | 'black' | 'random'>('white');
 
   // ── AI vs AI loop control ─────────────────────────────────────────────────
@@ -141,10 +183,10 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
   }, []);
 
   useEffect(() => {
-    if (!settings.loaded) return;
+    if (!loaded) return;
     void handleNewGame();
     return () => { aiLoopRef.current = false; };
-  }, [settings.loaded]);
+  }, [loaded]);
 
   // P2-T03: subscribe returns an unsubscribe closure, so cleanup removes
   // exactly this mount's wrapper (bare removeAllListeners would kill a
@@ -182,7 +224,7 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
   // values; the deps below are retrigger keys (restart the debounce when any
   // of them changes), not values consumed by the body.
   useEffect(() => {
-    if (!settings.showEvalBar) {
+    if (!showEvalBar) {
       useGameStore.getState().setAnalysis({ running: false, pvs: [] });
       window.electronAPI.stopAnalysis().catch(() => {});
       return;
@@ -214,11 +256,11 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
       }
     };
   }, [
-    store.fen,
-    settings.showEvalBar,
-    settings.stockfishPath,
-    settings.threads,
-    settings.hashMb,
+    fen,
+    showEvalBar,
+    stockfishPath,
+    threads,
+    hashMb,
   ]);
 
   // P3-T01: backend clock push (1 Hz while a clock runs). This
@@ -237,31 +279,31 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
   }, []);
 
   // P3-T01 change 6: autosave keys off the BACKEND's result.
-  // store.gameResult/termination now originate only from backend snapshots
+  // gameResult/termination now originate only from backend snapshots
   // (applyMoveResult via IPC, applyClockTick via push) - handleResign /
-  // handleDraw no longer write local state, so observing store.gameResult
+  // handleDraw no longer write local state, so observing gameResult
   // IS observing the backend's result.
   useEffect(() => {
-    if (!store.gameResult || !settings.autoSaveGameHistory || autoSaveRef.current) return;
-    if (store.fullMoveHistoryUCI.length === 0) return;
+    if (!gameResult || !autoSaveGameHistory || autoSaveRef.current) return;
+    if (fullMoveHistoryLength === 0) return;
     autoSaveRef.current = true;
 
-    const resultMap: Record<NonNullable<typeof store.gameResult>, string> = {
+    const resultMap: Record<NonNullable<typeof gameResult>, string> = {
       white_wins: '1-0',
       black_wins: '0-1',
       draw: '1/2-1/2',
     };
 
-    const engineName = botDisplayName(settings.playEngine);
+    const engineName = botDisplayName(playEngine);
 
-    const whiteName = store.mode === 'human_vs_ai'
-      ? (store.humanColor === 'white' ? 'You' : engineName)
-      : store.mode === 'ai_vs_ai'
+    const whiteName = mode === 'human_vs_ai'
+      ? (humanColor === 'white' ? 'You' : engineName)
+      : mode === 'ai_vs_ai'
         ? engineName
         : 'White';
-    const blackName = store.mode === 'human_vs_ai'
-      ? (store.humanColor === 'black' ? 'You' : engineName)
-      : store.mode === 'ai_vs_ai'
+    const blackName = mode === 'human_vs_ai'
+      ? (humanColor === 'black' ? 'You' : engineName)
+      : mode === 'ai_vs_ai'
         ? engineName
         : 'Black';
 
@@ -273,12 +315,12 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
           meta: {
             white: whiteName,
             black: blackName,
-            result: resultMap[store.gameResult!],
-            termination: store.termination,
-            moves: store.fullMoveHistoryUCI.length,
-            mode: store.mode,
-            engine: settings.playEngine,
-            time_control: settings.timeControl,
+            result: resultMap[gameResult!],
+            termination: termination,
+            moves: fullMoveHistoryLength,
+            mode: mode,
+            engine: playEngine,
+            time_control: timeControl,
             played_at: new Date().toISOString(),
           },
         });
@@ -304,7 +346,7 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
         autoSaveRef.current = false;
       });
   // P2-T02: async continuations above re-read via getState(); the sync reads justify the retrigger deps below.
-  }, [store.gameResult, store.fullMoveHistoryUCI.length, store.termination, store.mode, store.humanColor, settings.autoSaveGameHistory, settings.playEngine, settings.timeControl]);
+  }, [gameResult, fullMoveHistoryLength, termination, mode, humanColor, autoSaveGameHistory, playEngine, timeControl]);
 
   // ── AI move helper — reads fresh state so it's safe in async loops ──────────
   const makeAiMove = useCallback(async (fen: string): Promise<BackendMoveResult | null> => {
@@ -507,30 +549,30 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
     try {
       const result = await window.electronAPI.newGame({
         mode: setupMode,
-        engine_type: settings.playEngine,
+        engine_type: playEngine,
         human_color: resolvedColor,
-        strength: settings.botStrength,
-        stockfish_path: settings.stockfishPath,
-        maia3_path: settings.maia3Path,
-        maia3_model: settings.maia3Model,
-        maia3_device: settings.maia3Device,
-        maia3_elo: settings.maia3Elo,
-        think_profile: settings.thinkProfile,
-        threads: settings.threads,
-        hash_mb: settings.hashMb,
-        multipv: settings.multipv,
-        time_control: settings.timeControl,
+        strength: botStrength,
+        stockfish_path: stockfishPath,
+        maia3_path: maia3Path,
+        maia3_model: maia3Model,
+        maia3_device: maia3Device,
+        maia3_elo: maia3Elo,
+        think_profile: thinkProfile,
+        threads: threads,
+        hash_mb: hashMb,
+        multipv: multipv,
+        time_control: timeControl,
       }) as BackendMoveResult;
 
       // P2-T07: a second New Game superseded this one mid-flight — stay silent.
       if (newGameGen !== gameGenerationRef.current) return;
 
-      store.resetGame();
+      resetGame();
       // resetGame doesn't touch mode/humanColor; re-assert to be explicit
       useGameStore.setState({ mode: setupMode, humanColor: resolvedColor });
       // Flip board if human is playing as black
-      store.setFlipped(resolvedColor === 'black');
-      store.applyMoveResult(result);
+      setFlipped(resolvedColor === 'black');
+      applyMoveResult(result);
 
       // Orchestrate first AI move(s) depending on mode
       if (setupMode === 'ai_vs_ai') {
@@ -539,22 +581,22 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
       } else if (setupMode === 'human_vs_ai' && result.turn !== resolvedColor) {
         // Human chose black — AI (white) moves first.
         // Show board immediately by firing AI async so UI stays responsive.
-        store.setEngineBusy(true);
+        setEngineBusy(true);
         makeAiMove(result.fen).finally(() => {
           // P2-T07: only the owning generation clears busy.
-          if (newGameGen === gameGenerationRef.current) store.setEngineBusy(false);
+          if (newGameGen === gameGenerationRef.current) setEngineBusy(false);
         });
       }
     } catch (err) {
       if (newGameGen !== gameGenerationRef.current) return;
-      store.pushToast(`Failed to start game: ${err}`, 'error');
+      pushToast(`Failed to start game: ${err}`, 'error');
     }
   };
 
   const commitMove = async (moveUCI: string) => {
-    const oldFen = store.fen;
-    store.selectSquare(null);
-    store.setEngineBusy(true);
+    const oldFen = fen;
+    selectSquare(null);
+    setEngineBusy(true);
     const commitGen = gameGenerationRef.current;
     try {
       const result = await window.electronAPI.makeMove({ move: moveUCI }) as BackendMoveResult;
@@ -578,7 +620,7 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
       // tick may have ended the game while the human move was in flight.
       const prevResult = useGameStore.getState().gameResult;
       const prevTermination = useGameStore.getState().termination;
-      store.applyMoveResult(result);
+      applyMoveResult(result);
       if (prevResult && !result.game_over) {
         useGameStore.setState({ gameResult: prevResult, termination: prevTermination });
       }
@@ -590,75 +632,72 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
       // In Human vs AI, trigger the engine reply asynchronously so UI shows human move immediately
       if (!result.game_over && useGameStore.getState().mode === 'human_vs_ai') {
         makeAiMove(result.fen).finally(() => {
-          if (commitGen === gameGenerationRef.current) store.setEngineBusy(false);
+          if (commitGen === gameGenerationRef.current) setEngineBusy(false);
         });
       } else if (commitGen === gameGenerationRef.current) {
-        store.setEngineBusy(false);
+        setEngineBusy(false);
       }
     } catch (err) {
       if (commitGen !== gameGenerationRef.current) return;
       Sound.illegal();
-      store.pushToast(`Move error: ${err}`, 'error');
-      store.setEngineBusy(false);
+      pushToast(`Move error: ${err}`, 'error');
+      setEngineBusy(false);
     }
   };
 
   const handleSquareClick = async (sq: string) => {
-    if (store.gameResult || store.engineBusy) return;
+    if (gameResult || engineBusy) return;
 
     // Block human input when it's not their turn or the mode is AI-only
     const mode = useGameStore.getState().mode;
     if (mode === 'ai_vs_ai') return;
-    if (mode === 'human_vs_ai' && store.turn !== store.humanColor) return;
+    if (mode === 'human_vs_ai' && turn !== humanColor) return;
 
-    const { selectedSquare, legalMoves, fen, turn } = store;
 
     // Only own pieces (same color as the side to move) can be selected
     const isOwnPiece = pieceColorAt(fen, sq) === turn;
 
     if (!selectedSquare) {
-      if (isOwnPiece) store.selectSquare(sq);
+      if (isOwnPiece) selectSquare(sq);
       return;
     }
-    if (sq === selectedSquare) { store.selectSquare(null); return; }
+    if (sq === selectedSquare) { selectSquare(null); return; }
 
     const moveUCI = legalMoves.find((m) => m.startsWith(selectedSquare) && m.slice(2, 4) === sq);
     if (!moveUCI) {
       // Switch to another own piece, or deselect if clicking empty/opponent square
-      if (isOwnPiece) store.selectSquare(sq);
-      else store.selectSquare(null);
+      if (isOwnPiece) selectSquare(sq);
+      else selectSquare(null);
       return;
     }
 
-    if (!settings.autoQueen && isPawnPromotion(fen, selectedSquare, sq)) {
-      store.setPendingPromotion({ from: selectedSquare, to: sq });
+    if (!autoQueen && isPawnPromotion(fen, selectedSquare, sq)) {
+      setPendingPromotion({ from: selectedSquare, to: sq });
       return;
     }
     await commitMove(selectedSquare + sq);
   };
 
   const handlePromotion = async (piece: string) => {
-    const { pendingPromotion } = store;
     if (!pendingPromotion) return;
-    store.setPendingPromotion(null);
+    setPendingPromotion(null);
     await commitMove(`${pendingPromotion.from}${pendingPromotion.to}${piece}`);
   };
 
   /** Drop-move: fired by Board when a drag-and-drop completes. */
   const handleDropMove = async (from: string, to: string) => {
-    if (store.gameResult || store.engineBusy) return;
+    if (gameResult || engineBusy) return;
 
     // Enforce turn ownership
     const mode = useGameStore.getState().mode;
     if (mode === 'ai_vs_ai') return;
-    if (mode === 'human_vs_ai' && store.turn !== store.humanColor) return;
+    if (mode === 'human_vs_ai' && turn !== humanColor) return;
 
-    store.selectSquare(null);
-    const { legalMoves, fen } = store;
+    selectSquare(null);
     const moveUCI = legalMoves.find((m) => m.startsWith(from) && m.slice(2, 4) === to);
     if (!moveUCI) return;
-    if (!settings.autoQueen && isPawnPromotion(fen, from, to)) {
-      store.setPendingPromotion({ from, to });
+    if (!autoQueen && isPawnPromotion(fen, from, to)) {
+      setPendingPromotion({ from, to });
       return;
     }
     await commitMove(from + to);
@@ -776,13 +815,13 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  // P2-T02: store.flipBoard via getState(); handleUndo left as-is (P2-T07 owns its rewrite).
+  // P2-T02: flipBoard via getState(); handleUndo left as-is (P2-T07 owns its rewrite).
   }, [handleNavFirst, handleNavPrev, handleNavNext, handleNavLast, zenMode, toggleZenMode]);
 
   // P3-T01: resign/draw are backend commands now. The renderer forwards
   // intent (losing side for resign); result/termination come back in the
   // snapshot, so the backend stays the single termination authority and
-  // autosave (keyed off store.gameResult) observes backend truth.
+  // autosave (keyed off gameResult) observes backend truth.
   const handleResign = async () => {
     const gs = useGameStore.getState();
     if (gs.gameResult || gs.mode === 'ai_vs_ai') return;
@@ -817,13 +856,13 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
   };
 
   const handleExportPgn = async () => {
-    if (!backendConnected) { store.pushToast('Backend not connected', 'error'); return; }
+    if (!backendConnected) { pushToast('Backend not connected', 'error'); return; }
     try {
       const res = await window.electronAPI.exportPgn() as { pgn: string };
       await window.electronAPI.copyToClipboard(res.pgn);
-      store.pushToast('PGN copied to clipboard', 'success');
+      pushToast('PGN copied to clipboard', 'success');
     } catch (err) {
-      store.pushToast(`Export failed: ${err}`, 'error');
+      pushToast(`Export failed: ${err}`, 'error');
     }
   };
 
@@ -832,7 +871,7 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
       const res = await window.electronAPI.exportPgn() as { pgn: string };
       const pgn = res.pgn ?? '';
       if (!pgn) {
-        store.pushToast('No PGN to save yet', 'error');
+        pushToast('No PGN to save yet', 'error');
         return;
       }
       const resultMap: Record<string, string> = {
@@ -840,55 +879,55 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
         black_wins: '0-1',
         draw: '1/2-1/2',
       };
-      const engineName = botDisplayName(settings.playEngine);
-      const whiteName = store.mode === 'human_vs_ai'
-        ? (store.humanColor === 'white' ? 'You' : engineName)
-        : store.mode === 'ai_vs_ai'
+      const engineName = botDisplayName(playEngine);
+      const whiteName = mode === 'human_vs_ai'
+        ? (humanColor === 'white' ? 'You' : engineName)
+        : mode === 'ai_vs_ai'
           ? engineName
           : 'White';
-      const blackName = store.mode === 'human_vs_ai'
-        ? (store.humanColor === 'black' ? 'You' : engineName)
-        : store.mode === 'ai_vs_ai'
+      const blackName = mode === 'human_vs_ai'
+        ? (humanColor === 'black' ? 'You' : engineName)
+        : mode === 'ai_vs_ai'
           ? engineName
           : 'Black';
-      const mappedResult = store.gameResult ? resultMap[store.gameResult] : '*';
+      const mappedResult = gameResult ? resultMap[gameResult] : '*';
       const saveRes = await window.electronAPI.saveGameHistory({
         pgn,
         meta: {
           white: whiteName,
           black: blackName,
           result: mappedResult,
-          termination: store.termination,
-          moves: store.fullMoveHistoryUCI.length,
-          mode: store.mode,
-          engine: settings.playEngine,
-          time_control: settings.timeControl,
+          termination: termination,
+          moves: fullMoveHistoryLength,
+          mode: mode,
+          engine: playEngine,
+          time_control: timeControl,
           played_at: new Date().toISOString(),
         },
       });
       if (saveRes.ok) {
-        store.pushToast('Game saved', 'success');
+        pushToast('Game saved', 'success');
       } else {
-        store.pushToast('Save failed', 'error');
+        pushToast('Save failed', 'error');
       }
     } catch (err) {
-      store.pushToast(`Save failed: ${err}`, 'error');
+      pushToast(`Save failed: ${err}`, 'error');
     }
   };
 
   const handleExportFen = async () => {
-    if (!backendConnected) { store.pushToast('Backend not connected', 'error'); return; }
+    if (!backendConnected) { pushToast('Backend not connected', 'error'); return; }
     try {
       const res = await window.electronAPI.exportFen() as { fen: string };
       await window.electronAPI.copyToClipboard(res.fen);
-      store.pushToast('FEN copied to clipboard', 'success');
+      pushToast('FEN copied to clipboard', 'success');
     } catch (err) {
-      store.pushToast(`FEN export failed: ${err}`, 'error');
+      pushToast(`FEN export failed: ${err}`, 'error');
     }
   };
 
   const handleExportFenCollection = async () => {
-    if (!backendConnected) { store.pushToast('Backend not connected', 'error'); return; }
+    if (!backendConnected) { pushToast('Backend not connected', 'error'); return; }
     try {
       const fenRes = await window.electronAPI.exportFen() as { fen: string };
       const pgnRes = await window.electronAPI.exportPgn() as { pgn: string };
@@ -897,56 +936,54 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
       lines.push(`# PGN: ${pgnRes.pgn.replace(/\n/g, ' | ')}`);
       lines.push('');
       lines.push(`0. ${fenRes.fen}`);
-      if (store.fullMoveHistoryUCI.length > 0) {
+      if (fullMoveHistoryLength > 0) {
         lines.push('');
         lines.push('# Move FENs (use PGN for full game):');
       }
       await window.electronAPI.copyToClipboard(lines.join('\n'));
-      store.pushToast('FEN collection copied to clipboard', 'success');
+      pushToast('FEN collection copied to clipboard', 'success');
     } catch (err) {
-      store.pushToast(`FEN collection export failed: ${err}`, 'error');
+      pushToast(`FEN collection export failed: ${err}`, 'error');
     }
   };
 
   // ── Player card labels — adapt to current game mode ───────────────────────
-  const engineName = botDisplayName(settings.playEngine);
-  const engineElo = botEloForStrength(settings.botStrength, settings.playEngine);
+  const engineName = botDisplayName(playEngine);
+  const engineElo = botEloForStrength(botStrength, playEngine);
 
   let topThinking = false;
 let showResignDraw: boolean;
 
   // P3-T01: cards render the backend clock mirror (whole seconds, ceil so
   // a fresh 180 s clock reads 03:00). Null clock (Unlimited) -> '--:--'.
-  const whiteSecs = store.clock ? Math.max(0, Math.ceil(store.clock.white_ms / 1000)) : null;
-  const blackSecs = store.clock ? Math.max(0, Math.ceil(store.clock.black_ms / 1000)) : null;
+  const whiteSecs = clock ? Math.max(0, Math.ceil(clock.white_ms / 1000)) : null;
+  const blackSecs = clock ? Math.max(0, Math.ceil(clock.black_ms / 1000)) : null;
 
-  const flipped = store.flipped;
-  const mode = store.mode;
 
   // Determine card data for both positions
   let whiteCard: { name: string; elo?: number; isUser: boolean; time: number | null; active: boolean };
   let blackCard: { name: string; elo?: number; isUser: boolean; time: number | null; active: boolean };
 
   if (mode === 'human_vs_human') {
-    whiteCard = { name: 'White', elo: undefined, isUser: true, time: whiteSecs, active: store.turn === 'white' };
-    blackCard = { name: 'Black', elo: undefined, isUser: true, time: blackSecs, active: store.turn === 'black' };
+    whiteCard = { name: 'White', elo: undefined, isUser: true, time: whiteSecs, active: turn === 'white' };
+    blackCard = { name: 'Black', elo: undefined, isUser: true, time: blackSecs, active: turn === 'black' };
     showResignDraw = true;
   } else if (mode === 'ai_vs_ai') {
-    whiteCard = { name: `${engineName} (White)`, elo: engineElo, isUser: false, time: whiteSecs, active: store.turn === 'white' };
-    blackCard = { name: `${engineName} (Black)`, elo: engineElo, isUser: false, time: blackSecs, active: store.turn === 'black' };
+    whiteCard = { name: `${engineName} (White)`, elo: engineElo, isUser: false, time: whiteSecs, active: turn === 'white' };
+    blackCard = { name: `${engineName} (Black)`, elo: engineElo, isUser: false, time: blackSecs, active: turn === 'black' };
     showResignDraw = false;
-    topThinking = store.engineBusy;
+    topThinking = engineBusy;
   } else {
     // human_vs_ai
-    const humanIsWhite = store.humanColor === 'white';
+    const humanIsWhite = humanColor === 'white';
     whiteCard = humanIsWhite
-      ? { name: 'You', elo: undefined, isUser: true, time: whiteSecs, active: store.turn === 'white' }
-      : { name: engineName, elo: engineElo, isUser: false, time: whiteSecs, active: store.turn === 'white' };
+      ? { name: 'You', elo: undefined, isUser: true, time: whiteSecs, active: turn === 'white' }
+      : { name: engineName, elo: engineElo, isUser: false, time: whiteSecs, active: turn === 'white' };
     blackCard = humanIsWhite
-      ? { name: engineName, elo: engineElo, isUser: false, time: blackSecs, active: store.turn === 'black' }
-      : { name: 'You', elo: undefined, isUser: true, time: blackSecs, active: store.turn === 'black' };
+      ? { name: engineName, elo: engineElo, isUser: false, time: blackSecs, active: turn === 'black' }
+      : { name: 'You', elo: undefined, isUser: true, time: blackSecs, active: turn === 'black' };
     showResignDraw = true;
-    topThinking = store.engineBusy;
+    topThinking = engineBusy;
   }
 
   // When flipped, swap white and black card data
@@ -1003,14 +1040,14 @@ let showResignDraw: boolean;
           <span className="material-symbols-outlined" style={{ fontSize: 12 }}>close</span>
           Exit zen
         </button>
-        {store.pendingPromotion && (
+        {pendingPromotion && (
           <PromotionDialog
-            color={store.turn}
+            color={turn}
             onSelect={handlePromotion}
-            onCancel={() => store.setPendingPromotion(null)}
+            onCancel={() => setPendingPromotion(null)}
           />
         )}
-        {store.gameResult && (
+        {gameResult && (
           <GameOverModal
             onRematch={handleNewGame}
             onAnalyze={() => onTabChange('analysis')}
@@ -1038,11 +1075,11 @@ let showResignDraw: boolean;
         </div>
 
         {/* Eval bar */}
-        {settings.showEvalBar && <EvalBar />}
+        {showEvalBar && <EvalBar />}
 
         {/* Game controls */}
         <GameControls
-          onFlip={store.flipBoard}
+          onFlip={flipBoard}
           onUndo={handleUndo}
           onDraw={showResignDraw ? handleDraw : undefined}
           onResign={showResignDraw ? handleResign : undefined}
@@ -1172,14 +1209,14 @@ let showResignDraw: boolean;
         </div>
       </div>
 
-      {store.pendingPromotion && (
+      {pendingPromotion && (
         <PromotionDialog
-          color={store.turn}
+          color={turn}
           onSelect={handlePromotion}
-          onCancel={() => store.setPendingPromotion(null)}
+          onCancel={() => setPendingPromotion(null)}
         />
       )}
-      {store.gameResult && (
+      {gameResult && (
         <GameOverModal
           onRematch={handleNewGame}
           onAnalyze={() => onTabChange('analysis')}

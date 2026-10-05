@@ -956,7 +956,7 @@ unchecked.
 - **Done when:** every handler in `service.py` is documented, and an audit shows no
   drift.
 
-### P3-T05 — Narrow the hot-path store subscriptions
+### P3-T05 — Narrow the hot-path store subscriptions ✅ DONE
 
 `PlayView.tsx:55`, `Board.tsx:74` and `App.tsx:22` subscribe to the **entire** store.
 Stockfish streams update it many times per second, re-rendering the whole board subtree —
