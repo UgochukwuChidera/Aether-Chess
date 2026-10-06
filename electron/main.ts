@@ -194,6 +194,18 @@ function startPython(mainWindow: BrowserWindow): void {
       return;
     }
 
+    // P4-T10: Maia3 download progress (the backend parses the HF
+    // downloader's tqdm stderr into download_progress while maia3_cache
+    // runs). Global like the clock, not per-window like analysis, so
+    // broadcast to all live windows (clock_tick precedent above, not the
+    // analysisCallbacks map).
+    if (msg.type === "download_progress") {
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) win.webContents.send("download-progress", msg);
+      }
+      return;
+    }
+
     // Regular JSON-RPC response
     const id = msg.id as string | undefined;
     if (!id) return;

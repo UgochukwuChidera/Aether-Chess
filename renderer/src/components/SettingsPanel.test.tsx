@@ -11,7 +11,7 @@
  * against over-deletion).
  */
 import { describe, expect, it, vi, afterEach, beforeEach } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { SettingsPanel } from "./SettingsPanel";
 import { useSettingsStore } from "../stores/settingsStore";
 
@@ -47,6 +47,8 @@ function stubBackend(botFlags: { supports_skill_level: boolean }) {
       }),
       listBots: async () => ({ bots }),
       checkMaia3Cache: async () => ({ cached: false, model: "maia3-5m" }),
+      maia3Cache: async () => ({ ok: true }),
+      onDownloadProgress: () => () => {},
       getBookMoves: async () => ({ moves: [] }),
       pickStockfishPath: async () => null,
       revealEnginesDir: async () => "",
@@ -85,5 +87,73 @@ describe("SettingsPanel (P4-T08: strength slider follows supports_skill_level)",
     await waitFor(() => {
       expect(screen.queryByText("Bot difficulty")).not.toBeNull();
     });
+  });
+});
+
+/**
+ * P4-T10: the Maia3 download must surface in-UI progress. The backend pushes
+ * id-less `download_progress` events (clock_tick-shaped) through
+ * `onDownloadProgress`; the panel renders a <progress> element reflecting
+ * them. Fail-first contract: pre-fix there is no subscription and no
+ * element, so firing progress events leaves no progressbar in the DOM.
+ */
+function stubBackendWithProgress() {
+  let progressCb: ((data: unknown) => void) | null = null;
+  const unsubscribe = vi.fn();
+  stubBackend({ supports_skill_level: false });
+  const api = window.electronAPI as unknown as Record<string, unknown>;
+  api.onDownloadProgress = (cb: (data: unknown) => void) => {
+    progressCb = cb;
+    return unsubscribe;
+  };
+  return {
+    fireProgress: (progress: number) => {
+      expect(progressCb).not.toBeNull();
+      act(() => {
+        (progressCb as (data: unknown) => void)({
+          type: "download_progress",
+          model: "maia3-5m",
+          progress,
+        });
+      });
+    },
+    unsubscribe,
+  };
+}
+
+describe("SettingsPanel (P4-T10: in-UI download progress)", () => {
+  afterEach(() => cleanup());
+  it("shows no progress element before any download event", async () => {
+    stubBackendWithProgress();
+    render(<SettingsPanel />);
+    await waitFor(() => {
+      expect(screen.queryByText("Maia3 cache")).not.toBeNull();
+    });
+    expect(screen.queryByRole("progressbar")).toBeNull();
+  });
+
+  it("reflects pushed progress values 0->100 in order", async () => {
+    const { fireProgress } = stubBackendWithProgress();
+    render(<SettingsPanel />);
+    await waitFor(() => {
+      expect(screen.queryByText("Maia3 cache")).not.toBeNull();
+    });
+    for (const value of [0, 25, 50, 75, 100]) {
+      fireProgress(value);
+      const bar = screen.getByRole("progressbar") as HTMLProgressElement;
+      expect(bar.value).toBe(value);
+      expect(bar.max).toBe(100);
+    }
+  });
+
+  it("unsubscribes from progress events on unmount", async () => {
+    const { unsubscribe } = stubBackendWithProgress();
+    render(<SettingsPanel />);
+    await waitFor(() => {
+      expect(screen.queryByText("Maia3 cache")).not.toBeNull();
+    });
+    expect(unsubscribe).not.toHaveBeenCalled();
+    cleanup();
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
   });
 });

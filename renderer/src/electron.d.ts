@@ -131,6 +131,8 @@ declare global {
       onBackendClosed: (callback: () => void) => () => void;
       onBackendReady: (callback: () => void) => () => void;
       onClockTick: (callback: (data: unknown) => void) => () => void;
+      // P4-T10: Maia3 download progress push (id-less {type, model, progress}).
+      onDownloadProgress: (callback: (data: unknown) => void) => () => void;
 
       // Settings
       loadSettings: () => Promise<unknown>;

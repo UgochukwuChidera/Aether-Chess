@@ -50,6 +50,7 @@ from __future__ import annotations
 import atexit
 import io
 import json
+import re
 import sys
 import threading
 import traceback
@@ -165,6 +166,55 @@ class _ThreadCapture:
     @property
     def stderr_text(self) -> str:
         return self.stderr_buf.getvalue()
+
+
+# P4-T10: tqdm percent tokens the HF downloader (hf_hub_download) emits on
+# stderr, e.g. `maia3-5m.pt:  25%|██▌ | 5.00M/20.0M [...]`. Parsed live so
+# the UI gets a download_progress push, not just the terminal. tqdm stays
+# the downloader (no redesign); this only observes its output.
+_MAIA3_PROGRESS_RE = re.compile(r"(\d{1,3}(?:\.\d+)?)\s*%")
+
+
+class _ProgressTee(io.StringIO):
+    """A capture buffer that also pushes download progress live.
+
+    Installed as the captured thread's stderr buffer (see handle_maia3_cache),
+    so every write is both retained for the terminal pass-through filter and
+    scanned for percent tokens. Pushes are synchronous emissions during the
+    handler -- there is no loop to orphan: when the download ends or raises,
+    writes stop and so do pushes. Only strictly-increasing values are
+    pushed (tqdm redraws the same percent repeatedly).
+    """
+
+    def __init__(self, push_fn: Any, model: str) -> None:
+        super().__init__()
+        self._push_fn = push_fn
+        self._model = model
+        self.last_percent = -1
+
+    def write(self, data: Any) -> Any:
+        result = super().write(data)
+        text = str(data)
+        if "%" in text:
+            for match in _MAIA3_PROGRESS_RE.finditer(text):
+                try:
+                    pct = float(match.group(1))
+                except ValueError:
+                    continue
+                pct_int = max(0, min(100, int(pct)))
+                if pct_int > self.last_percent:
+                    self.last_percent = pct_int
+                    try:
+                        self._push_fn(
+                            {
+                                "type": "download_progress",
+                                "model": self._model,
+                                "progress": pct_int,
+                            }
+                        )
+                    except Exception:
+                        pass
+        return result
 
 
 def _cleanup() -> None:
@@ -415,11 +465,16 @@ def handle_check_maia3_cache(params: Dict[str, Any]) -> Any:
     return {"cached": cached, "model": model}
 
 
-def handle_maia3_cache(params: Dict[str, Any]) -> Any:
+def handle_maia3_cache(params: Dict[str, Any], push_fn: Any = None) -> Any:
     model = params.get("model", "maia3-5m")
     cache_dir = params.get("cache_dir")
     force_download = bool(params.get("force_download", False))
     token = params.get("hf_token")
+    # P4-T10: id-less download_progress push (clock_tick/analysis_update
+    # shape). The dispatcher calls handler(params); production uses _send,
+    # tests inject a capture. On failure the exception propagates with no
+    # terminal push -- writes stop, so pushes stop (no orphaned loop).
+    push = _send if push_fn is None else push_fn
     try:
         from maia3.cache import main as maia3_cache
     except Exception as exc:
@@ -438,7 +493,13 @@ def handle_maia3_cache(params: Dict[str, Any]) -> Any:
     # Suppress stdout (cache.py prints "Maia3 5M: /path" which breaks JSON protocol)
     # and filter stderr noise (symlink warnings, image.png errors),
     # but let tqdm progress bars (lines with %) show through.
-    with _ThreadCapture() as cap:
+    # P4-T10: the captured thread's stderr buffer is the progress tee, so
+    # percent tokens push live to the UI while the same text is retained for
+    # the terminal pass-through below.
+    cap = _ThreadCapture()
+    progress_tee = _ProgressTee(push, str(model))
+    cap.stderr_buf = progress_tee
+    with cap:
         try:
             maia3_cache(args)
         except SystemExit:
@@ -446,6 +507,8 @@ def handle_maia3_cache(params: Dict[str, Any]) -> Any:
     for line in cap.stderr_text.splitlines():
         if "%" in line:
             print(line, file=sys.stderr)
+    if progress_tee.last_percent < 100:
+        push({"type": "download_progress", "model": model, "progress": 100})
 
     return {"ok": True, "model": model}
 

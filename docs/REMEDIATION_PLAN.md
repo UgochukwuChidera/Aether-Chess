@@ -1502,7 +1502,26 @@ replay from startpos, wrong for FEN-started games — reachable since
 > Edge: empty-history FEN navigate returns the FEN with live sentinel, no
 > crash. Full gate green (counts in commit body).
 
-### P4-T10 — Download progress bar in UI (TODO.md:1)
+### P4-T10 — Download progress bar in UI (TODO.md:1) ✅ DONE
+
+> Verification (2026-10-06): test-first both levels. BACKEND
+> `tests/test_maia3_progress.py` (3 tests): pre-fix FAIL recorded
+> (`TypeError: handle_maia3_cache() got an unexpected keyword argument
+> 'push_fn'`, zero pushes); post-fix green (0→100 in order, stoppage,
+> terminal passthrough). RENDERER `SettingsPanel.test.tsx` +3: pre-fix 2
+> FAIL (no subscription, no element) + 1 vacuous guard green; post-fix 5/5.
+> Push shape mirrors `clock_tick` (P3-T01), not the `analysisCallbacks`
+> map (P2-T04): id-less `{type: download_progress, model, progress}`,
+> broadcast to all live windows — download is global like the clock, not
+> per-window like analysis. Source: tqdm `%` lines on captured stderr
+> (hf_hub_download via maia3.cache); `_ProgressTee` observes writes live
+> (tqdm stays, no downloader redesign); terminal passthrough preserved;
+> terminal 100 on success, silent stop on failure. Preload
+> `onDownloadProgress` mirrors the P2-T03 unsubscribe-handle shape; panel
+> `<progress>` + cleanup on unmount. Docs: the three terminal-only lines
+> (SETUP.md:127-128, BACKEND_API.md:866-867, :909-912) rewritten; `rg`
+> for the promising sentences returns zero (only this proof line quotes
+> the pattern). Full gate green (counts/times in commit body).
 
 Hugging Face progress only reaches terminal stderr (P1-T02 fixed the
 hijack, not the surfacing); docs re-promise it in three places.

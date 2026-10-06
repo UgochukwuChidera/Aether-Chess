@@ -124,8 +124,8 @@ If you skip this, Maia3 still appears in the Play engine list marked
 **(unavailable)** and the rest of the app is unaffected. Mentor and Stockfish
 need nothing here.
 
-> Download progress is printed to the terminal only. There is no in-app progress
-> bar yet — see [TODO](../TODO.md) item 1.
+> Download progress shows in the Settings → Engine panel while downloading
+> (and is also printed to the terminal).
 
 ---
 

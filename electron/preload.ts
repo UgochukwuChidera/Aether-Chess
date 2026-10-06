@@ -130,6 +130,16 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.removeListener("clock-tick", wrapped);
     };
   },
+  // P4-T10: Maia3 download progress push (backend maia3_cache parses tqdm
+  // stderr into id-less {type, model, progress}; main broadcasts like
+  // clock_tick). Same unsubscribe-handle shape as onClockTick (P2-T03).
+  onDownloadProgress: (callback: (data: unknown) => void) => {
+    const wrapped = (_event: unknown, data: unknown) => callback(data);
+    ipcRenderer.on("download-progress", wrapped);
+    return () => {
+      ipcRenderer.removeListener("download-progress", wrapped);
+    };
+  },
 
   // ── Settings persistence ─────────────────────────────────────────────────
   loadSettings: () => ipcRenderer.invoke("settings-load"),

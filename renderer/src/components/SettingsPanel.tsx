@@ -112,6 +112,9 @@ export const SettingsPanel: React.FC = () => {
   const [loadingBook, setLoadingBook] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [modelCached, setModelCached] = useState<Record<string, boolean>>({});
+  // P4-T10: in-UI download progress (percent from the backend's
+  // download_progress push). Null means no download observed yet.
+  const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
   // Discovery starts engines, so it is not instant on first use. Tracked
   // separately from stockfishInfo so a slow scan reads as "still looking"
   // rather than "no engine installed".
@@ -173,11 +176,28 @@ export const SettingsPanel: React.FC = () => {
 
   // Check cache status whenever the selected model changes
   useEffect(() => {
+    // A different model makes any shown progress stale.
+    setDownloadProgress(null);
     window.electronAPI
       .checkMaia3Cache({ model: settings.maia3Model })
       .then((res) => setModelCached((prev) => ({ ...prev, [res.model]: res.cached })))
       .catch(() => {});
   }, [settings.maia3Model]);
+
+  // P4-T10: in-UI download progress. The backend parses the HF downloader's
+  // tqdm stderr into id-less download_progress events (clock_tick shape);
+  // cleanup removes exactly this subscription (P2-T03 pattern).
+  useEffect(() => {
+    const unsubscribe = window.electronAPI.onDownloadProgress((raw: unknown) => {
+      const pct = (raw as { progress?: unknown })?.progress;
+      if (typeof pct === 'number' && Number.isFinite(pct)) {
+        setDownloadProgress(Math.max(0, Math.min(100, pct)));
+      }
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, []);
 
   // Load book moves count when opening book path changes
   useEffect(() => {
@@ -570,13 +590,14 @@ export const SettingsPanel: React.FC = () => {
             </Row>
             <Row
               label="Maia3 cache"
-              tooltip="Download model weights to project_dir/model_cache/ (check console for progress)"
+              tooltip="Download model weights to project_dir/model_cache/ (progress shows below)"
             >
               <div className="flex items-center gap-2">
                 <button
                   disabled={downloading}
                   onClick={async () => {
                     setDownloading(true);
+                    setDownloadProgress(0);
                     const toast = useGameStore.getState().pushToast;
                     toast(`Downloading ${settings.maia3Model}...`, 'info');
                     try {
@@ -610,6 +631,14 @@ export const SettingsPanel: React.FC = () => {
                       ? `Cached ${settings.maia3Model}`
                       : `Download ${settings.maia3Model}`}
                 </button>
+                {downloadProgress !== null && (
+                  <progress
+                    value={downloadProgress}
+                    max={100}
+                    aria-label="Maia3 download progress"
+                    className="w-28"
+                  />
+                )}
               </div>
             </Row>
             <Row label="Elo rating" tooltip="Maia3 skill level from 0 (weak) to 5000 (strong). Default 1500.">

@@ -863,8 +863,8 @@ states.
 
 ### `check_maia3_cache`
 
-Whether a Maia3 model is already downloaded, so the UI can avoid starting a
-download the user cannot see progress for.
+Whether a Maia3 model is already downloaded, so the UI can show the cached
+state without starting a redundant download.
 
 **Request params:**
 
@@ -908,8 +908,10 @@ Set `hf_token` for gated repos. `HF_HOME` is honoured; it defaults to
 
 > Progress is written to **stderr**, not stdout. The backend wraps the
 > downloader because `cache.py` prints to stdout, which would corrupt the
-> newline-delimited JSON protocol. The UI streams this to the terminal only —
-> see [TODO](../TODO.md) item 1 for the in-app progress bar.
+> newline-delimited JSON protocol. The backend also forwards parsed
+> percentages as `download_progress` push events (broadcast like
+> `clock_tick`), which SettingsPanel renders in a `<progress>` element.
+> The raw lines still reach the terminal as well.
 
 **Error:** if Maia3 is not installed in the environment, this returns
 `"Maia3 is not installed in this environment. Run: python -m pip install -e ./inspiration"`.
