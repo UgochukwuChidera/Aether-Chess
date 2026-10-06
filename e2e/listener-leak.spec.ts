@@ -143,6 +143,13 @@ function killFixtureBackend(): void {
   }
 }
 
+// Loaded-machine allowance: this spec performs 10 full Play remounts
+// plus a backend kill; observed 20-59s under memory pressure vs ~20s
+// quiet (see ledger flake watch). The 60s shared default would trip on
+// slowness alone, so this spec alone gets headroom. A genuine hang
+// still fails, just at 120s.
+test.setTimeout(120_000);
+
 test("tab switches do not accumulate backend listeners", async () => {
   expect(
     fs.existsSync(MAIN_JS),
