@@ -1,8 +1,8 @@
 {
   "$schemaNote": "Coordinator-owned phase ledger for the AetherChess remediation. Shape follows the pre-flight-protocol skill: status, phase, workItems, decisions, session.os. Sub-agent outcomes live in commit bodies + coordinator chat (subagent depth limit forbids nested .spec/agents writes). workItem statuses: completed | active | todo. P1-T01 is flagged next:true.",
   "status": "executing",
-  "phase": "phase-3",
-  "phaseLabel": "Phase 3 — Structural (P3-T05 next)",
+  "phase": "phase-4",
+  "phaseLabel": "Phase 4 — Final sweep (P4-T07 next, P4-T12 last)",
   "phases": [
     {
       "id": "phase-0",
@@ -25,13 +25,13 @@
     {
       "id": "phase-3",
       "label": "Phase 3 — Structural",
-      "status": "active",
-      "note": "P3-T01..P3-T07."
+      "status": "completed",
+      "note": "P3-T01..P3-T09 all committed."
     },
     {
       "id": "phase-4",
       "label": "Phase 4 — Unfinished features",
-      "status": "todo",
+      "status": "active",
       "note": "P4-T01..P4-T05. P4-T03 Tier 3 gated on §2c portability precondition."
     }
   ],
@@ -46,7 +46,7 @@
     "authority": "docs/VERIFICATION_REGISTER.md outranks docs/REMEDIATION_PLAN.md where they disagree (register §5 adjudication)."
   },
   "gate": {
-    "baseline": "python 193 passed · ruff clean · pyright 0 errors · electron 76 passed · lint clean · build succeeds",
+    "baseline": "python 242 passed · ruff clean · pyright 0 errors · electron 78 passed · lint clean · build succeeds",
     "phaseExits": {
       "phase-0": "python 122 passed",
       "phase-1": "python 130 passed",
@@ -463,51 +463,57 @@
       "id": "P3-T05",
       "title": "Narrow hot-path store subscriptions",
       "phase": "phase-3",
-      "status": "todo",
-      "note": "Selectors in PlayView/Board/App.",
-      "next": true
+      "status": "completed",
+      "note": "Selectors in PlayView/Board/App; render-count proof flat; App game-store already getState.",
+      "commit": "2da1a870e6349cf4f12d7fffbf2c8c21cc274773"
     },
     {
       "id": "P3-T06",
       "title": "Delete the superseded stack",
       "phase": "phase-3",
-      "status": "todo",
-      "note": "~390 lines + dead tests (count DROPS ~200 — expected, state in body). Also closes P2-T20."
+      "status": "completed",
+      "note": "~390 lines deleted; suite 193->189 (dead tests leaving); P2-T20 closed with it.",
+      "commit": "ba567d34c21eda6bff2067221e8b5ff0b64e13ba"
     },
     {
       "id": "P3-T07",
       "title": "Document retained dead code",
       "phase": "phase-3",
-      "status": "todo",
-      "note": "'Planned, not wired' ARCHITECTURE section."
+      "status": "completed",
+      "note": "Planned-not-wired section + registry note; claims read against code.",
+      "commit": "9741790f0d96f899da9ac36e6f9f28ae6e565a63"
     },
     {
       "id": "P3-T08",
       "title": "Enable numba compile caching for the test suite",
       "phase": "phase-3",
-      "status": "todo",
-      "note": "cache=True + NUMBA_CACHE_DIR; measure before/after; from test-suite audit."
+      "status": "completed",
+      "note": "cache=True + NUMBA_CACHE_DIR; cold-vs-warm measured; persistent-dir test rewrite after self-defeat.",
+      "commit": "60f60d8df50df40981a413699d936f304902c3db"
     },
     {
       "id": "P3-T09",
       "title": "Renderer never calls settings_defaults",
       "phase": "phase-3",
-      "status": "todo",
-      "note": "P3-T02 Change 2 half-done: command exists, zero callers. Preload + loadFromBackend wiring + fixture answer."
+      "status": "completed",
+      "note": "Preload getSettingsDefaults + store fetch w/ silent fallback; fixture untouched.",
+      "commit": "fde997767e7b5ec4600a9c6c268fedb142477eb4"
     },
     {
       "id": "P4-T01",
       "title": "Syzygy tablebases",
       "phase": "phase-4",
-      "status": "todo",
-      "note": "Injected opener stub tests; no data in repo; real-data test opt-in via AETHER_TABLEBASE_PATH, never in CI."
+      "status": "completed",
+      "note": "Sign/None/minmax fixed + opener injection + detect-and-report wiring; no data in repo.",
+      "commit": "68e9eb1f72f66fead8fbd620b8f42cb7353a8e64"
     },
     {
       "id": "P4-T02",
       "title": "PDF game reports",
       "phase": "phase-4",
-      "status": "todo",
-      "note": "Uncomment fpdf2; export_pdf_report + UI; key_moments from cp_loss."
+      "status": "completed",
+      "note": "MAKE verdict unanimous; fpdf2 + command + UI + key_moments.",
+      "commit": "7285bf0fcd0e900121c40a6a1af315c66a9124a2"
     },
     {
       "id": "P4-T03",
@@ -520,15 +526,68 @@
       "id": "P4-T04",
       "title": "estimate_bayesian_elo",
       "phase": "phase-4",
-      "status": "todo",
-      "note": "Wire as primary with Glicko comparison, or remove README claim."
+      "status": "completed",
+      "note": "REMOVE verdict (sound math, shape chasm); README now Glicko-2.",
+      "commit": "e6b13b273a1fec8c80952aa80e351001ae5f9b01"
     },
     {
       "id": "P4-T05",
       "title": "Opening book loose ends",
       "phase": "phase-4",
+      "status": "completed",
+      "note": "Wrapper deleted; books_dir wired; mtime cache + lock; .bin in-temp only.",
+      "commit": "43fea9e70757b73c3c2b365717b6236165dcd827"
+    },
+    {
+      "id": "P4-T06",
+      "title": "C++ kernel Tier 3",
+      "phase": "phase-4",
+      "status": "completed",
+      "note": "Wrapper as C++, kernel ACTIVE, Tier 3 green, ~6x NO-SHIP (mate-blind), CI gcc step; closes P4-T03. P4-T03 stays todo (PARTIAL) per plan.",
+      "commit": "4b26a816588501b07f6dae073b886ac4aeba82a9"
+    },
+    {
+      "id": "P4-T07",
+      "title": "Docs drift sweep (post-Phase-4 touch-ups)",
+      "phase": "phase-4",
       "status": "todo",
-      "note": "choose_weighted fate; openingBookPath plumbing; mtime cache."
+      "note": "BACKEND_API not-yet + ARCHITECTURE planned-not-wired + TODO C++ strike.",
+      "next": true
+    },
+    {
+      "id": "P4-T08",
+      "title": "Dead UI surface: unused skill flag + no-op drawer",
+      "phase": "phase-4",
+      "status": "todo",
+      "note": "Wire-or-drop flag; REMOVE drawer button (implementing out of track)."
+    },
+    {
+      "id": "P4-T09",
+      "title": "FEN-startpos navigation replay",
+      "phase": "phase-4",
+      "status": "todo",
+      "note": "Clamp replay to retained _initial_fen; P2-T09 residual."
+    },
+    {
+      "id": "P4-T10",
+      "title": "Download progress bar in UI (TODO.md:1)",
+      "phase": "phase-4",
+      "status": "todo",
+      "note": "maia3_cache push + onDownloadProgress IPC + panel progress."
+    },
+    {
+      "id": "P4-T11",
+      "title": "Compiled kernel default-on evaluation",
+      "phase": "phase-4",
+      "status": "todo",
+      "note": "P4-T06 NO-SHIP exit: quality work + benchmark-gated decision."
+    },
+    {
+      "id": "P4-T12",
+      "title": "AnalysisView callback stabilization (2 warnings) — LAST TASK",
+      "phase": "phase-4",
+      "status": "todo",
+      "note": "UNOWNED x3: useCallback+getState, no restart loops. Closes the program."
     }
   ],
   "decisions": [

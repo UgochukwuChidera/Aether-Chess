@@ -1408,6 +1408,76 @@ Python-C-API + `evaluate_fen`, no C-only constructs) compiles as C++ unchanged.
 - **Done when:** kernel builds, Tier 3 green, benchmark recorded, CI step
   added, P4-T03 marked DONE (this item closes it).
 
+### P4-T07 — Docs drift sweep (post-Phase-4 touch-ups)
+
+Three statements the program itself falsified since P3-T04/P3-T07:
+`docs/BACKEND_API.md` "Not yet commands" (both commands shipped in
+P4-T01/P4-T02); `docs/ARCHITECTURE.md` "Planned, not wired" (all four wired
+or decided — includes the stale Bayesian-README clause P4-T04 falsified);
+`TODO.md` item 3 (P4-T06 shipped kernel, tests, benchmark, CI step).
+
+- **Change:** document both commands + limits; rewrite the section to
+  shipped/wired with the P4-T04 decision record; strike TODO item 3 CLOSED.
+- **Test:** zero-drift audit (handlers vs docs, section claims vs code) empty;
+  rg for the stale sentences zero.
+- **Done when:** no false "not yet / planned / pending" statement remains.
+
+### P4-T08 — Dead UI surface: unused skill flag + no-op drawer
+
+- `supports_skill_level` declared (d.ts, base, stockfish, manager, fixture)
+  but read by zero components → wire it (hide the strength slider when
+  false) or drop the field + d.ts + fixture.
+- TopBar hamburger → `TODO: slide-out drawer` (`App.tsx:84`, scaffold
+  2026-04-22, only drawer hit repo-wide) → REMOVE the button/prop.
+  Implementing a drawer is a feature, out of this track.
+- **Test:** slider follows the flag (or field absence asserted); drawer
+  button role-query absent.
+- **Done when:** no dead-looking-live control remains.
+
+### P4-T09 — FEN-startpos navigation replay
+
+P2-T09 residual (noted, unowned): `navigate_to` / `_board_from_full_history`
+replay from startpos, wrong for FEN-started games — reachable since
+`new_game(fen)` landed.
+
+- **Change:** clamp the replay to the retained startpos (`_initial_fen`).
+- **Test:** FEN-started game → navigate mid → return → position correct;
+  export intact.
+- **Done when:** history correct for FEN-started games.
+
+### P4-T10 — Download progress bar in UI (TODO.md:1)
+
+Hugging Face progress only reaches terminal stderr (P1-T02 fixed the
+hijack, not the surfacing); docs re-promise it in three places.
+
+- **Change:** `maia3_cache` progress push event + `onDownloadProgress` IPC +
+  SettingsPanel `<progress>` element.
+- **Test:** stubbed downloader → progress events observed 0→100 in order.
+- **Done when:** downloading shows in-UI progress; terminal-only claims gone.
+
+### P4-T11 — Compiled kernel default-on evaluation
+
+P4-T06 NO-SHIP exit clause: ~6x end-to-end but mate/stalemate-blind
+(Scholar's −80 vs −99995, queen-up −1002), so the flag stays off until
+quality is proven.
+
+- **Change:** mate/stalemate-term quality work + benchmark-gated default-on
+  decision (on with proof, or documented stay-off with numbers — either
+  closes honestly).
+- **Test:** quality bar + benchmark, same contracts as Tier 3.
+- **Done when:** flag state decided with evidence, recorded.
+
+### P4-T12 — AnalysisView callback stabilization (2 warnings) — LAST TASK
+
+UNOWNED candidate, declined twice as scope creep, accepted residual since
+P2-T18: per-render `handleStartAnalysis` + snapshot reads can't join effect
+deps without restart loops.
+
+- **Change:** `useCallback` + `getState` stabilization, no restart loops.
+- **Test:** existing single-start + engine-switch tests green + lint zero
+  warnings file-wide.
+- **Done when:** 0 warnings, behavior identical. Closes the program.
+
 ---
 
 # Appendix A — Unused-code inventory and disposition
