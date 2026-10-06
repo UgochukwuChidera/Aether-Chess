@@ -1,16 +1,14 @@
 /**
- * TopBar.tsx — Fixed 64px frameless app bar with drag region, window controls,
- * and nav hamburger.
+ * TopBar.tsx — Fixed 64px frameless app bar with drag region and window controls.
  */
 import React, { useEffect, useState } from 'react';
 
 interface Props {
   title?: string;
-  onMenuClick: () => void;
   onSettingsClick: () => void;
 }
 
-export const TopBar: React.FC<Props> = ({ title = 'AETHER CHESS', onMenuClick, onSettingsClick }) => {
+export const TopBar: React.FC<Props> = ({ title = 'AETHER CHESS', onSettingsClick }) => {
   const [maximized, setMaximized] = useState(false);
 
   useEffect(() => {
@@ -29,16 +27,6 @@ export const TopBar: React.FC<Props> = ({ title = 'AETHER CHESS', onMenuClick, o
                  bg-bg border-b border-surface2 px-4"
       style={{ height: 64 }}
     >
-      {/* Hamburger menu */}
-      <button
-        className="no-drag w-10 h-10 flex items-center justify-center rounded-lg
-                   text-muted hover:text-accent transition-colors mr-2"
-        onClick={onMenuClick}
-        aria-label="Menu"
-      >
-        <span className="material-symbols-outlined" style={{ fontSize: 24 }}>menu</span>
-      </button>
-
       {/* App title */}
       <span className="flex-1 font-sans font-bold text-base tracking-widest text-accent text-glow-accent">
         {title}

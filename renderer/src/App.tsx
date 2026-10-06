@@ -81,7 +81,6 @@ export default function App() {
   return (
     <div className="flex flex-col h-screen bg-bg overflow-hidden">
       <TopBar
-        onMenuClick={() => {/* TODO: slide-out drawer */}}
         onSettingsClick={() => setTab('settings')}
       />
 

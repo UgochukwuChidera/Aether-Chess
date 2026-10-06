@@ -1447,7 +1447,21 @@ or decided — includes the stale Bayesian-README clause P4-T04 falsified);
   rg for the stale sentences zero.
 - **Done when:** no false "not yet / planned / pending" statement remains.
 
-### P4-T08 — Dead UI surface: unused skill flag + no-op drawer
+### P4-T08 — Dead UI surface: unused skill flag + no-op drawer ✅ DONE
+
+> Verification (2026-10-06): test-first, decisions by evidence (see commit
+> body). WIRE (not DROP): the flag already reaches `SettingsPanel` via the
+> existing `listBots()` → `bots` state, so the conditional is 9 lines;
+> DROP would leave Maia3's no-op difficulty slider in place. Truth-fix inside
+> the wire: Mentor honors the 1-10 scale (`mentor_search_config`) but declared
+> false, so naive wiring would hide a LIVE control for the default bot —
+> `mentor_bot.py` now declares true (fixture already said true; `BACKEND_API.md`
+> gloss corrected). Drawer REMOVED (button + `onMenuClick` chain); zero other
+> callers, no shortcut, no spec clicks Menu. Pre-fix FAILs recorded (Menu
+> present; slider visible under false flag); post-fix all 4 new tests green.
+> `rg` proofs: `aria-label="Menu"` zero; `onMenuClick` zero outside test
+> prose; `supports_skill_level` read at `SettingsPanel.tsx:132`. Full gate
+> green (counts in commit body).
 
 - `supports_skill_level` declared (d.ts, base, stockfish, manager, fixture)
   but read by zero components → wire it (hide the strength slider when

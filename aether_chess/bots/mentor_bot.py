@@ -40,6 +40,7 @@ class MentorBot(Bot):
             display_name="Mentor",
             kind="builtin",
             requires_binary=False,
+            supports_skill_level=True,
             supports_eval=True,
             supports_depth=True,
             deterministic=True,

@@ -383,7 +383,7 @@ Stockfish build or a bot added later appears without frontend changes.
       "kind": "builtin",
       "description": "Instant in-process search. Always available, but shallow.",
       "requires_binary": false,
-      "supports_skill_level": false,
+      "supports_skill_level": true,
       "supports_elo": false,
       "supports_eval": true,
       "deterministic": true,
@@ -424,7 +424,7 @@ Stockfish build or a bot added later appears without frontend changes.
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | `kind`                 | `builtin` (in-process) or `uci` (subprocess / proxy).                                                                                |
 | `requires_binary`      | Needs a discovered executable to be available.                                                                                       |
-| `supports_skill_level` | Exposes a **native UCI `Skill Level` option**. False for Mentor, whose 1–10 strength is Aether's own scale rather than a UCI option. |
+| `supports_skill_level` | Honors the cross-bot 1–10 strength scale (Stockfish maps it onto its native UCI `Skill Level`; Mentor maps it onto its own search config). False only for bots with their own scale, e.g. Elo-driven Maia3. |
 | `supports_elo`         | Configurable by Elo rating (Maia3).                                                                                                  |
 | `supports_eval`        | Can return a score. False for Maia3, so callers must not require one.                                                                |
 | `deterministic`        | False for Maia3, which samples from a distribution.                                                                                  |

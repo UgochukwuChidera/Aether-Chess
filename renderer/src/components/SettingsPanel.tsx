@@ -122,6 +122,15 @@ export const SettingsPanel: React.FC = () => {
   // a discovered Stockfish build or a bot added later appears here by itself.
   const [bots, setBots] = useState<BotInfo[]>([]);
 
+  // P4-T08: the "Bot difficulty" slider drives the cross-bot 1-10 strength
+  // scale, which only some bots honor (Maia3 is Elo-driven and ignores it).
+  // The flag arrives via listBots(); hide the slider only when the selected
+  // bot is known AND reports false — an unknown bot (list failed) keeps the
+  // slider rather than removing a possibly-live control.
+  const selectedBot = bots.find((bot) => bot.bot_id === settings.playEngine);
+  const showStrengthSlider =
+    !selectedBot || selectedBot.supports_skill_level !== false;
+
   const refreshBots = useCallback(() => {
     return window.electronAPI
       .listBots()
@@ -517,6 +526,7 @@ export const SettingsPanel: React.FC = () => {
             ))}
           </select>
         </Row>
+        {showStrengthSlider && (
         <Row
           label="Bot difficulty"
           tooltip="AI strength 1 (Beginner) to 10 (Grandmaster). Affects search time and depth."
@@ -532,6 +542,7 @@ export const SettingsPanel: React.FC = () => {
           />
           <span className="text-xs font-mono text-muted w-5 text-right">{settings.botStrength}</span>
         </Row>
+        )}
         {settings.playEngine === 'maia3' && (
           <>
             <Row label="Maia3 model" tooltip="Pretrained model size/strength">
