@@ -62,7 +62,7 @@ echo.
 
 cl /nologo /O2 /EHsc /std:c++17 /LD ^
     /I"%PYTHON_INCLUDE%" ^
-    pymodule.c evaluate.cpp ^
+    pymodule.cpp evaluate.cpp ^
     /Fe:cpp_engine.pyd ^
     /link /OUT:cpp_engine.pyd
 

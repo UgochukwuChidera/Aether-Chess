@@ -1184,7 +1184,7 @@ key_moments}`; main `export-pdf-report` handler injects a history-dir
   prettier churn that broke the `set-state-in-effect` disable) — reverted
   and re-applied surgically, diffs now additive-only.
 
-### P4-T03 — C++ evaluation engine (speed)
+### P4-T03 — C++ evaluation engine (speed) ✅ DONE
 
 Requested as an experimental speed-up. **The toolchain is available** — gcc 16.2.1, g++,
 make, cmake, and `/usr/include/python3.14/Python.h`, all verified present.
@@ -1236,7 +1236,18 @@ cannot be caught by Python and would kill the whole process. The real defect is 
 
 - **Done when:** the flag exists, the benchmark is recorded, and `TODO.md` item 3 reflects
   reality.
-- **Status 2026-10-06: PARTIAL (Tier-3-blocked), not DONE — do not mark ✅ until the kernel builds.** Shipped: Tier 0 half (register §2c shim landed; `evaluate.cpp` compiles warning-free under `gcc -Wall -Wextra`) but the build still fails at `pymodule.c` (compiled as C, includes C++ `<cstdint>` — a second defect beyond the shim; STOP rule applied, no further C++ wrangling); Tiers 1-2 green (`tests/test_cpp_fallback.py` 7 tests, `tests/test_cpp_dispatch.py` 6 tests); Change 1 (wrapper validates via `chess.Board` + both-kings rule on ALL entry points — also caught the same silent-score hole in the Python fallback for kingless FEN); Change 3 (`mentor_use_cpp` default off in `ChessEngineManager.settings` + `settings_schema.engine_defaults` with strict-bool validation, injectable `_cpp_evaluate` dispatch, lazy import only); Change 2+4 (`npm run build:cpp`, HERE-anchored `setup.py`, `backend.spec` `_cpp_binaries` glob + `cpp_engine` hiddenimport, best-effort kernel step in `build-backend.sh`, `.gitignore` kernel artifacts); `TODO.md` item 3 rewritten to reality. NOT shipped: Tier 3 kernel tests (no kernel to test — file deliberately not added; `@unittest.skipUnless` tests would only skip), benchmark (nothing to time — flag stays off per the item's own exit clause), CI Linux gcc step (would fail CI while Tier 0 is red — deferred, documented here). Unblock path: build the wrapper TU as C++ (rename `pymodule.c` → `.cpp`, update `setup.py` + `build_msvc.bat`), then add Tier 3 tests + benchmark + CI step in a follow-up.
+- **Status history:** PARTIAL (Tier-3-blocked) 2026-10-06 -- Tier 0 shim
+  landed but the wrapper TU still compiled as C, so no kernel existed
+  (full paragraph preserved below for the record).
+- **CLOSED 2026-10-06 by P4-T06 (this item closes it):** kernel builds
+  (`npm run build:cpp` emits
+  `cpp_engine/cpp_engine.cpython-314-x86_64-linux-gnu.so` beside
+  `__init__.py`; `get_info()` reports ACTIVE); Tier 3 green
+  (`tests/test_cpp_kernel.py`, 7 tests); benchmark recorded (~6x
+  end-to-end, flag stays OFF per the exit clause); CI Linux gcc step
+  added (Windows step not applicable -- no Windows jobs in the
+  workflow).
+- **As-shipped PARTIAL record:** Shipped: Tier 0 half (register §2c shim landed; `evaluate.cpp` compiles warning-free under `gcc -Wall -Wextra`) but the build still fails at `pymodule.c` (compiled as C, includes C++ `<cstdint>` — a second defect beyond the shim; STOP rule applied, no further C++ wrangling); Tiers 1-2 green (`tests/test_cpp_fallback.py` 7 tests, `tests/test_cpp_dispatch.py` 6 tests); Change 1 (wrapper validates via `chess.Board` + both-kings rule on ALL entry points — also caught the same silent-score hole in the Python fallback for kingless FEN); Change 3 (`mentor_use_cpp` default off in `ChessEngineManager.settings` + `settings_schema.engine_defaults` with strict-bool validation, injectable `_cpp_evaluate` dispatch, lazy import only); Change 2+4 (`npm run build:cpp`, HERE-anchored `setup.py`, `backend.spec` `_cpp_binaries` glob + `cpp_engine` hiddenimport, best-effort kernel step in `build-backend.sh`, `.gitignore` kernel artifacts); `TODO.md` item 3 rewritten to reality. NOT shipped: Tier 3 kernel tests (no kernel to test — file deliberately not added; `@unittest.skipUnless` tests would only skip), benchmark (nothing to time — flag stays off per the item's own exit clause), CI Linux gcc step (would fail CI while Tier 0 is red — deferred, documented here). Unblock path: build the wrapper TU as C++ (rename `pymodule.c` → `.cpp`, update `setup.py` + `build_msvc.bat`), then add Tier 3 tests + benchmark + CI step in a follow-up.
 
 ### P4-T04 — `estimate_bayesian_elo` ✅ DONE
 
@@ -1318,7 +1329,62 @@ orphaned.
 > (stash-proof: `books_dir` absent) and passes post-fix. Full gate green
 > (counts/times in commit body). No `.bin` committed (all in-temp).
 
-### P4-T06 — C++ kernel Tier 3: build the wrapper as C++, test, benchmark
+### P4-T06 — C++ kernel Tier 3: build the wrapper as C++, test, benchmark ✅ DONE
+
+> Verification (2026-10-06): all four changes landed, full gate green
+> (counts/times in the commit body).
+>
+> - Change 1 (rename): `git mv cpp_engine/pymodule.c cpp_engine/pymodule.cpp`
+>   (56 lines, pure Python-C-API + `evaluate_fen` -- no C-only constructs:
+>   no VLA/`_Generic`/`restrict`/designated-initializers, so it compiles as
+>   C++ unchanged); `setup.py` sources + `build_msvc.bat` `cl` line follow.
+>   No other C-assumptions in either file (`language="c++"`, `/std:c++17`
+>   - `/EHsc`, `-std=c++17 -Wall -Wextra` already C++ on both branches).
+>     Two live defects found past the rename, both fixed minimally: (a) the
+>     HERE-anchored root invocation emitted the `.so` at the repo root
+>     (setuptools places a top-level Extension beside the CWD), where the
+>     loader never looks -- `npm run build:cpp` now cds into `cpp_engine/`
+>     first, so the artifact lands beside `__init__.py` as the item
+>     requires; (b) the loader's `_cpp_engine_native` alias could never
+>     match a built `.so` (PyInit symbol derives from the spec name), and
+>     loading under the true name evicts the wrapper from `sys.modules`
+>     (single-phase `create_dynamic` registers it -- proven by bisect), so
+>     `_load_native_module` loads under the true name and restores the
+>     wrapper entry in a `finally`.
+> - Change 2 (build): `npm run build:cpp` green, warnings only (benign
+>   unused-`self` + `PyModuleDef` missing-field-initializers -- no
+>   `-fpermissive`, no stubs). Artifact
+>   `cpp_engine/cpp_engine.cpython-314-x86_64-linux-gnu.so` beside
+>   `__init__.py`, matching the ABI-tagged glob; `get_info()` reports
+>   `'C++ accelerated evaluation ACTIVE'`, `_has_cpp True`, wrapper
+>   intact in `sys.modules`.
+> - Change 3 (Tier 3): new `tests/test_cpp_kernel.py`, 7 tests, green in
+>   0.04s with ran-not-skipped proof (7 run with the `.so` present; 7
+>   skipped with it moved away -- CI-without-toolchain safe). Fallback-
+>   first probe recorded in the test docstring: antisymmetry exact in
+>   Python too (midgame 334/-334, queen 955/-955), mates exactly
+>   `-MATE_SCORE+ply`, stalemates exactly 0. Two literal sub-properties
+>   do not apply to a static kernel and are adapted with margins that
+>   survive a future mate/stalemate term (documented in the test
+>   docstring, not code): "mate = mate score" -> mated side to move
+>   scores against itself (Scholar's: kernel -80 vs fallback -99995;
+>   equal-material Fool's scores 0 -- blindness pinned by documentation,
+>   not assertion); "stalemate ~= 0" -> asserted for near-equal material
+>   only (pawn-up -133, bound 200; queen-up -1002 documented, unasserted).
+>   No exact-equality-with-MentorEngine assertion anywhere (wrong
+>   contract). `mentor_use_cpp` stays OFF (no flag change in this item).
+> - Change 4 (benchmark + CI): fixed 6-FEN set (== `BENCH_FENS`),
+>   batch-of-6 wall times, two interleaved rounds: compiled ~490us/eval
+>   vs fallback ~2.7-3.2ms/eval -> ~6x end-to-end (validation-bound --
+>   `_validate_fen` dominates the compiled path; the kernel itself is
+>   ns-scale). NO-SHIP recommendation with the flag staying OFF: the win
+>   is real but modest, and the kernel is behaviorally different
+>   (mate/stalemate-blind), so default-on needs its own
+>   evaluation-quality item, not this build item. CI: Linux gcc step
+>   added to the backend job (builds + asserts `_has_cpp`, so Tier 3
+>   RUNS in CI); Windows step not applicable (no Windows jobs/patterns
+>   in the workflow).
+> - Closes P4-T06 and P4-T03 (both `Closes:` trailers on the commit).
 
 Completes the PARTIAL P4-T03 (Tier-3-blocked): the §2c shim landed and
 `evaluate.cpp` compiles warning-free, but `pymodule.c` is compiled as C while

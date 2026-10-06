@@ -19,17 +19,42 @@ _HERE = os.path.dirname(__file__)
 
 
 def _load_native_module(path):
-    """Load the compiled kernel from ``path`` under an alias module name.
+    """Load the compiled kernel from ``path`` and return its functions.
 
-    The alias keeps the native module out of ``sys.modules['cpp_engine']``
-    (that name is this wrapper package), so the in-place ``.so`` and this
-    ``__init__`` coexist.
+    The spec name MUST be the extension's real module name
+    (``cpp_engine``): CPython derives the init symbol from it
+    (``PyInit_cpp_engine``), so an alias name fails with
+    ``ImportError: dynamic module does not define module export
+    function`` (found live in P4-T06 -- the alias this wrapper
+    originally used never matched any built ``.so``).
+
+    The true name collides with this wrapper package in
+    ``sys.modules``: for a single-phase extension module,
+    ``module_from_spec`` (via ``_imp.create_dynamic``) registers the
+    fresh native module under ``sys.modules['cpp_engine']``,
+    evicting the wrapper (proven by bisect in P4-T06 -- the entry
+    flips at ``module_from_spec``, before ``exec_module``). So save
+    and restore the entry around the load; the native handle itself
+    is returned directly and never re-registered.
     """
-    spec = importlib.util.spec_from_file_location("_cpp_engine_native", path)
+    import sys
+
+    saved = sys.modules.get("cpp_engine")
+    spec = importlib.util.spec_from_file_location("cpp_engine", path)
     if spec is None or spec.loader is None:
         raise ImportError(f"cannot load native module from {path}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    module = None
+    try:
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+    finally:
+        # Whatever exec does (success or raise), put the wrapper back:
+        # the caller keeps working with the restored package, and the
+        # native functions travel on the returned handle, not sys.modules.
+        if saved is not None:
+            sys.modules["cpp_engine"] = saved
+        else:
+            sys.modules.pop("cpp_engine", None)
     return module.evaluate, getattr(module, "evaluate_batch", None)
 
 

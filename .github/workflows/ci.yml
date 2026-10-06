@@ -76,6 +76,21 @@ jobs:
         # requirements-dev.txt rather than the runtime requirements.
         run: pip install -r requirements-dev.txt
 
+      - name: Build C++ kernel (P4-T06)
+        # gcc is preinstalled on ubuntu-latest and setup-python ships the
+        # Python headers, so the kernel builds on the runner with no extra
+        # toolchain step. Run setup.py directly (this job has no Node, so
+        # `npm run build:cpp` -- which just cds into cpp_engine/ first --
+        # is unavailable here). The .so is gitignored and rebuilt fresh so
+        # the Tier-3 kernel tests RUN in CI instead of skipping. No
+        # Windows/MSVC step: this workflow has no Windows jobs or
+        # patterns (ubuntu-latest only), so it is not applicable here.
+        run: |
+          pip install setuptools
+          cd cpp_engine && python setup.py build_ext --inplace
+          cd ..
+          python -c "import cpp_engine as k; assert k._has_cpp, k.get_info(); print(k.get_info())"
+
       - name: Note — venv/ not required on runner
         # venv/ is a local-dev convenience only; the runner uses system python
         # with pip installs from requirements.txt / requirements-dev.txt above.
