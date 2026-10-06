@@ -483,9 +483,12 @@ class ChessEngineManager:
 
         Same pattern as `history_fens_and_moves` and `move_history_san`:
         `_full_history` is the game, `board.move_stack` may be a truncated
-        viewing window left behind by `navigate_to`.
+        viewing window left behind by `navigate_to`. The replay starts from
+        the retained `_initial_fen` (P4-T09): a FEN-opened game does not
+        start at startpos, so a startpos replay drops FEN-legal moves as
+        illegal and misplaces the rest.
         """
-        board = chess.Board()
+        board = chess.Board(self._initial_fen)
         for move in self._full_history:
             if move in board.legal_moves:
                 board.push(move)
@@ -499,7 +502,7 @@ class ChessEngineManager:
         truncation into `_full_history` and discard the game tail.
         """
         live = self._board_from_full_history()
-        self.board.reset()
+        self.board.set_fen(self._initial_fen)
         for move in live.move_stack:
             self.board.push(move)
 
@@ -514,7 +517,9 @@ class ChessEngineManager:
         """
         moves = self._full_history
         target = max(-1, min(index, len(moves) - 1))
-        self.board.reset()
+        # P4-T09: viewing starts at the retained start, not startpos --
+        # `reset()` would replay a FEN-opened game from the wrong squares.
+        self.board.set_fen(self._initial_fen)
         for m in moves[: target + 1]:
             self.board.push(m)
         if target >= len(moves) - 1:
@@ -534,8 +539,12 @@ class ChessEngineManager:
         return [m.uci() for m in self.board.legal_moves]
 
     def move_history_san(self) -> List[str]:
-        """Return SAN list by replaying the move stack."""
-        b = chess.Board()
+        """Return SAN list by replaying the move stack.
+
+        P4-T09: from the retained start -- the import_pgn caller resets it
+        to standard, so that path is byte-identical.
+        """
+        b = chess.Board(self._initial_fen)
         san_list = []
         for m in self._full_history:
             if m in b.legal_moves:
@@ -947,7 +956,10 @@ class ChessEngineManager:
             return None
 
     def history_fens_and_moves(self) -> tuple[List[str], List[str]]:
-        board = chess.Board()
+        # P4-T09: from the retained start -- FEN-opened games replay from
+        # their FEN, so the accuracy paths see every ply, not just the
+        # startpos-legal subset.
+        board = chess.Board(self._initial_fen)
         fen_list: List[str] = []
         moves: List[str] = []
         for move in self._full_history:
@@ -1012,7 +1024,12 @@ class ChessEngineManager:
     # ── PGN management ───────────────────────────────────────────────────────
 
     def export_pgn(self) -> str:
-        return self.game_state.to_pgn(moves=self._board_from_full_history().move_stack)
+        # P4-T09: thread the retained start -- GameState owns no history, so
+        # the FEN travels as a parameter, not new state.
+        return self.game_state.to_pgn(
+            moves=self._board_from_full_history().move_stack,
+            initial_fen=self._initial_fen,
+        )
 
     def import_pgn(self, pgn_text: str) -> None:
         self.game_state.load_pgn(pgn_text)

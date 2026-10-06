@@ -1473,7 +1473,7 @@ or decided — includes the stale Bayesian-README clause P4-T04 falsified);
   button role-query absent.
 - **Done when:** no dead-looking-live control remains.
 
-### P4-T09 — FEN-startpos navigation replay
+### P4-T09 — FEN-startpos navigation replay ✅ DONE
 
 P2-T09 residual (noted, unowned): `navigate_to` / `_board_from_full_history`
 replay from startpos, wrong for FEN-started games — reachable since
@@ -1483,6 +1483,24 @@ replay from startpos, wrong for FEN-started games — reachable since
 - **Test:** FEN-started game → navigate mid → return → position correct;
   export intact.
 - **Done when:** history correct for FEN-started games.
+
+> Verification (2026-10-06): test-first `FenStartNavigationTests` (5 tests,
+> Black-to-move FEN `rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1`
+> + `e7e5 b1c3 g8f6 g1f3`): pre-fix 5 FAIL recorded (mid-view
+> `rnbqkbnr/pppp1ppp/8/4P3/8/2n5/PPPPPPPP/R1BQKBNR w KQkq - 0 2` vs expected
+> `...2N5/... b KQkq - 1 2`; `history_fens_and_moves` 3 vs 4 with e5 dropped;
+> `move_history_san` `['Nc3','Nf6','Nf3']`; empty-FEN navigate shows startpos).
+> Post-fix 11/11 navigation green. Clamp: `_board_from_full_history`,
+> `_restore_live_board` (`set_fen`), `navigate_to` (`set_fen`),
+> `move_history_san`, `history_fens_and_moves` replay from `_initial_fen`;
+> `export_pgn` threads it as a `to_pgn(initial_fen)` parameter (no new state;
+> `GameState.setup()` only when non-standard, so standard exports
+> byte-identical). `_history_with_colors` already clamped (P2-T09, untouched);
+> `start_analysis`/`get_mentor_eval`/`get_book_moves` take an explicit fen
+> (correctly-startpos, untouched); `import_pgn` resets to STARTING_FEN
+> (verified by reading + `test_import_pgn_resets_start_to_standard` green).
+> Edge: empty-history FEN navigate returns the FEN with live sentinel, no
+> crash. Full gate green (counts in commit body).
 
 ### P4-T10 — Download progress bar in UI (TODO.md:1)
 
