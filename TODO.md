@@ -4,7 +4,7 @@
 
 2. Fix Maia3 inference on this machine — PyTorch `c10.dll` fails to initialize (WinError 1114). Reinstall CPU-only torch: `pip install --force-reinstall torch --index-url https://download.pytorch.org/whl/cpu`
 
-3. Compile C++ engine in `cpp_engine/` — Needs MSVC Build Tools (~2-6GB) or MinGW-w64 (~500MB). Blocked by disk space (~2GB free).
+3. Compile C++ engine in `cpp_engine/` — PARTIALLY UNBLOCKED (P4-T03, 2026-10-06). The toolchain IS present (gcc 16.2.1, g++, Python.h for 3.14) — the old "needs MSVC, blocked by disk" story is stale. What actually blocks `npm run build:cpp`: `evaluate.h`'s MSVC-only intrinsics are now shimmed (`__builtin_popcountll`/`__builtin_ctzll`, and `evaluate.cpp` compiles warning-free under `-Wall -Wextra`), BUT `pymodule.c` is compiled as C while including the C++ header `evaluate.h` (`fatal error: cstdint`), so the link never happens. Same latent issue in `build_msvc.bat` (`cl` treats `.c` as C). Likely fix: build the wrapper TU as C++ (rename to `.cpp`, update `setup.py` + `.bat`). Until then: backend runs the pure-Python fallback, `mentor_use_cpp` defaults off, Tier 3 kernel tests + benchmark pending.
 
 4. ~~**Maia3 ignores the resolved time limit** — `aether_chess/bots/maia3_bot.py` does not honour the `time_limit_sec` the manager resolves from the clock, so Maia3 can think longer than the budget it was given. Every other bot uses it. Until this is fixed, Maia3 is not strictly comparable to the others in timed play.~~ ✅ DONE — P2-T10 (bot forwards the resolved budget, proxy clamps `min(sample, budget)`, persistent ping executor; see commit `Closes: P2-T10`).
 

@@ -93,6 +93,9 @@ def engine_defaults() -> Dict[str, Any]:
         "stockfish_path": "stockfish",
         "maia3_model": "maia3-5m",
         "maia3_device": "cpu",
+        # P4-T03: compiled-kernel dispatch, default OFF (see
+        # ChessEngineManager.settings -- the two must agree).
+        "mentor_use_cpp": False,
     }
 
 
@@ -134,6 +137,10 @@ def validate_settings(raw: Any) -> Dict[str, Any]:
         out["multipv"] = clamp_multipv(data["multipv"])
     if "maia3_elo" in data:
         out["maia3_elo"] = clamp_maia_elo(data["maia3_elo"])
+    if "mentor_use_cpp" in data:
+        # P4-T03: strict bool gate, junk yields False (off). Only the
+        # explicit True enables the compiled kernel.
+        out["mentor_use_cpp"] = data["mentor_use_cpp"] is True
     return out
 
 

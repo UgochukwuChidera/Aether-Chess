@@ -9,10 +9,22 @@ from pathlib import Path
 
 ROOT = Path(SPECPATH).parent  # repo root
 
+# P4-T03: ship the compiled C++ eval kernel alongside the frozen backend
+# when present (built via `npm run build:cpp`, which places
+# cpp_engine.*.so / .pyd beside cpp_engine/__init__.py). Glob matches
+# nothing when unbuilt, so the entry is inert and the frozen backend keeps
+# working on the pure-Python fallback (flag defaults off).
+_CPP_LIB = ROOT / "cpp_engine"
+_cpp_binaries = [
+    (str(p), ".")
+    for pattern in ("cpp_engine*.so", "cpp_engine*.pyd")
+    for p in sorted(_CPP_LIB.glob(pattern))
+]
+
 a = Analysis(
     [str(ROOT / 'backend' / 'service.py')],
     pathex=[str(ROOT), str(ROOT / 'backend')],
-    binaries=[],
+    binaries=_cpp_binaries,
     datas=[
         (str(ROOT / 'aether_chess'), 'aether_chess'),
         (str(ROOT / 'resources' / 'books'), 'resources/books'),
@@ -47,6 +59,10 @@ a = Analysis(
         'aether_chess.models',
         'aether_chess.models.game_state',
         'aether_chess.think_profile',
+        # P4-T03: wrapper package for the compiled eval kernel. Imported
+        # lazily in the flag branch (never module-level), so static analysis
+        # misses it; the native library itself arrives via _cpp_binaries.
+        'cpp_engine',
     ],
     hookspath=[],
     hooksconfig={},

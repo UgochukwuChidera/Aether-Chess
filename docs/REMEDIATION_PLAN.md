@@ -1148,14 +1148,14 @@ load in production.
   contradicted). Test-first `tests/test_reporting.py` (8 tests): pre-fix
   FAIL recorded (`ImportError: cannot import name 'key_moments_from_rows'`;
   probe: `FPDF is None` → `RuntimeError: fpdf2 is required for PDF
-  reporting`). Post-fix 8/8 green: known Scholar's-mate game → `%PDF-1.3`
+reporting`). Post-fix 8/8 green: known Scholar's-mate game → `%PDF-1.3`
   magic, 1545 bytes, `%%EOF` trailer (no pypdf in venv, so header + size +
   trailer is the validity proof); unwritable path → `OSError` naming the
   path; `FPDF=None` patch → `RuntimeError`. Two minimal repairs, both
   recorded: (1) `cell(ln=1)` → `new_x/new_y` (pyright `Literal['DEPRECATED']`
   error under fpdf2 2.8.9 stubs); (2) every `multi_cell` gains
   `new_x=LMARGIN/new_y=NEXT` — the module as-shipped raised `FPDFException:
-  Not enough horizontal space` on the SECOND paragraph (dead code, never
+Not enough horizontal space` on the SECOND paragraph (dead code, never
   executed; default `new_x=RIGHT` left x at the page edge). Uncovered in the
   same pass: `_IMPORT_ERROR` unbound when the import succeeds (NameError on
   the RuntimeError path) — now always defined. `key_moments` = top-5
@@ -1163,7 +1163,7 @@ load in production.
   fen+uci, e.g. `Ply 6 Nf6 (black, Blunder, cp loss 520.0)`. Backend
   `export_pdf_report` mirrors `calculate_accuracy_from_pgn` (`pgn?` else
   live-history snapshot under `_board_lock`) and returns `{path,
-  key_moments}`; main `export-pdf-report` handler injects a history-dir
+key_moments}`; main `export-pdf-report` handler injects a history-dir
   destination (mirrors `save-game-history`) and the renderer reveals it via
   the EXISTING `reveal-in-folder` IPC — no new shell surface; long-running
   tier (5 min); `ipcValidation` rule + hiddenimport added. UI: `Export PDF`
@@ -1236,6 +1236,7 @@ cannot be caught by Python and would kill the whole process. The real defect is 
 
 - **Done when:** the flag exists, the benchmark is recorded, and `TODO.md` item 3 reflects
   reality.
+- **Status 2026-10-06: PARTIAL (Tier-3-blocked), not DONE — do not mark ✅ until the kernel builds.** Shipped: Tier 0 half (register §2c shim landed; `evaluate.cpp` compiles warning-free under `gcc -Wall -Wextra`) but the build still fails at `pymodule.c` (compiled as C, includes C++ `<cstdint>` — a second defect beyond the shim; STOP rule applied, no further C++ wrangling); Tiers 1-2 green (`tests/test_cpp_fallback.py` 7 tests, `tests/test_cpp_dispatch.py` 6 tests); Change 1 (wrapper validates via `chess.Board` + both-kings rule on ALL entry points — also caught the same silent-score hole in the Python fallback for kingless FEN); Change 3 (`mentor_use_cpp` default off in `ChessEngineManager.settings` + `settings_schema.engine_defaults` with strict-bool validation, injectable `_cpp_evaluate` dispatch, lazy import only); Change 2+4 (`npm run build:cpp`, HERE-anchored `setup.py`, `backend.spec` `_cpp_binaries` glob + `cpp_engine` hiddenimport, best-effort kernel step in `build-backend.sh`, `.gitignore` kernel artifacts); `TODO.md` item 3 rewritten to reality. NOT shipped: Tier 3 kernel tests (no kernel to test — file deliberately not added; `@unittest.skipUnless` tests would only skip), benchmark (nothing to time — flag stays off per the item's own exit clause), CI Linux gcc step (would fail CI while Tier 0 is red — deferred, documented here). Unblock path: build the wrapper TU as C++ (rename `pymodule.c` → `.cpp`, update `setup.py` + `build_msvc.bat`), then add Tier 3 tests + benchmark + CI step in a follow-up.
 
 ### P4-T04 — `estimate_bayesian_elo`
 

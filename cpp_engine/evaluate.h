@@ -15,17 +15,33 @@ enum PieceType {
     PAWN=0, KNIGHT=1, BISHOP=2, ROOK=3, QUEEN=4, KING=5, NONE=6
 };
 
+#ifdef _MSC_VER
+#include <intrin.h>
+#endif
+
 // Bitboard utility
 inline uint64_t file_mask(int f) {
     return 0x0101010101010101ULL << f;
 }
+// P4-T03 Tier 0 (§2c shim): __popcnt64 / _BitScanForward64 are MSVC-only.
+// MSVC keeps its intrinsics; every other compiler gets the __builtin_*
+// equivalents. All call sites guarantee b != 0 (while(bb) loops), so the
+// ctz-on-zero UB matches _BitScanForward64's undefined-on-zero exactly.
 inline int popcount(uint64_t b) {
+#if defined(_MSC_VER)
     return (int)__popcnt64(b);
+#else
+    return (int)__builtin_popcountll(b);
+#endif
 }
 inline int bitscan(uint64_t b) {
+#if defined(_MSC_VER)
     unsigned long idx;
     _BitScanForward64(&idx, b);
     return (int)idx;
+#else
+    return (int)__builtin_ctzll(b);
+#endif
 }
 
 struct BoardState {

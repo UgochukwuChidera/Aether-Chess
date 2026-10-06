@@ -15,6 +15,16 @@ node_modules/
 dist/
 build/pyinstaller-work/
 build/backend-dist/
+build/temp.linux-*/
+build/temp.win-*/
+build/temp.macosx-*/
+
+# P4-T03: compiled C++ eval kernel (built via `npm run build:cpp`, never
+# committed -- rebuild per machine/toolchain). setuptools --inplace drops
+# these beside cpp_engine/__init__.py; the temp dirs land CWD-relative.
+cpp_engine/*.so
+cpp_engine/*.pyd
+cpp_engine/build/
 
 # Electron packager
 dist/packages/

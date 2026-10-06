@@ -91,6 +91,11 @@ class ChessEngineManager:
             "threads": DEFAULT_THREADS,
             "hash_mb": DEFAULT_HASH_MB,
             "multipv": DEFAULT_MULTIPV,
+            # P4-T03: compiled-kernel dispatch, default OFF. Nothing changes
+            # for current users until explicitly enabled; the kernel's values
+            # differ from MentorEngine's, so this is a speed experiment gate,
+            # not a silent eval swap.
+            "mentor_use_cpp": False,
         }
         # P3-T01: backend-owned game clock (milliseconds). None == Unlimited:
         # no clock installed, no flag possible. The turn stamp is
@@ -886,7 +891,7 @@ class ChessEngineManager:
 
     # ── Custom Mentor Evaluation ─────────────────────────────────────────────────
 
-    def get_mentor_eval(self, fen: str) -> Dict[str, Any]:
+    def get_mentor_eval(self, fen: str, _cpp_evaluate: Any = None) -> Dict[str, Any]:
         """Get position evaluation from MentorEngine's evaluation function.
 
         Returns evaluation from the custom Stockfish-style evaluation:
@@ -895,9 +900,26 @@ class ChessEngineManager:
         - Pawn structure bonuses/penalties
         - Bishop pair bonus
         - King safety
+
+        P4-T03: when the ``mentor_use_cpp`` setting is on (default OFF),
+        the static score comes from the compiled ``cpp_engine`` kernel
+        instead of ``MentorEngine.evaluate``. ``_cpp_evaluate`` is the
+        injectable dispatch (tests pass a fake; production lazily imports
+        the wrapper -- never a module-level import, so the backend starts
+        with no toolchain). Any cpp failure falls back to the Python path.
         """
         try:
             board = chess.Board(fen)
+            if self.settings.get("mentor_use_cpp", False):
+                cpp_score = self._cpp_eval_score(fen, _cpp_evaluate)
+                if cpp_score is not None:
+                    if board.turn == chess.BLACK:
+                        cpp_score = -cpp_score
+                    mentor = self._get_mentor_engine(self.settings.get("strength", 7))
+                    return {
+                        "eval_cp": cpp_score,
+                        "phase": mentor._phase(board),
+                    }
             mentor = self._get_mentor_engine(self.settings.get("strength", 7))
             eval_score = mentor.evaluate(board)
 
@@ -911,6 +933,17 @@ class ChessEngineManager:
             }
         except Exception as e:
             return {"eval_cp": None, "error": str(e)}
+
+    def _cpp_eval_score(self, fen: str, _cpp_evaluate: Any = None) -> Any:
+        """Resolve one compiled-kernel score, or ``None`` to use Python."""
+        try:
+            if _cpp_evaluate is None:
+                from cpp_engine import evaluate_fen as _cpp_evaluate_fn
+
+                _cpp_evaluate = _cpp_evaluate_fn
+            return _cpp_evaluate(fen)
+        except Exception:
+            return None
 
     def history_fens_and_moves(self) -> tuple[List[str], List[str]]:
         board = chess.Board()
