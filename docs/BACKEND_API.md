@@ -472,10 +472,13 @@ The canonical settings defaults, limits and schema version
 }
 ```
 
-The renderer treats this payload as the authority and mirrors the same
-numbers as static fallback constants (8 threads / 512 MB / 5 multipv,
-`schemaVersion` 1) so boot never blocks on the backend — no IPC channel wires
-the command through yet, so the fallback is what boot uses today.
+The renderer treats this payload as the authority: `loadFromBackend`
+(`renderer/src/stores/settingsStore.ts`) fetches it over the wired
+`settings_defaults` channel (preload `getSettingsDefaults` → main
+`CHESS_COMMANDS` entry) and applies backend defaults under saved values
+through the same validation `update` uses. Static fallback constants (8 threads
+/ 512 MB / 5 multipv, `schemaVersion` 1) cover boot only when the backend is
+unreachable — boot never blocks on the backend.
 
 ---
 
@@ -576,6 +579,51 @@ Query the Polyglot opening book for moves at a position.
   "hint": "No opening book found. Place .bin files in the books directory."
 }
 ```
+
+---
+
+### `probe_tablebase`
+
+Syzygy endgame probe (P4-T01). Detect-and-report: when no tablebase path is
+configured it answers `configured: false` instead of failing, so the UI
+degrades to a quiet note.
+
+**Request params:**
+
+```json
+{ "fen": "<FEN>", "tablebase_path": "/home/user/syzygy/3-4-5" }
+```
+
+`fen` is optional — absent means the live board (read under the board lock).
+`tablebase_path` accepts the camelCase alias `tablebasePath`; absent or empty
+means unconfigured. Both are shape-checked at the `ipcMain.handle` boundary
+(`electron/ipcValidation.ts`).
+
+**Response result (unconfigured):**
+
+```json
+{ "configured": false, "best_move": null, "fen": "<FEN>" }
+```
+
+**Response result (configured):**
+
+```json
+{ "configured": true, "best_move": "e8e7", "fen": "<FEN>" }
+```
+
+`best_move` is UCI, or `null` when the probe finds nothing (including
+positions with more than 6 pieces, which return `reason: "too many pieces"`).
+Missing tables / OS errors map to `null`, never a raise — only an invalid FEN
+raises (`ValueError`, same surface as the other FEN-taking handlers).
+
+**Wiring:** `service.py:handle_probe_tablebase` → `HANDLERS["probe_tablebase"]`,
+forwarded by main's generic `CHESS_COMMANDS` loop (`electron/main.ts`), exposed
+as preload `probeTablebase` (+ `renderer/src/electron.d.ts`). UI: the
+SettingsPanel tablebase-directory picker persists `tablebasePath`
+(`renderer/src/stores/settingsStore.ts`), and `TablebaseAnnotation`
+(`renderer/src/components/AnalysisPanel.tsx`) probes per position. No
+tablebase data ships in the repo — see [SETUP](SETUP.md#5b-add-syzygy-endgame-tablebases-optional-p4-t01)
+for the download and layout.
 
 ---
 
@@ -761,6 +809,58 @@ Score an imported game. Runs the full analysis, so it can take a while.
 
 ---
 
+### `export_pdf_report`
+
+PDF game report (P4-T02). Builds on the same Stockfish accuracy rows as
+`calculate_accuracy_from_pgn`, so it needs Stockfish and can take minutes
+(long-running IPC tier, 300 s timeout).
+
+**Request params:**
+
+```json
+{ "pgn": "[Event \"...\"]\n...", "stockfish_path": "stockfish" }
+```
+
+`pgn` is optional — absent means the live game (history snapshot taken under
+the board lock, then released before the long computation, mirroring
+`calculate_accuracy_from_history`). Optional display overrides `white`,
+`black`, `result` (default from PGN headers, else `White` / `Black` / `*`).
+`output_path` is **not** a renderer param: main's dedicated `export-pdf-report`
+handler injects a history-dir destination (overwriting any supplied value) and
+the renderer reveals it via the existing `reveal-in-folder` IPC — no new shell
+surface. Without main (direct backend use) it falls back to a temp file.
+
+**Response result:**
+
+```json
+{
+  "path": "/home/user/.config/AetherChess/games/report-....pdf",
+  "key_moments": ["Ply 6 Nf6 (black, Blunder, cp loss 520.0)", "..."]
+}
+```
+
+`key_moments` is the top-5 `cp_loss` rows (`KEY_MOMENTS_TOP_N = 5` in
+`aether_chess/analysis/reporting.py`), each replayed from its own `fen`+`uci`.
+Side accuracies come from `accuracy_from_losses` on each side's own losses;
+side Elos from `estimate_elo` on the same per-side numbers.
+
+**Errors:** unparseable PGN → `ValueError`; an accuracy-backend error → the
+same error as `ValueError`; an unwritable path → `OSError` naming the path;
+missing `fpdf2` → `RuntimeError` (defensive — `fpdf2` is a hard requirement
+since P4-T02, and the module uses core fonts only so no font file is ever
+loaded).
+
+**Wiring:** `service.py:handle_export_pdf_report` → `HANDLERS["export_pdf_report"]`
+— **not** in main's `CHESS_COMMANDS` loop but a dedicated `export-pdf-report`
+handler (it must inject `output_path`), validated at the boundary, exposed as
+preload `exportPdfReport` (+ `electron.d.ts`). UI: the AnalysisView
+`handleExportPdf` action (`renderer/src/views/AnalysisView.tsx`) calls it for
+the live game, reveals the file, and toasts; the AnalysisPanel `Export PDF`
+button is props-drilled like `onComputeAccuracy` with matching loading/error
+states.
+
+---
+
 ### `check_maia3_cache`
 
 Whether a Maia3 model is already downloaded, so the UI can avoid starting a
@@ -827,8 +927,8 @@ Commands are then grouped by what they need:
 | Group           | Commands                                                                                                                                                                                      | Locking                                                                                                                    |
 | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
 | Board mutation  | `new_game`, `make_move`, `resign`, `draw`, `undo_move`, `navigate_to_move`, `import_pgn`                                                                                                      | Serialized under one board lock, so the game state cannot be corrupted by interleaving.                                    |
-| Board read      | `get_legal_moves`, `export_pgn`, `export_fen`, `get_book_moves`                                                                                                                               | Same board lock, but fast.                                                                                                 |
-| Everything else | `get_engine_move`, `get_bot_move`, `list_bots`, `settings_defaults`, `get_eval`, `calculate_accuracy*`, `estimate_elo`, `start_analysis`, `stop_analysis`, `maia3_cache`, `check_maia3_cache` | **No board lock.** These take a FEN from params and may block for a long time, so holding the lock would freeze the board. |
+| Board read      | `get_legal_moves`, `export_pgn`, `export_fen`, `get_book_moves`, `probe_tablebase`                                                                                                                                 | Same board lock, but fast. (`probe_tablebase` takes it only to read the live FEN when no `fen` is passed.)                 |
+| Everything else | `get_engine_move`, `get_bot_move`, `list_bots`, `settings_defaults`, `get_eval`, `calculate_accuracy*`, `export_pdf_report`, `estimate_elo`, `start_analysis`, `stop_analysis`, `maia3_cache`, `check_maia3_cache` | **No board lock.** These take a FEN from params and may block for a long time, so holding the lock would freeze the board. |
 
 `new_game` stops analysis _before_ taking the board lock, so waiting on
 analysis teardown cannot block board traffic.
@@ -839,7 +939,3 @@ overlapping `get_engine_move` calls queue instead of interleaving the UCI
 protocol and corrupting replies. (Lock order is board-outer / UCI-inner; in
 practice no path holds both at once — handlers snapshot the FEN under the
 board lock, release it, then take the UCI lock for the search.)
-
-> Not yet commands: `probe_tablebase` (P4-T01) and `export_pdf_report` (P4-T02)
-> do not exist in `service.py` — they are deliberately undocumented here, not
-> missing.

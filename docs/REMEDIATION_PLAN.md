@@ -1408,7 +1408,32 @@ Python-C-API + `evaluate_fen`, no C-only constructs) compiles as C++ unchanged.
 - **Done when:** kernel builds, Tier 3 green, benchmark recorded, CI step
   added, P4-T03 marked DONE (this item closes it).
 
-### P4-T07 — Docs drift sweep (post-Phase-4 touch-ups)
+### P4-T07 — Docs drift sweep (post-Phase-4 touch-ups) ✅ DONE
+
+> Verification (2026-10-06): test-first zero-drift audit (`/tmp/p4t07_audit.py`,
+> throwaway; struck `~~...~~` history exempted per the file's strike
+> convention): pre-change FAIL recorded — HANDLERS-vs-`###` gap
+> `['export_pdf_report', 'probe_tablebase']` plus 8 live stale-claim hits
+> (the two BACKEND_API not-yet relics, three ARCHITECTURE unwired relics
+> incl. the superseded Bayesian-README clause, two TODO item-3 relics, one
+> decision-pending relic). Post-change audit empty (24/24 handlers
+> documented — 26 `###` headings are the 24 command sections plus the 2
+> push-event sections `analysis_update`/`clock_tick`; zero live stale hits —
+> full pre/post outputs in the commit body). Changes, docs-only:
+> BACKEND_API gains `probe_tablebase` + `export_pdf_report` sections (exact
+> command strings, params, response shapes, main/preload/UI wiring, limits),
+> `settings_defaults` rewritten to the wired P3-T09 state, threading table
+> rows extended, "Not yet" footer deleted; ARCHITECTURE unwired-section
+> rewritten to shipped/wired per module (P4-T01/P4-T02/P4-T06 evidence
+> pointers + P4-T04 REMOVE decision record superseding — not doubling — the
+> stale Bayesian-README clause); TODO item 3 struck CLOSED per the file's
+> P2-T10 strike convention (no renumbering). Premise check: every shipped
+> claim verified against code before writing (HANDLERS entries, CHESS_COMMANDS
+> plus the dedicated `export-pdf-report` handler, preload/d.ts, `tablebasePath`
+> store, `TablebaseAnnotation` + Export-PDF UI, `.so` + ACTIVE `get_info()`,
+> Tier-3 7 green, README Glicko-2 line, `books_dir` senders + mtime cache +
+> `choose_weighted` gone) — zero corrections needed. Full gate green (counts
+> in commit body).
 
 Three statements the program itself falsified since P3-T04/P3-T07:
 `docs/BACKEND_API.md` "Not yet commands" (both commands shipped in

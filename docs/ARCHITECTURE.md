@@ -222,14 +222,14 @@ Two Zustand stores:
 - All user preferences (appearance, engine config, gameplay)
 - Persists to/from `userData/settings.json` via Electron IPC
 
-## Planned, not wired
+## Shipped and wired (Phase 4)
 
-Four modules ship in the tree but have no production caller. They are kept
-deliberately — each has a Phase 4 owner — so this section records what each one
-does, what would connect it, and what blocks it. Contrast
-`aether_chess/engines/registry.py`: Stockfish discovery **is** live, reached via
-`backend/analysis.py:24` (`resolve_engine_path`, used at `:155`) and
-`aether_chess/bots/stockfish_bot.py:28` (used at `:68`) plus `:173`
+The four modules P3-T07 parked in this section as unwired have all shipped
+(P4-T01/P4-T02, P4-T03 closed by P4-T06) or been decided (P4-T04). Nothing
+below is unwired; each entry records what shipped and where it connects.
+Contrast `aether_chess/engines/registry.py`: Stockfish discovery **is** live,
+reached via `backend/analysis.py:24` (`resolve_engine_path`, used at `:155`)
+and `aether_chess/bots/stockfish_bot.py:28` (used at `:68`) plus `:173`
 (`discover_engines`, used at `:177`), flowing through `BotManager`
 (`aether_chess/bots/manager.py:31,79`) into `ChessEngineManager`
 (`backend/chess_engine.py:51,679-686`) and the service. Neither
@@ -237,47 +237,76 @@ does, what would connect it, and what blocks it. Contrast
 directly — the reach is transitive, not a package re-export
 (`aether_chess/engines/__init__.py` only re-exports the mentor engine).
 
-- **Syzygy tablebases** — `aether_chess/io/tablebases.py` (37 lines).
-  `TablebaseProbe` (`:11`) carries an optional Syzygy `path` (`:12`); `best_move`
-  (`:14`) opens the tablebase (`:18`), declines positions with more than 6 pieces
-  (`:19`), probes DTZ after each legal move (`:26`), and maps missing-table / OS
-  errors to `None` (`:36`). Connecting it means a `tablebasePath` setting plus a
-  `probe_tablebase` command annotating endgames in the UI (detect-and-report while
-  unconfigured). Blocker: **P4-T01**, which also owns three selection-logic
-  defects in this file (inverted sign branches `:31-33`, `None` DTZ compared
-  against `int`, raw-DTZ minmax). No tablebase data ships in the repo.
-- **PDF game reports** — `aether_chess/analysis/reporting.py` (54 lines).
-  `ReportData` (`:15-25`) plus `generate_pdf_report` (`:28`), built on fpdf2's
-  `FPDF` (`:8`) with an explicit `RuntimeError` when the import is absent
-  (`:29-30`). Connecting it means uncommenting `fpdf2` in `requirements.txt:15`
-  (currently `# fpdf2>=2.8`), adding an `export_pdf_report` command with an
-  Export-PDF action, and sourcing `key_moments` from the `cp_loss` rows
-  `backend/analysis.py` already computes. Blocker: **P4-T02**.
-- **C++ evaluation engine** — `cpp_engine/` (7 files: `build_msvc.bat`,
-  `evaluate.cpp`, `evaluate.h`, `__init__.py`, `pymodule.c`, `search.h`,
-  `setup.py`). The native kernel exposes `evaluate(fen)` / `evaluate_batch`
-  (`pymodule.c:39-41`, kernel entry `evaluate.cpp:230`); the Python loader
-  (`cpp_engine/__init__.py:19-48`) tries the compiled module and falls back to
-  `MentorEngine` (`:58-66`), reporting which branch is active via `get_info()`
-  (`:53`). Nothing outside `cpp_engine/` imports it. Connecting it means a
-  `build:cpp` step, CI coverage on the Linux runner, a default-off setting flag
-  in the mentor path, packaging entries, and a benchmark proving the speedup.
-  Blocker: **P4-T03**, hard-gated on the register §2c portability shim
-  (`evaluate.h:23` `__popcnt64` and `:27` `_BitScanForward64` are MSVC-only and
-  unguarded — zero `_MSC_VER` / `__builtin_` hits in the directory). See also
-  TODO item 3.
-- **`estimate_bayesian_elo`** — `aether_chess/analysis/metrics.py:46-81`,
-  returning `BayesianEloResult` (`:40-43`). Its siblings `classify_move` (`:16`)
-  and `accuracy_from_losses` (`:30`) are live (`backend/analysis.py:21-22`, used
-  at `:196,207-208`); only this estimator is orphaned — the sole caller is
-  `tests/test_metrics.py:27-28`, while the README still advertises "Bayesian Elo
-  estimation ✅" (`README.md:87`). Connecting it means either wiring it into the
-  Elo panel as the primary estimator with a documented Glicko comparison, or
-  removing the README claim. Blocker: **P4-T04** (decision pending).
+- **Syzygy tablebases — SHIPPED (P4-T01).** `aether_chess/io/tablebases.py`:
+  `TablebaseProbe` carries an injectable `opener` (default
+  `chess.syzygy.open_tablebase`) plus an optional Syzygy `path`; `best_move`
+  declines positions with more than 6 pieces, prefers forced mate, then WDL,
+  then DTZ as a tiebreak minmaxed in the correct direction regardless of
+  colour, and maps missing-table / OS errors and `None` DTZ values to `None`
+  (never a `TypeError`). Wired end to end: `tablebasePath` setting (renderer
+  `settingsStore`, SettingsPanel picker), `probe_tablebase` command
+  (`backend/service.py:handle_probe_tablebase` → `HANDLERS`, main
+  `CHESS_COMMANDS` loop, preload `probeTablebase` + `electron.d.ts`,
+  `ipcValidation` rule), and `TablebaseAnnotation` in
+  `renderer/src/components/AnalysisPanel.tsx`. Detect-and-report while
+  unconfigured (`{configured: false}` → quiet "not configured" note). No
+  tablebase data ships in the repo (see `docs/SETUP.md` §5b for download and
+  layout). Covered by `tests/test_tablebases.py` (stub tablebase for both
+  colours, `None`-DTZ, >6-piece, missing-table paths; opt-in real-data test
+  gated on `AETHER_TABLEBASE_PATH`, never in CI).
+- **PDF game reports — SHIPPED (P4-T02).** `aether_chess/analysis/reporting.py`:
+  `ReportData` plus `generate_pdf_report` on fpdf2 core fonts (no font file
+  ever loaded), with `key_moments` sourced from the top-5 `cp_loss` entries of
+  the accuracy rows `backend/analysis.py` already computes. Wired end to end:
+  `fpdf2` uncommented in `requirements.txt` (imports in CI), `export_pdf_report`
+  command (`backend/service.py:handle_export_pdf_report` → `HANDLERS`;
+  `pgn?` else live-history snapshot under `_board_lock`, returns
+  `{path, key_moments}`), main's dedicated `export-pdf-report` handler (injects
+  a history-dir destination, renderer reveals via the existing
+  `reveal-in-folder` IPC — no new shell surface; long-running tier),
+  `ipcValidation` rule, `Export PDF` action in AnalysisView/AnalysisPanel, and
+  the `build/backend.spec` hiddenimport. Covered by `tests/test_reporting.py`
+  (valid-PDF header/size/trailer, unwritable-path `OSError`, missing-fpdf2
+  `RuntimeError`).
+- **C++ evaluation engine — SHIPPED, default-off (P4-T03 closed by P4-T06).**
+  `cpp_engine/`: the wrapper builds as C++ (`pymodule.cpp`), `npm run
+  build:cpp` emits the ABI-tagged `.so` beside `__init__.py`, and `get_info()`
+  reports `C++ accelerated evaluation ACTIVE`. The Python loader
+  (`cpp_engine/__init__.py`) tries the compiled module and falls back to
+  `MentorEngine`, reporting which branch is active via `get_info()`; nothing
+  outside `cpp_engine/` imports it except through the injectable
+  `mentor_use_cpp` dispatch (default **off** in `ChessEngineManager.settings` +
+  `settings_schema.engine_defaults`). Tier 3 is green
+  (`tests/test_cpp_kernel.py`, 7 tests: determinism, colour antisymmetry,
+  material sanity, mated-side-loses, near-equal stalemate ≈ 0, batch ==
+  elementwise, malformed-FEN `ValueError` never silent 0). Benchmark recorded:
+  ~6x end-to-end (~490 µs/eval compiled vs ~2.7–3.2 ms/eval fallback,
+  validation-bound) with a NO-SHIP recommendation — the kernel is
+  mate/stalemate-blind, so default-on needs its own evaluation-quality item
+  (P4-T11), not a build flip. CI Linux gcc step builds the kernel and asserts
+  `_has_cpp`, so Tier 3 runs in CI. The register §2c portability shim
+  (`__builtin_popcountll` / `__builtin_ctzll`) is what unblocked the gcc build;
+  see also struck `TODO.md` item 3.
+- **`estimate_bayesian_elo` — DECISION: REMOVE the claim, keep the function
+  (P4-T04).** The math in `aether_chess/analysis/metrics.py:46-81` is sound
+  for its own contract (logistic gradient/Hessian, Newton step with Laplace
+  variance, prior on empty input, ±60 exponent clamps), but its input contract
+  (`List[float]` per-game scores vs one fixed opponent) cannot be honestly fed
+  from the aggregate summaries the Elo panel supplies (`accuracy`,
+  `blunder_rate`, `avg_cp_loss`) — bridging would invent per-game scores from
+  aggregates, comparing two transforms of the same heuristic rather than an
+  independent estimate. So per the item's forcing rule the README no longer
+  advertises it: `README.md` reads "Glicko-2-based Elo estimation ✅" — the
+  production path (`backend/analysis.py` GlickoRating, wired to both panel
+  callers). The orphaned function and its `tests/test_metrics.py` coverage
+  stay; no unbacked marketing remains. (This supersedes the stale P3-T07 clause
+  that framed the README claim as still advertised with a wiring decision
+  pending — that clause is replaced by this record, not kept alongside it.)
 
 Cross-reference: `TODO.md` (trailing block) maps each module above to its Phase 4
-owner. Phase 4 items live in `docs/REMEDIATION_PLAN.md` (Phase 4) and
-`docs/VERIFICATION_REGISTER.md` §2c (the P4-T03 precondition).
+owner; item 3 there is struck CLOSED by P4-T06. Phase 4 items live in
+`docs/REMEDIATION_PLAN.md` (Phase 4) and `docs/VERIFICATION_REGISTER.md` §2c
+(the P4-T03 precondition, now satisfied).
 
 ---
 
