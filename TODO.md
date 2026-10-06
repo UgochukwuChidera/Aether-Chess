@@ -1,6 +1,6 @@
 # TODO
 
-1. **Real download progress bar in UI** — Currently Hugging Face progress only shows in terminal stderr. Needs streaming from Python backend through Electron IPC to a `<progress>` element in SettingsPanel.
+1. ~~**Real download progress bar in UI** — Currently Hugging Face progress only shows in terminal stderr. Needs streaming from Python backend through Electron IPC to a `<progress>` element in SettingsPanel.~~ ✅ DONE — P4-T10 (backend parses tqdm stderr into `download_progress` pushes broadcast like `clock_tick`; SettingsPanel renders `<progress>`; see commit `Closes: P4-T10`).
 
 2. Fix Maia3 inference on this machine — PyTorch `c10.dll` fails to initialize (WinError 1114). Reinstall CPU-only torch: `pip install --force-reinstall torch --index-url https://download.pytorch.org/whl/cpu`
 

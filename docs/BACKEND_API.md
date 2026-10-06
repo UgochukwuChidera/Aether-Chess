@@ -708,6 +708,26 @@ delivered. A player who sits idle without moving is still flagged: the flag
 check runs at the top of every snapshot, so the next tick latches
 `TIME_FORFEIT` by itself.
 
+### `download_progress`
+
+Parsed percentages from the Maia3 model download, pushed while
+`maia3_cache` runs (see [`maia3_cache`](#maia3_cache) for the terminal
+passthrough). Broadcast like `clock_tick` — no subscription, every live
+window receives the same events:
+
+```json
+{
+  "type": "download_progress",
+  "model": "maia3-5m",
+  "progress": 25
+}
+```
+
+`progress` is an integer 0–100, strictly increasing per download; a final
+100 is pushed on success. SettingsPanel renders it in a `<progress>`
+element. When the download fails, writes stop and so do the pushes — no
+orphaned loop.
+
 ---
 
 ### `calculate_accuracy`
