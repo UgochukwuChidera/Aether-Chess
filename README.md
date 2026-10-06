@@ -57,49 +57,49 @@ Full instructions: [docs/BUILD.md](docs/BUILD.md)
 
 ## Features
 
-| Feature | Status |
-|---------|--------|
-| Dark futuristic UI (Aether design system) | ✅ |
-| Frameless window with custom title bar | ✅ |
-| 8×8 CSS Grid board with Material Symbols pieces | ✅ |
-| Legal move highlights + selected square overlay | ✅ |
-| Piece animation (CSS transitions) | ✅ |
-| Board flip | ✅ |
-| Evaluation bar (real-time) | ✅ |
-| Player profile cards + timers | ✅ |
-| Move history (SAN, two-column, clickable) | ✅ |
-| Promotion dialog | ✅ |
-| Game over modal | ✅ |
-| Toast notifications | ✅ |
-| Analysis tab (Stockfish PV lines, depth, score) | ✅ |
-| Settings tab (appearance, engine, gameplay, data) | ✅ |
-| Persistent settings (userData/settings.json) | ✅ |
-| Centralized defaults (`resources/config/settings.defaults.json`) | ✅ |
-| PGN export/import | ✅ |
-| Opening book (Polyglot .bin, no database) | ✅ |
-| Custom mentor bot (PVS + TT + QSearch) | ✅ |
-| Stockfish integration (UCI) | ✅ |
-| Per-Engine Stockfish builds (SF18, SF19, ...) selectable individually | ✅ |
-| Maia3 neural bot (plays like a human of a chosen Elo) | ✅ |
-| Unified bot interface + one normalized move result | ✅ |
-| Dynamic engine picker driven by backend discovery | ✅ |
-| Accuracy scoring (centipawn loss) | ✅ |
-| Bayesian Elo estimation | ✅ |
-| electron-builder packaging (Win/Mac/Linux) | ✅ |
-| PyInstaller backend bundling | ✅ |
+| Feature                                                               | Status |
+| --------------------------------------------------------------------- | ------ |
+| Dark futuristic UI (Aether design system)                             | ✅     |
+| Frameless window with custom title bar                                | ✅     |
+| 8×8 CSS Grid board with Material Symbols pieces                       | ✅     |
+| Legal move highlights + selected square overlay                       | ✅     |
+| Piece animation (CSS transitions)                                     | ✅     |
+| Board flip                                                            | ✅     |
+| Evaluation bar (real-time)                                            | ✅     |
+| Player profile cards + timers                                         | ✅     |
+| Move history (SAN, two-column, clickable)                             | ✅     |
+| Promotion dialog                                                      | ✅     |
+| Game over modal                                                       | ✅     |
+| Toast notifications                                                   | ✅     |
+| Analysis tab (Stockfish PV lines, depth, score)                       | ✅     |
+| Settings tab (appearance, engine, gameplay, data)                     | ✅     |
+| Persistent settings (userData/settings.json)                          | ✅     |
+| Centralized defaults (`resources/config/settings.defaults.json`)      | ✅     |
+| PGN export/import                                                     | ✅     |
+| Opening book (Polyglot .bin, no database)                             | ✅     |
+| Custom mentor bot (PVS + TT + QSearch)                                | ✅     |
+| Stockfish integration (UCI)                                           | ✅     |
+| Per-Engine Stockfish builds (SF18, SF19, ...) selectable individually | ✅     |
+| Maia3 neural bot (plays like a human of a chosen Elo)                 | ✅     |
+| Unified bot interface + one normalized move result                    | ✅     |
+| Dynamic engine picker driven by backend discovery                     | ✅     |
+| Accuracy scoring (centipawn loss)                                     | ✅     |
+| Glicko-2-based Elo estimation                                         | ✅     |
+| electron-builder packaging (Win/Mac/Linux)                            | ✅     |
+| PyInstaller backend bundling                                          | ✅     |
 
 ---
 
 ## Documentation
 
-| Document | Contents |
-|----------|----------|
-| [docs/SETUP.md](docs/SETUP.md) | Developer setup, env vars, prerequisites |
-| [docs/BUILD.md](docs/BUILD.md) | Production builds, code signing, CI |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Process diagram, IPC protocol, state management |
-| [docs/USER_MANUAL.md](docs/USER_MANUAL.md) | End-user guide, keyboard shortcuts |
-| [docs/BACKEND_API.md](docs/BACKEND_API.md) | All JSON-RPC commands with examples |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | Coding standards, how to add themes/bots, CI-equivalent checklist |
+| Document                                     | Contents                                                          |
+| -------------------------------------------- | ----------------------------------------------------------------- |
+| [docs/SETUP.md](docs/SETUP.md)               | Developer setup, env vars, prerequisites                          |
+| [docs/BUILD.md](docs/BUILD.md)               | Production builds, code signing, CI                               |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Process diagram, IPC protocol, state management                   |
+| [docs/USER_MANUAL.md](docs/USER_MANUAL.md)   | End-user guide, keyboard shortcuts                                |
+| [docs/BACKEND_API.md](docs/BACKEND_API.md)   | All JSON-RPC commands with examples                               |
+| [CONTRIBUTING.md](CONTRIBUTING.md)           | Coding standards, how to add themes/bots, CI-equivalent checklist |
 
 ---
 

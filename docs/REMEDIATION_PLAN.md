@@ -1238,7 +1238,31 @@ cannot be caught by Python and would kill the whole process. The real defect is 
   reality.
 - **Status 2026-10-06: PARTIAL (Tier-3-blocked), not DONE — do not mark ✅ until the kernel builds.** Shipped: Tier 0 half (register §2c shim landed; `evaluate.cpp` compiles warning-free under `gcc -Wall -Wextra`) but the build still fails at `pymodule.c` (compiled as C, includes C++ `<cstdint>` — a second defect beyond the shim; STOP rule applied, no further C++ wrangling); Tiers 1-2 green (`tests/test_cpp_fallback.py` 7 tests, `tests/test_cpp_dispatch.py` 6 tests); Change 1 (wrapper validates via `chess.Board` + both-kings rule on ALL entry points — also caught the same silent-score hole in the Python fallback for kingless FEN); Change 3 (`mentor_use_cpp` default off in `ChessEngineManager.settings` + `settings_schema.engine_defaults` with strict-bool validation, injectable `_cpp_evaluate` dispatch, lazy import only); Change 2+4 (`npm run build:cpp`, HERE-anchored `setup.py`, `backend.spec` `_cpp_binaries` glob + `cpp_engine` hiddenimport, best-effort kernel step in `build-backend.sh`, `.gitignore` kernel artifacts); `TODO.md` item 3 rewritten to reality. NOT shipped: Tier 3 kernel tests (no kernel to test — file deliberately not added; `@unittest.skipUnless` tests would only skip), benchmark (nothing to time — flag stays off per the item's own exit clause), CI Linux gcc step (would fail CI while Tier 0 is red — deferred, documented here). Unblock path: build the wrapper TU as C++ (rename `pymodule.c` → `.cpp`, update `setup.py` + `build_msvc.bat`), then add Tier 3 tests + benchmark + CI step in a follow-up.
 
-### P4-T04 — `estimate_bayesian_elo`
+### P4-T04 — `estimate_bayesian_elo` ✅ DONE
+
+> Verification (2026-10-06): DECISION — REMOVE the README claim (no
+> wiring). Math audit: `estimate_bayesian_elo`
+> (`aether_chess/analysis/metrics.py:46-81`) is sound for its own
+> contract — logistic `e = 1/(1+10^((opp-r)/400))`, gradient
+> `(s-e)*d` and Hessian `-e(1-e)d²` are the exact Bernoulli
+> derivatives, Newton `r -= grad/hess` with Laplace `var = -1/hess`
+> is correct, empty-input returns the prior, ±60 exponent clamps
+> hold. But its input contract is `List[float]` per-game scores vs
+> one fixed opponent, while the Elo panel supplies aggregate
+> summaries (`accuracy`, `blunder_rate`, `avg_cp_loss` via
+> `estimateElo` from `AnalysisPanel.tsx:85-91` and
+> `HistoryView.tsx:174,472` into Glicko `estimate_elo`). Bridging
+> would invent per-game scores from aggregates (e.g. repeat
+> `accuracy/100` per estimated game) — moves are not games, so the
+> "comparison" would be two transforms of the same heuristic, not
+> an honest independent estimate. Shape chasm → REMOVE per the
+> item's forcing rule (no math redesign attempted). Change:
+> `README.md:87` now reads "Glicko-2-based Elo estimation ✅" (the
+> production path: `backend/analysis.py` GlickoRating wired to both
+> panel callers). No new test — removed claim is test-vacuous;
+> existing `tests/test_metrics.py` (5 tests, incl. `:27-28`
+> monotonicity) stands and passes. Post-state: no unbacked
+> marketing remains (`rg -i bayesian README.md` empty).
 
 The README advertises Bayesian Elo, but only `tests/test_metrics.py:27-28` calls it.
 Production uses `backend/analysis.py`. Note `accuracy_from_losses` and `classify_move` in
