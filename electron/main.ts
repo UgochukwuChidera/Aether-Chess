@@ -238,6 +238,7 @@ const LONG_RUNNING_COMMANDS = new Set([
   "calculate_accuracy",
   "calculate_accuracy_from_history",
   "calculate_accuracy_from_pgn",
+  "export_pdf_report",
   "get_engine_move",
   "get_bot_move",
   "maia3_cache",
@@ -504,6 +505,27 @@ ipcMain.handle(
       `[Analysis] stop_analysis: ${analysisCallbacks.size} active analysis subscription(s)`,
     );
     return sendCommand("stop_analysis", params);
+  },
+);
+
+// P4-T02: PDF game report. Dedicated handler (NOT in CHESS_COMMANDS) because
+// the backend needs an `output_path` the renderer must never choose: main
+// injects a history-dir destination (mirroring save-game-history, which
+// writes userData/games) and the renderer reveals it via the EXISTING
+// reveal-in-folder IPC -- no new shell surface (P2-T06). Any
+// renderer-supplied output_path is overwritten, never honored.
+ipcMain.handle(
+  "export-pdf-report",
+  async (_event, params: Record<string, unknown> = {}) => {
+    const validationError = validateIpcParams("export_pdf_report", params);
+    if (validationError) throw new Error(validationError);
+    const historyDir = getHistoryDir();
+    ensureDirSync(historyDir);
+    const dest = path.join(
+      historyDir,
+      `report-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.pdf`,
+    );
+    return sendCommand("export_pdf_report", { ...params, output_path: dest });
   },
 );
 

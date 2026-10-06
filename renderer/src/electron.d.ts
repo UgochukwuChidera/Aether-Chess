@@ -100,6 +100,9 @@ declare global {
       getBookMoves: (params: { fen: string }) => Promise<unknown>;
       // P4-T01: Syzygy endgame probe (detect-and-report when unconfigured).
       probeTablebase: (params: { fen?: string; tablebase_path?: string }) => Promise<unknown>;
+      // P4-T02: PDF game report (main injects the destination; backend
+      // returns { path, key_moments }).
+      exportPdfReport: (params: { pgn?: string; stockfish_path?: string }) => Promise<{ path: string; key_moments?: string[] }>;
       maia3Cache: (params: {
         model?: string;
         cache_dir?: string;

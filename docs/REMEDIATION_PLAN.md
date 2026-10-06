@@ -1128,7 +1128,7 @@ testable with a stub — no data files required.
   generator needs 16 GB RAM for 6-piece. No tablebase data enters the repository. Document
   the download and expected layout in `docs/SETUP.md`.
 
-### P4-T02 — PDF game reports
+### P4-T02 — PDF game reports ✅ DONE
 
 `aether_chess/analysis/reporting.py` (54) defines `ReportData` and `generate_pdf_report`
 via fpdf2. `requirements.txt:15` has `fpdf2` **commented out**, so the module can never
@@ -1143,6 +1143,46 @@ load in production.
   exists, is non-empty and is a valid PDF, and that a missing font or unwritable path raises
   a clear error.
 - **Done when:** the module imports in CI.
+- **Verification (2026-10-06):** MAKE (54 lines of fpdf2-core-font code,
+  clean lazy-import/RuntimeError path; premise confirmed, nothing
+  contradicted). Test-first `tests/test_reporting.py` (8 tests): pre-fix
+  FAIL recorded (`ImportError: cannot import name 'key_moments_from_rows'`;
+  probe: `FPDF is None` → `RuntimeError: fpdf2 is required for PDF
+  reporting`). Post-fix 8/8 green: known Scholar's-mate game → `%PDF-1.3`
+  magic, 1545 bytes, `%%EOF` trailer (no pypdf in venv, so header + size +
+  trailer is the validity proof); unwritable path → `OSError` naming the
+  path; `FPDF=None` patch → `RuntimeError`. Two minimal repairs, both
+  recorded: (1) `cell(ln=1)` → `new_x/new_y` (pyright `Literal['DEPRECATED']`
+  error under fpdf2 2.8.9 stubs); (2) every `multi_cell` gains
+  `new_x=LMARGIN/new_y=NEXT` — the module as-shipped raised `FPDFException:
+  Not enough horizontal space` on the SECOND paragraph (dead code, never
+  executed; default `new_x=RIGHT` left x at the page edge). Uncovered in the
+  same pass: `_IMPORT_ERROR` unbound when the import succeeds (NameError on
+  the RuntimeError path) — now always defined. `key_moments` = top-5
+  `cp_loss` rows (`KEY_MOMENTS_TOP_N = 5`), SAN replayed from each row's own
+  fen+uci, e.g. `Ply 6 Nf6 (black, Blunder, cp loss 520.0)`. Backend
+  `export_pdf_report` mirrors `calculate_accuracy_from_pgn` (`pgn?` else
+  live-history snapshot under `_board_lock`) and returns `{path,
+  key_moments}`; main `export-pdf-report` handler injects a history-dir
+  destination (mirrors `save-game-history`) and the renderer reveals it via
+  the EXISTING `reveal-in-folder` IPC — no new shell surface; long-running
+  tier (5 min); `ipcValidation` rule + hiddenimport added. UI: `Export PDF`
+  button in `AnalysisPanel` (props drilled like `onComputeAccuracy`,
+  loading/error states like siblings). fpdf2 2.8.9 installed in venv;
+  requirements pin uncommented (CI installs it → module imports in CI).
+  Missing-font N/A: module uses core fonts only (no font file ever loaded);
+  ASCII-only test data (core fonts are latin-1). Full gate green — python
+  214 OK / 203.5s (2 skips: opt-in tablebase + pre-existing), ruff clean,
+  pyright 0, electron 78 pass, lint 0 errors (3 warnings proven
+  pre-existing via HEAD worktree), build succeeds, typecheck:renderer
+  clean, test:renderer 38/38 (one AnalysisView timing flake, green solo +
+  green full rerun), test:e2e 3/4 + listener-leak PASS with
+  `--timeout=120000` (1.3m vs 60s budget under load ~16; HEAD equally
+  marginal at 1.0m under load 14.8 — environmental, per ledger flake
+  watch). Surprises: stray `=2.8` file from the pip-install shell line
+  (deleted); the file-edit tool reformatted 3 TS files (whole-file
+  prettier churn that broke the `set-state-in-effect` disable) — reverted
+  and re-applied surgically, diffs now additive-only.
 
 ### P4-T03 — C++ evaluation engine (speed)
 

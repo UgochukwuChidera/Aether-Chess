@@ -28,6 +28,10 @@ interface Props {
   onStopAnalysis: () => void;
   onComputeAccuracy: () => void;
   accuracyLoading?: boolean;
+  // P4-T02: Export-PDF action, drilled like onComputeAccuracy (optional so
+  // older callers keep working; the button hides when unwired).
+  onExportPdf?: () => void;
+  exportLoading?: boolean;
 }
 
 interface EloEstimate {
@@ -42,6 +46,8 @@ export const AnalysisPanel: React.FC<Props> = ({
   onStopAnalysis,
   onComputeAccuracy,
   accuracyLoading = false,
+  onExportPdf,
+  exportLoading = false,
 }) => {
   const { analysis, moveHistory, fen } = useGameStore();
   const {
@@ -99,6 +105,17 @@ export const AnalysisPanel: React.FC<Props> = ({
         >
           {accuracyLoading ? '…' : 'CAPS'}
         </button>
+        {onExportPdf && (
+          <button
+            onClick={onExportPdf}
+            disabled={exportLoading}
+            className="px-2 py-0.5 rounded text-[10px] font-sans border border-surface2 text-muted
+                       hover:border-accent hover:text-accent transition-all
+                       disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {exportLoading ? '…' : 'Export PDF'}
+          </button>
+        )}
         <button
           onClick={running ? onStopAnalysis : onStartAnalysis}
           className={`px-2 py-0.5 rounded text-[10px] font-sans border transition-all

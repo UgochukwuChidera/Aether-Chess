@@ -16,6 +16,7 @@ export const AnalysisView: React.FC = () => {
   const settings = useSettingsStore();
   const runningRef = useRef(false);
   const [accuracyLoading, setAccuracyLoading] = React.useState(false);
+  const [exportLoading, setExportLoading] = React.useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const boardAreaRef = useRef<HTMLDivElement>(null);
   const [boardSize, setBoardSize] = useState(0);
@@ -137,6 +138,31 @@ export const AnalysisView: React.FC = () => {
     }
   };
 
+  // P4-T02: Export-PDF action. Same shape as handleComputeAccuracy above
+  // (loading flag, toast on error/success): the backend builds the report
+  // for the LIVE game (no pgn => history snapshot, mirroring
+  // calculateAccuracyFromHistory), main writes it into the history dir, and
+  // the renderer reveals it via the EXISTING reveal-in-folder IPC -- no new
+  // shell surface.
+  const handleExportPdf = async () => {
+    setExportLoading(true);
+    try {
+      const res = await window.electronAPI.exportPdfReport({
+        stockfish_path: settings.stockfishPath,
+      });
+      if (!res || !res.path) {
+        store.pushToast('PDF export failed: backend returned no path', 'error');
+        return;
+      }
+      await window.electronAPI.revealInFolder(res.path);
+      store.pushToast('PDF report exported', 'success');
+    } catch (err) {
+      store.pushToast(`PDF export failed: ${err}`, 'error');
+    } finally {
+      setExportLoading(false);
+    }
+  };
+
   // ── Navigation helpers ────────────────────────────────────────────────────
   const handleNavFirst = useCallback(() => {
     if (store.fullMoveHistoryUCI.length === 0) return;
@@ -248,6 +274,8 @@ export const AnalysisView: React.FC = () => {
           onStopAnalysis={handleStopAnalysis}
           onComputeAccuracy={handleComputeAccuracy}
           accuracyLoading={accuracyLoading}
+          onExportPdf={handleExportPdf}
+          exportLoading={exportLoading}
         />
       </div>
     </div>

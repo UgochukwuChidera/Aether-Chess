@@ -25,6 +25,10 @@ a = Analysis(
         'aether_chess',
         'aether_chess.analysis',
         'aether_chess.analysis.metrics',
+        # P4-T02: imported lazily inside handle_export_pdf_report (same
+        # shape as the tablebases probe above), so it needs the explicit
+        # entry or the frozen backend cannot build the report.
+        'aether_chess.analysis.reporting',
         # Every bot is chosen dynamically by id at runtime, so PyInstaller sees
         # no import of these from any single static call site.
         'aether_chess.bots',

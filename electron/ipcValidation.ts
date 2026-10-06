@@ -393,6 +393,25 @@ function validateDetail(command: string, params: unknown): string | null {
       if (pgnErr) return pgnErr;
       return checkOptionalString(params, "stockfish_path");
     }
+    case "export_pdf_report": {
+      // P4-T02: same game-identifying shape as calculate_accuracy_from_pgn
+      // (optional pgn => live game), plus display overrides and the
+      // main-injected output_path (the renderer never sends it, but the
+      // boundary only checks its shape -- main.ts overwrites it anyway).
+      if (!isObject(params)) return `params must be an object`;
+      for (const field of [
+        "pgn",
+        "stockfish_path",
+        "output_path",
+        "white",
+        "black",
+        "result",
+      ]) {
+        const err = checkOptionalString(params, field);
+        if (err) return err;
+      }
+      return null;
+    }
     case "estimate_elo":
       if (!isObject(params)) return `params must be an object`;
       return checkEstimateElo(params);

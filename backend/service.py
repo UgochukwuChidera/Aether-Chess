@@ -533,6 +533,98 @@ def handle_calculate_accuracy_from_pgn(params: Dict[str, Any]) -> Any:
     return result
 
 
+# P4-T02: game input mirrors handle_calculate_accuracy_from_pgn (optional
+# `pgn`; absent means the live game via the history snapshot, mirroring
+# handle_calculate_accuracy_from_history). `output_path` is injected by the
+# Electron main process (history dir, a P2-T06 revealable root) -- the
+# renderer never supplies it; without it the backend falls back to temp.
+def handle_export_pdf_report(params: Dict[str, Any]) -> Any:
+    import tempfile
+
+    from aether_chess.analysis.metrics import accuracy_from_losses
+    from aether_chess.analysis.reporting import (
+        ReportData,
+        generate_pdf_report,
+        key_moments_from_rows,
+    )
+
+    pgn_text = params.get("pgn")
+    stockfish_path: str = params.get(
+        "stockfish_path", engine_mgr.settings.get("stockfish_path", "stockfish")
+    )
+    output_path = params.get("output_path")
+
+    if isinstance(pgn_text, str) and pgn_text.strip():
+        game = chess.pgn.read_game(io.StringIO(pgn_text))
+        if game is None:
+            raise ValueError("Invalid PGN: could not parse a game")
+        headers = game.headers
+        white = str(params.get("white") or headers.get("White", "White"))
+        black = str(params.get("black") or headers.get("Black", "Black"))
+        result = str(params.get("result") or headers.get("Result", "*"))
+        board = game.board()
+        fen_list: list[str] = []
+        moves: list[str] = []
+        for move in game.mainline_moves():
+            fen_list.append(board.fen())
+            moves.append(move.uci())
+            board.push(move)
+        annotated_pgn = pgn_text
+    else:
+        # Live game: snapshot history under the board lock (fast), then
+        # release before the long Stockfish computation -- the same shape
+        # as handle_calculate_accuracy_from_history.
+        with _board_lock:
+            fen_list, moves = engine_mgr.history_fens_and_moves()
+            annotated_pgn = engine_mgr.export_pgn()
+        white = str(params.get("white", "White"))
+        black = str(params.get("black", "Black"))
+        result = str(params.get("result", "*"))
+
+    accuracy = accuracy_analyser.calculate(
+        fen_list, moves, stockfish_path=stockfish_path
+    )
+    if accuracy.get("error"):
+        raise ValueError(str(accuracy["error"]))
+
+    rows = accuracy.get("moves", [])
+    key_moments = key_moments_from_rows(rows)
+
+    def _side_elo(color: str, side_accuracy: float) -> int:
+        losses = [float(r.get("cp_loss", 0.0)) for r in rows if r.get("color") == color]
+        side_moves = [r for r in rows if r.get("color") == color]
+        blunders = sum(1 for r in side_moves if r.get("classification") == "Blunder")
+        blunder_rate = (blunders / len(side_moves)) if side_moves else 0.0
+        avg_loss = (sum(losses) / len(losses)) if losses else 0.0
+        # accuracy_from_losses on the side's own losses matches the reported
+        # side accuracy; estimate_elo is pure math (no engine).
+        acc = accuracy_from_losses(losses) if losses else float(side_accuracy)
+        return int(
+            accuracy_analyser.estimate_elo(acc, blunder_rate, avg_loss)["estimated_elo"]
+        )
+
+    data = ReportData(
+        title="Aether Chess Game Report",
+        white=white,
+        black=black,
+        result=result,
+        accuracy_white=float(accuracy.get("white_accuracy", 0.0)),
+        accuracy_black=float(accuracy.get("black_accuracy", 0.0)),
+        estimated_elo_white=_side_elo("white", accuracy.get("white_accuracy", 0.0)),
+        estimated_elo_black=_side_elo("black", accuracy.get("black_accuracy", 0.0)),
+        key_moments=key_moments,
+        annotated_pgn=annotated_pgn,
+    )
+
+    if not isinstance(output_path, str) or not output_path:
+        fd, output_path = tempfile.mkstemp(prefix="aether-report-", suffix=".pdf")
+        import os
+
+        os.close(fd)
+    path = generate_pdf_report(output_path, data)
+    return {"path": path, "key_moments": key_moments}
+
+
 # P2-T19: num_games feeds `range(estimated_games)` in analysis.estimate_elo,
 # so it is an IPC-fed loop bound — clamp it (a huge value is a CPU-DoS vector
 # in the handler thread).
@@ -674,6 +766,7 @@ HANDLERS: Dict[str, Any] = {
     "calculate_accuracy": handle_calculate_accuracy,
     "calculate_accuracy_from_history": handle_calculate_accuracy_from_history,
     "calculate_accuracy_from_pgn": handle_calculate_accuracy_from_pgn,
+    "export_pdf_report": handle_export_pdf_report,
     "estimate_elo": handle_estimate_elo,
     "get_book_moves": handle_get_book_moves,
     "start_analysis": handle_start_analysis,

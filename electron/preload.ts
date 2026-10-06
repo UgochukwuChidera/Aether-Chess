@@ -54,6 +54,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
   // (backend returns configured:false; the UI degrades to a quiet note).
   probeTablebase: (params: { fen?: string; tablebase_path?: string }) =>
     ipcRenderer.invoke("probe_tablebase", params),
+  // P4-T02: PDF game report. Main injects the history-dir destination and
+  // returns it; the renderer reveals it via the existing revealInFolder
+  // IPC (no new shell surface).
+  exportPdfReport: (params: { pgn?: string; stockfish_path?: string }) =>
+    ipcRenderer.invoke("export-pdf-report", params),
   maia3Cache: (params: {
     model?: string;
     cache_dir?: string;

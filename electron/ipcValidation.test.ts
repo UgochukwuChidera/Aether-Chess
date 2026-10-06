@@ -242,6 +242,30 @@ describe("calculate_accuracy_from_history / from_pgn", () => {
   });
 });
 
+describe("export_pdf_report (P4-T02)", () => {
+  it("rejects non-string game/display fields", () => {
+    assertInvalid("export_pdf_report", { pgn: 42 }, "pgn");
+    assertInvalid(
+      "export_pdf_report",
+      { stockfish_path: 42 },
+      "stockfish_path",
+    );
+    assertInvalid("export_pdf_report", { output_path: 42 }, "output_path");
+    assertInvalid("export_pdf_report", { white: 42 }, "white");
+  });
+
+  it("passes absent/empty shapes (backend owns PGN truth)", () => {
+    assertValid("export_pdf_report", {});
+    assertValid("export_pdf_report", { stockfish_path: "/usr/bin/stockfish" });
+    assertValid("export_pdf_report", {
+      pgn: "1. e4 e5 *",
+      white: "Scholar",
+      black: "Opponent",
+      result: "1-0",
+    });
+  });
+});
+
 describe("estimate_elo", () => {
   it("rejects missing/NaN/out-of-range numerics", () => {
     assertInvalid("estimate_elo", {}, "accuracy");
