@@ -1273,7 +1273,7 @@ orphaned.
   comparison against the Glicko figure, or remove the README claim. Pick one; do not ship
   an unbacked marketing claim.
 
-### P4-T05 — Opening book loose ends
+### P4-T05 — Opening book loose ends ✅ DONE
 
 - `aether_chess/io/opening_book.py::choose_weighted` (`:85`) is unused. Meanwhile
   `backend/chess_engine.py:494` **does** use this module — the file is live, only the
@@ -1284,6 +1284,39 @@ orphaned.
   live-looking control that does nothing. Wire `openingBookPath` through, or remove the
   picker.
 - Book readers reopen the file per lookup. Open once and cache, keyed on mtime.
+
+> Verification (2026-10-06): DECISIONS — (a) DELETE `choose_weighted`:
+> body was `return self.choose(board, strategy="weighted")`, byte-identical
+> to `choose()` defaults (default strategy IS "weighted"); `rg` zero
+> callers repo-wide; one way kept. (b) WIRE the picker (hop count 2 real
+> edits, not a layer crossing): store already held + persisted the value;
+> `PlayView` AI book path and the `SettingsPanel` status poll now send
+> `books_dir`; preload + `electron.d.ts` widened optional; main forwarder,
+> `ipcValidation` and service needed zero changes (both already accepted
+> `books_dir`). No dead-looking-live control remains. (c) mtime cache in
+> `opening_book.py`: `{abspath: (mtime_ns, reader)}` + lock, stat on every
+> lookup, close + reopen on drift, `close_cached_books()` for tests; both
+> `OpeningBook._entries_for_path` and the live `get_book_moves` route
+> through it, and the engine anchors relative dirs at the repo root when
+> the CWD has none (dev at repo root unchanged). Thread account: open +
+> check under one lock (exactly-once even racing), readers are read-only
+> mmaps safe for concurrent `find_all`, and the service already serializes
+> `get_book_moves` under `_board_lock`. Anchor drift recorded:
+> `chess_engine.py` never imports `opening_book` (":494 uses this module"
+> does not hold — the cache wiring makes it true now), `get_book_moves`
+> lives at `:961-989` (default `:962`), the picker at
+> `SettingsPanel.tsx:646-659` with the status poll at `:173-188` (whose
+> `openingBookPath` dep was listed but unread — now honest). Test-first:
+> `tests/test_opening_book.py` +8 (minimal `.bin` packed in-temp via
+> `ENTRY_STRUCT` + `zobrist_hash`; python-chess ships no writer;
+> `resources/books/Perfect2023.bin` verified live with 4 startpos entries):
+> pre-fix 5 FAIL (`choose_weighted` present, CWD-relative default
+> invisible from a foreign tmp CWD, 2 opens per double lookup on both the
+> unit and live paths) + 3 green-throughout guards (weighted-via-`choose`,
+> custom-dir honored, 16 concurrent lookups clean); post-fix 11/11.
+> Renderer: new `PlayView.test.tsx` forwarding test FAILS pre-fix
+> (stash-proof: `books_dir` absent) and passes post-fix. Full gate green
+> (counts/times in commit body). No `.bin` committed (all in-temp).
 
 ### P4-T06 — C++ kernel Tier 3: build the wrapper as C++, test, benchmark
 

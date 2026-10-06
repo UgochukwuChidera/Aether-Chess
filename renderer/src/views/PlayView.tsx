@@ -388,6 +388,7 @@ export const PlayView: React.FC<Props> = ({ onTabChange }) => {
       try {
         const bookData = await window.electronAPI.getBookMoves({
           fen,
+          books_dir: cfg.openingBookPath,
         }) as { moves?: { uci: string; weight: number }[] };
         if (bookData.moves && bookData.moves.length > 0) {
           // Validate each candidate move against fresh legal moves before playing

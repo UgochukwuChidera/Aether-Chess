@@ -97,7 +97,7 @@ declare global {
         avg_cp_loss?: number;
         num_games?: number;
       }) => Promise<unknown>;
-      getBookMoves: (params: { fen: string }) => Promise<unknown>;
+      getBookMoves: (params: { fen: string; books_dir?: string }) => Promise<unknown>;
       // P4-T01: Syzygy endgame probe (detect-and-report when unconfigured).
       probeTablebase: (params: { fen?: string; tablebase_path?: string }) => Promise<unknown>;
       // P4-T02: PDF game report (main injects the destination; backend

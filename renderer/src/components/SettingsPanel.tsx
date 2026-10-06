@@ -178,7 +178,10 @@ export const SettingsPanel: React.FC = () => {
     }
     setLoadingBook(true);
     window.electronAPI
-      .getBookMoves({ fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1' })
+      .getBookMoves({
+        fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+        books_dir: settings.openingBookPath,
+      })
       .then((res) => {
         const data = res as { moves?: { uci: string; weight: number }[] };
         setBookMoves(data.moves?.length ?? 0);

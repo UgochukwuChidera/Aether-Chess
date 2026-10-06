@@ -48,7 +48,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   }) => ipcRenderer.invoke("calculate_accuracy_from_pgn", params),
   estimateElo: (params: { accuracy: number; blunder_rate: number }) =>
     ipcRenderer.invoke("estimate_elo", params),
-  getBookMoves: (params: { fen: string }) =>
+  getBookMoves: (params: { fen: string; books_dir?: string }) =>
     ipcRenderer.invoke("get_book_moves", params),
   // P4-T01: Syzygy endgame probe — detect-and-report when unconfigured
   // (backend returns configured:false; the UI degrades to a quiet note).

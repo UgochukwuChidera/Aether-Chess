@@ -52,6 +52,7 @@ function moveResult(
 interface FakeBackend {
   api: Record<string, (...args: never[]) => unknown>;
   makeMoveMoves: string[];
+  bookParams: unknown[];
   getAnalysisCb: () => ((raw: unknown) => void) | null;
 }
 
@@ -66,12 +67,16 @@ interface FakeBackend {
 function createFakeBackend(): FakeBackend {
   const played: string[] = [];
   const makeMoveMoves: string[] = [];
+  const bookParams: unknown[] = [];
   let analysisCb: ((raw: unknown) => void) | null = null;
   const api: Record<string, (...args: never[]) => unknown> = {
     newGame: async () => moveResult(INITIAL_FEN, [], false),
-    getBookMoves: async () => ({
-      moves: [{ uci: BOOK_PLIES[played.length] ?? "g1f3", weight: 100 }],
-    }),
+    getBookMoves: async (params: unknown) => {
+      bookParams.push(params);
+      return {
+        moves: [{ uci: BOOK_PLIES[played.length] ?? "g1f3", weight: 100 }],
+      };
+    },
     getLegalMoves: async () => ({
       moves: [{ uci: "e2e4" }, { uci: "e7e5" }, { uci: "g1f3" }],
     }),
@@ -106,6 +111,7 @@ function createFakeBackend(): FakeBackend {
   return {
     api,
     makeMoveMoves,
+    bookParams,
     getAnalysisCb: () => analysisCb,
   };
 }
@@ -992,6 +998,40 @@ describe("P3-T01 backend-owned clock and termination", () => {
       expect(useGameStore.getState().selectedSquare).toBe("e2");
     } finally {
       h.unmount();
+    }
+  }, 15000);
+});
+
+describe("P4-T05 openingBookPath plumbing", () => {
+  it("forwards the configured openingBookPath as books_dir", async () => {
+    // Fail-first: pre-fix makeAiMove sent { fen } only, so the Settings
+    // picker value never reached the backend and every lookup used the
+    // CWD-relative default. Fixed behaviour: every getBookMoves call
+    // carries the store's openingBookPath as books_dir.
+    const backend = createFakeBackend();
+    window.electronAPI = backend.api as unknown as Window["electronAPI"];
+    resetStoresForAiVsAi();
+    useSettingsStore.setState({ openingBookPath: "/tmp/custom-books" });
+    const counter = countApplies();
+    const { unmount } = render(<PlayView onTabChange={() => undefined} />);
+    try {
+      await waitFor(
+        () => {
+          expect(useGameStore.getState().fullMoveHistoryUCI).toEqual(
+            BOOK_PLIES,
+          );
+        },
+        { timeout: 4000, interval: 50 },
+      );
+      expect(backend.bookParams.length).toBeGreaterThan(0);
+      for (const p of backend.bookParams) {
+        expect((p as { books_dir?: string }).books_dir).toBe(
+          "/tmp/custom-books",
+        );
+      }
+    } finally {
+      counter.restore();
+      unmount();
     }
   }, 15000);
 });

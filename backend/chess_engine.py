@@ -56,6 +56,7 @@ from aether_chess.bots import (
 from aether_chess.engines.maia3_proxy import Maia3Proxy
 from aether_chess.engines.mentor_engine import MentorEngine
 from aether_chess.engines.mentor_profile import mentor_search_config
+from aether_chess.io.opening_book import find_entries_cached
 from aether_chess.models.game_state import GameState
 
 
@@ -958,12 +959,32 @@ class ChessEngineManager:
 
     # ── Opening book ──────────────────────────────────────────────────────────
 
+    def _resolve_books_dir(self, books_dir: str) -> str:
+        """Resolve `books_dir` independent of the process CWD.
+
+        Absolute paths pass through untouched. A relative path that exists
+        from the CWD wins (dev runs at the repo root, where
+        `resources/books` is real). Otherwise the path is retried anchored
+        at this backend's repo root, so a backend spawned with any CWD —
+        the packaged app, a test that chdir'd away — still finds the
+        shipped books instead of an empty hint. A path that exists nowhere
+        passes through unchanged and yields the usual empty-hint result.
+        """
+        if os.path.isabs(books_dir):
+            return books_dir
+        if os.path.isdir(books_dir):
+            return books_dir
+        anchored = os.path.normpath(os.path.join(_ROOT, books_dir))
+        if os.path.isdir(anchored):
+            return anchored
+        return books_dir
+
     def get_book_moves(
         self, fen: str, books_dir: str = "resources/books"
     ) -> Dict[str, Any]:
         """Return all book moves with weights for a position."""
-
-        bin_files = globlib.glob(os.path.join(books_dir, "*.bin"))
+        resolved = self._resolve_books_dir(books_dir)
+        bin_files = sorted(globlib.glob(os.path.join(resolved, "*.bin")))
         if not bin_files:
             return {
                 "moves": [],
@@ -972,19 +993,19 @@ class ChessEngineManager:
         board = chess.Board(fen)
         all_moves: Dict[str, Dict[str, Any]] = {}
         for bin_path in bin_files:
-            try:
-                with chess.polyglot.open_reader(bin_path) as reader:
-                    for entry in reader.find_all(board):
-                        uci = entry.move.uci()
-                        if uci not in all_moves:
-                            all_moves[uci] = {
-                                "uci": uci,
-                                "san": board.san(entry.move),
-                                "weight": 0,
-                            }
-                        all_moves[uci]["weight"] += entry.weight
-            except OSError:
-                continue
+            # P4-T05: entries come from the open-once (path, mtime) reader
+            # cache in `aether_chess/io/opening_book.py` — no per-lookup
+            # reopen. Missing/unreadable books yield [] from the helper, so
+            # there is no per-file try/except here anymore.
+            for entry in find_entries_cached(bin_path, board):
+                uci = entry.move.uci()
+                if uci not in all_moves:
+                    all_moves[uci] = {
+                        "uci": uci,
+                        "san": board.san(entry.move),
+                        "weight": 0,
+                    }
+                all_moves[uci]["weight"] += entry.weight
         moves = sorted(all_moves.values(), key=lambda x: x["weight"], reverse=True)
         return {"moves": moves}
 
