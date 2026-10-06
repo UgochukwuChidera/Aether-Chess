@@ -681,6 +681,22 @@ export const SettingsPanel: React.FC = () => {
         </Row>
       </Section>
 
+      {/* ── Endgame Tablebases (P4-T01: detect-and-report when unconfigured) ── */}
+      <Section title="Endgame Tablebases" icon="grid_on">
+        <Row label="Tablebase directory" tooltip="Folder holding Syzygy .rtbw/.rtbz files. Empty means unconfigured — endgame hints stay off.">
+          <input
+            type="text"
+            value={settings.tablebasePath}
+            onChange={(e) => settings.update({ tablebasePath: e.target.value })}
+            placeholder="No tablebases (optional)"
+            className="bg-surface border border-surface2 text-on-surface text-xs font-mono rounded px-2 py-1.5 w-48 hover:border-accent focus:border-accent focus:outline-none transition-colors"
+          />
+        </Row>
+        <p className="text-[10px] text-muted -mt-1 px-0.5">
+          Optional Syzygy path for endgame hints. See docs/SETUP.md — no tablebase data ships with the app.
+        </p>
+      </Section>
+
       {/* ── Gameplay ────────────────────────────────────────────────────── */}
       <Section title="Gameplay" icon="sports_esports">
         <Row label="Time control">

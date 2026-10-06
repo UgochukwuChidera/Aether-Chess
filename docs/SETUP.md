@@ -143,6 +143,27 @@ If no book is present, the opening explorer will display:
 
 ---
 
+## 5b. Add Syzygy endgame tablebases (optional, P4-T01)
+
+Tablebases are **never** stored in the repository: the smallest useful
+Syzygy set (3-4-5-piece WDL+DTZ) is ~1 GB, and generating 6-piece tables
+needs ~16 GB RAM. Download them separately (e.g. from
+https://syzygy-tables.info/ or a mirror) into a local folder with the
+standard layout (`*.rtbw` + `*.rtbz` side by side, e.g.
+`~/syzygy/3-4-5/KQvK.rtbw`), then point the app at it via
+**Settings → Endgame Tablebases** (or pass the folder as
+`tablebase_path` to the `probe_tablebase` command).
+
+When no path is configured the backend answers `{"configured": false}`
+and the Analysis view shows a quiet "Tablebase: not configured" note —
+endgame hints stay off and everything else works. The opt-in integration
+test (`tests/test_tablebases.py::RealTablebaseTests`, gated on
+`AETHER_TABLEBASE_PATH`) uses the python-chess known-value fixture
+`8/2K5/4B3/3N4/8/8/4k3/8 b - - 0 1` → `probe_dtz == -53`,
+`probe_wdl == -2`; it never runs in required CI.
+
+---
+
 ## 6. Run in development mode
 
 The development server starts the Vite renderer and Electron concurrently:

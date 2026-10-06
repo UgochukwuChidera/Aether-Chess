@@ -105,6 +105,9 @@ export interface AppSettings {
   useOpeningBook: boolean;
   openingBookPath: string;
   openingBookDepth: number; // plies to use book (e.g., 10 = 5 moves each side)
+  // Syzygy endgame tablebases (P4-T01, renderer-only like openingBookPath:
+  // empty means unconfigured and the UI degrades to a quiet note).
+  tablebasePath: string;
   // Gameplay
   timeControl: TimeControl;
   autoQueen: boolean;
@@ -154,6 +157,7 @@ const DEFAULTS: AppSettings = {
   useOpeningBook: true,
   openingBookPath: 'resources/books',
   openingBookDepth: 20, // default to 20 plies (10 moves each side)
+  tablebasePath: '',
   timeControl: TIME_CONTROLS[3], // Unlimited
   autoQueen: false,
   showEvalBar: true,
@@ -388,6 +392,9 @@ function validatePatch(
   }
   if ('openingBookDepth' in patch) {
     out.openingBookDepth = toClampedInt(patch.openingBookDepth, 0, 200, 20);
+  }
+  if ('tablebasePath' in patch) {
+    out.tablebasePath = typeof patch.tablebasePath === 'string' ? patch.tablebasePath : '';
   }
   if ('timeControl' in patch) out.timeControl = toTimeControl(patch.timeControl);
   if ('autoQueen' in patch) {

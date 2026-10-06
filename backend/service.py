@@ -623,6 +623,36 @@ def handle_stop_analysis(_params: Dict[str, Any]) -> Any:
     return {"stopped": True}
 
 
+def handle_probe_tablebase(params: Dict[str, Any]) -> Any:
+    """Syzygy endgame probe (P4-T01 Change 4) — detect-and-report.
+
+    Returns ``{"configured": False, ...}`` when no path is supplied so the
+    UI degrades gracefully; never raises for a missing directory or missing
+    tables (``TablebaseProbe`` already maps those to ``None``). Only an
+    invalid FEN raises ``ValueError`` — the same surface as the other
+    fen-taking handlers.
+    """
+    fen = params.get("fen")
+    if not fen:
+        with _board_lock:
+            fen = engine_mgr.fen()
+    tablebase_path = params.get("tablebase_path") or params.get("tablebasePath") or ""
+    if not tablebase_path:
+        return {"configured": False, "best_move": None, "fen": fen}
+    board = chess.Board(str(fen))
+    if board.occupied.bit_count() > 6:
+        return {
+            "configured": True,
+            "best_move": None,
+            "fen": fen,
+            "reason": "too many pieces",
+        }
+    from aether_chess.io.tablebases import TablebaseProbe
+
+    best = TablebaseProbe(path=str(tablebase_path)).best_move(board)
+    return {"configured": True, "best_move": best.uci() if best else None, "fen": fen}
+
+
 # ── Dispatch table ────────────────────────────────────────────────────────────
 
 HANDLERS: Dict[str, Any] = {
@@ -650,6 +680,7 @@ HANDLERS: Dict[str, Any] = {
     "stop_analysis": handle_stop_analysis,
     "maia3_cache": handle_maia3_cache,
     "check_maia3_cache": handle_check_maia3_cache,
+    "probe_tablebase": handle_probe_tablebase,
 }
 
 # Commands that mutate board state — must hold _board_lock

@@ -50,6 +50,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("estimate_elo", params),
   getBookMoves: (params: { fen: string }) =>
     ipcRenderer.invoke("get_book_moves", params),
+  // P4-T01: Syzygy endgame probe — detect-and-report when unconfigured
+  // (backend returns configured:false; the UI degrades to a quiet note).
+  probeTablebase: (params: { fen?: string; tablebase_path?: string }) =>
+    ipcRenderer.invoke("probe_tablebase", params),
   maia3Cache: (params: {
     model?: string;
     cache_dir?: string;

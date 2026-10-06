@@ -441,6 +441,8 @@ const CHESS_COMMANDS = [
   "calculate_accuracy_from_pgn",
   "estimate_elo",
   "get_book_moves",
+  // P4-T01: Syzygy endgame probe (detect-and-report when unconfigured).
+  "probe_tablebase",
   // NOTE: no "stop_analysis" here — it has a dedicated handler below that
   // deletes the analysisCallbacks entry. ipcMain serves the FIRST handler
   // registered per channel, so listing it here would shadow the dedicated

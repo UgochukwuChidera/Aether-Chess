@@ -1082,7 +1082,7 @@ exist — boot always uses the mirrored fallback constants, so P3-T02 Change 2
 
 # Phase 4 — Unfinished features and loose ends
 
-### P4-T01 — Syzygy tablebases
+### P4-T01 — Syzygy tablebases ✅ DONE
 
 **Confirmed defects in `aether_chess/io/tablebases.py` (37 lines), which has no production
 caller.** `best_move` uses only one method of the tablebase API, so the whole thing is

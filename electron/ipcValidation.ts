@@ -356,12 +356,18 @@ function validateDetail(command: string, params: unknown): string | null {
     }
     case "get_legal_moves":
     case "get_eval":
-    case "get_book_moves": {
+    case "get_book_moves":
+    case "probe_tablebase": {
       if (!isObject(params)) return `params must be an object`;
       const fenErr = checkFen(params);
       if (fenErr) return fenErr;
       if (command === "get_book_moves") {
         return checkOptionalString(params, "books_dir");
+      }
+      if (command === "probe_tablebase") {
+        const pathErr = checkOptionalString(params, "tablebase_path");
+        if (pathErr) return pathErr;
+        return checkOptionalString(params, "tablebasePath");
       }
       return null;
     }

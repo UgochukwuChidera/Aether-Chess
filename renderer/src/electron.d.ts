@@ -98,6 +98,8 @@ declare global {
         num_games?: number;
       }) => Promise<unknown>;
       getBookMoves: (params: { fen: string }) => Promise<unknown>;
+      // P4-T01: Syzygy endgame probe (detect-and-report when unconfigured).
+      probeTablebase: (params: { fen?: string; tablebase_path?: string }) => Promise<unknown>;
       maia3Cache: (params: {
         model?: string;
         cache_dir?: string;

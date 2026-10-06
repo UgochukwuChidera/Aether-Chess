@@ -43,7 +43,7 @@ export const AnalysisPanel: React.FC<Props> = ({
   onComputeAccuracy,
   accuracyLoading = false,
 }) => {
-  const { analysis, moveHistory } = useGameStore();
+  const { analysis, moveHistory, fen } = useGameStore();
   const {
     showAnalysisThreats,
     showAnalysisTopMoves,
@@ -160,6 +160,72 @@ export const AnalysisPanel: React.FC<Props> = ({
       {moveHistory.length > 0 && (
         <MoveClassificationTable />
       )}
+
+      {/* Syzygy endgame hint (P4-T01: detect-and-report, degrades gracefully) */}
+      <TablebaseAnnotation fen={fen} />
+    </div>
+  );
+};
+
+/**
+ * Minimal endgame annotation (P4-T01 Change 4). When no tablebase path is
+ * configured the backend answers `configured:false` and this renders a
+ * quiet note — never an error, never a block. Any IPC failure degrades to
+ * nothing (null) so analysis never depends on tablebases.
+ */
+const TablebaseAnnotation: React.FC<{ fen: string }> = ({ fen }) => {
+  const tablebasePath = useSettingsStore((s) => s.tablebasePath);
+  const [bestMove, setBestMove] = React.useState<string | null>(null);
+  const [probed, setProbed] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!tablebasePath) {
+      setBestMove(null);
+      setProbed(false);
+      return;
+    }
+    const probe = window.electronAPI.probeTablebase?.bind(window.electronAPI);
+    if (!probe) {
+      setBestMove(null);
+      setProbed(false);
+      return;
+    }
+    let cancelled = false;
+    probe({ fen, tablebase_path: tablebasePath })
+      .then((res: unknown) => {
+        if (cancelled) return;
+        const data = res as { configured?: boolean; best_move?: string | null };
+        if (!data || data.configured === false) {
+          setBestMove(null);
+          setProbed(false);
+          return;
+        }
+        setBestMove(data.best_move ?? null);
+        setProbed(true);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setBestMove(null);
+          setProbed(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [fen, tablebasePath]);
+
+  if (!tablebasePath) {
+    return (
+      <div className="text-[10px] font-mono text-muted truncate">
+        Tablebase: not configured
+      </div>
+    );
+  }
+  if (!probed) return null;
+  if (!bestMove) return null;
+  return (
+    <div className="text-[10px] font-mono text-muted truncate">
+      <span className="text-accent">Tablebase:</span> {bestMove}
     </div>
   );
 };
