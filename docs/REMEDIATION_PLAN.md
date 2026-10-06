@@ -1261,6 +1261,30 @@ orphaned.
   picker.
 - Book readers reopen the file per lookup. Open once and cache, keyed on mtime.
 
+### P4-T06 — C++ kernel Tier 3: build the wrapper as C++, test, benchmark
+
+Completes the PARTIAL P4-T03 (Tier-3-blocked): the §2c shim landed and
+`evaluate.cpp` compiles warning-free, but `pymodule.c` is compiled as C while
+including C++ `<cstdint>`, so no kernel exists. The wrapper (56 lines, pure
+Python-C-API + `evaluate_fen`, no C-only constructs) compiles as C++ unchanged.
+
+- **Change 1:** `git mv cpp_engine/pymodule.c cpp_engine/pymodule.cpp`;
+  `setup.py` sources + `build_msvc.bat` `cl` line follow the rename (`cl`
+  selects C++ by extension).
+- **Change 2:** `npm run build:cpp` must emit the `.so`/`.pyd` beside
+  `cpp_engine/__init__.py`; `get_info()` must report the kernel present.
+- **Change 3:** Tier 3 tests (`@unittest.skipUnless(cpp_engine._has_cpp)`):
+  determinism, colour antisymmetry, material sanity (extra queen ≈ queen),
+  mate = mate score, stalemate ≈ 0, batch equals elementwise single,
+  malformed FEN rejected not 0. NOT exact-equality with MentorEngine
+  (different evaluations — wrong contract).
+- **Change 4:** benchmark compiled kernel vs Python path on a fixed FEN set,
+  recorded in the commit body. If no speedup, the flag stays off per P4-T03's
+  exit clause. Then add the CI Linux gcc step P4-T03 deferred (it would have
+  failed red before; green now).
+- **Done when:** kernel builds, Tier 3 green, benchmark recorded, CI step
+  added, P4-T03 marked DONE (this item closes it).
+
 ---
 
 # Appendix A — Unused-code inventory and disposition
