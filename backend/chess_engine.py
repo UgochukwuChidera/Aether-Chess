@@ -92,11 +92,13 @@ class ChessEngineManager:
             "threads": DEFAULT_THREADS,
             "hash_mb": DEFAULT_HASH_MB,
             "multipv": DEFAULT_MULTIPV,
-            # P4-T03: compiled-kernel dispatch, default OFF. Nothing changes
-            # for current users until explicitly enabled; the kernel's values
-            # differ from MentorEngine's, so this is a speed experiment gate,
-            # not a silent eval swap.
-            "mentor_use_cpp": False,
+            # P4-T11: compiled-kernel dispatch, default ON. P4-T06 shipped
+            # it default-off (mate/stalemate-blind); P4-T11 closed the gap
+            # with a wrapper-level terminal passthrough (exact mate/0
+            # parity, Tier-3-proven) and re-measured ~4x end-to-end, so
+            # the kernel is now the default eval source. Explicit False
+            # restores the pure-Python path.
+            "mentor_use_cpp": True,
         }
         # P3-T01: backend-owned game clock (milliseconds). None == Unlimited:
         # no clock installed, no flag possible. The turn stamp is
@@ -911,9 +913,11 @@ class ChessEngineManager:
         - Bishop pair bonus
         - King safety
 
-        P4-T03: when the ``mentor_use_cpp`` setting is on (default OFF),
+        P4-T11: when the ``mentor_use_cpp`` setting is on (default ON),
         the static score comes from the compiled ``cpp_engine`` kernel
-        instead of ``MentorEngine.evaluate``. ``_cpp_evaluate`` is the
+        instead of ``MentorEngine.evaluate``. Terminals are exact on both
+        paths (the wrapper passes checkmate/stalemate/insufficient through
+        before dispatching). ``_cpp_evaluate`` is the
         injectable dispatch (tests pass a fake; production lazily imports
         the wrapper -- never a module-level import, so the backend starts
         with no toolchain). Any cpp failure falls back to the Python path.

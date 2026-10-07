@@ -120,7 +120,7 @@ from a subprocess, from pure Python, or from a neural proxy.
 The manager computes think time once per move, from the clock and the think
 profile, then hands the same value to whichever bot plays. This is what makes
 two bots comparable: switching from Stockfish to Mentor for the same position
-changes *how* the move is chosen, not *how long* it was allowed to think.
+changes _how_ the move is chosen, not _how long_ it was allowed to think.
 Leaving budget resolution to each bot is how bots end up silently advantaged
 over one another.
 
@@ -181,7 +181,15 @@ No `id` — pushed from Python to main at any time:
 {
   "type": "analysis_update",
   "callback_id": "<string>",
-  "pvs": [ { "depth": 20, "score_cp": 42, "mate": null, "pv": ["e2e4"], "pv_san": ["e4"] } ],
+  "pvs": [
+    {
+      "depth": 20,
+      "score_cp": 42,
+      "mate": null,
+      "pv": ["e2e4"],
+      "pv_san": ["e4"]
+    }
+  ],
   "fen": "<FEN string>"
 }
 ```
@@ -193,14 +201,15 @@ No `id` — pushed from Python to main at any time:
 The renderer communicates exclusively through the `contextBridge` API defined in `electron/preload.ts`:
 
 ```ts
-window.electronAPI.makeMove({ move: 'e2e4' })
-  // → ipcMain.handle('make_move', ...)
-  // → Python: {"command": "make_move", "params": {"move": "e2e4"}}
-  // ← Python: {"id": "...", "result": { "fen": "...", "turn": "black", ... }}
-  // → Promise resolves with result
+window.electronAPI.makeMove({ move: "e2e4" });
+// → ipcMain.handle('make_move', ...)
+// → Python: {"command": "make_move", "params": {"move": "e2e4"}}
+// ← Python: {"id": "...", "result": { "fen": "...", "turn": "black", ... }}
+// → Promise resolves with result
 ```
 
 All chess commands are forwarded directly to Python. The main process also handles:
+
 - Window controls (minimize/maximize/close)
 - Settings file I/O (`userData/settings.json`)
 - File dialogs (Stockfish path picker)
@@ -212,6 +221,7 @@ All chess commands are forwarded directly to Python. The main process also handl
 Two Zustand stores:
 
 ### `gameStore`
+
 - Board FEN, turn, legal moves
 - Move history (SAN + UCI)
 - Selected square, highlights
@@ -219,6 +229,7 @@ Two Zustand stores:
 - UI state (pending promotion, toasts, engine busy)
 
 ### `settingsStore`
+
 - All user preferences (appearance, engine config, gameplay)
 - Persists to/from `userData/settings.json` via Electron IPC
 
@@ -268,22 +279,25 @@ directly — the reach is transitive, not a package re-export
   the `build/backend.spec` hiddenimport. Covered by `tests/test_reporting.py`
   (valid-PDF header/size/trailer, unwritable-path `OSError`, missing-fpdf2
   `RuntimeError`).
-- **C++ evaluation engine — SHIPPED, default-off (P4-T03 closed by P4-T06).**
-  `cpp_engine/`: the wrapper builds as C++ (`pymodule.cpp`), `npm run
-  build:cpp` emits the ABI-tagged `.so` beside `__init__.py`, and `get_info()`
+- **C++ evaluation engine — SHIPPED, default-on (P4-T03 closed by P4-T06,
+  enabled by P4-T11).** `cpp_engine/`: the wrapper builds as C++ (`pymodule.cpp`),
+  `npm run build:cpp` emits the ABI-tagged `.so` beside `__init__.py`, and `get_info()`
   reports `C++ accelerated evaluation ACTIVE`. The Python loader
   (`cpp_engine/__init__.py`) tries the compiled module and falls back to
   `MentorEngine`, reporting which branch is active via `get_info()`; nothing
   outside `cpp_engine/` imports it except through the injectable
-  `mentor_use_cpp` dispatch (default **off** in `ChessEngineManager.settings` +
-  `settings_schema.engine_defaults`). Tier 3 is green
-  (`tests/test_cpp_kernel.py`, 7 tests: determinism, colour antisymmetry,
-  material sanity, mated-side-loses, near-equal stalemate ≈ 0, batch ==
-  elementwise, malformed-FEN `ValueError` never silent 0). Benchmark recorded:
-  ~6x end-to-end (~490 µs/eval compiled vs ~2.7–3.2 ms/eval fallback,
-  validation-bound) with a NO-SHIP recommendation — the kernel is
-  mate/stalemate-blind, so default-on needs its own evaluation-quality item
-  (P4-T11), not a build flip. CI Linux gcc step builds the kernel and asserts
+  `mentor_use_cpp` dispatch (default **on** in `ChessEngineManager.settings` +
+  `settings_schema.engine_defaults`; explicit `False` restores pure Python).
+  Tier 3 is green (`tests/test_cpp_kernel.py`, 11 tests: the P4-T06 7 plus
+  P4-T11 exact mate/stalemate/insufficient-material parity and batch
+  terminal parity). The wrapper passes terminals through before dispatching
+  (checkmate → `-MATE_SCORE + ply`, stalemate/insufficient → 0, mirroring
+  `MentorEngine.evaluate`), so kernel and fallback are bit-identical there;
+  non-terminal statics remain different evaluations under the Tier-3
+  property contract. Fresh P4-T11 benchmark: ~4x end-to-end on game-like
+  positions (~296 µs/eval compiled vs ~1.2 ms/eval fallback, best-of
+  interleaved warmed rounds; ~1.4x through `get_mentor_eval`), parity on
+  pure-terminal sets. CI Linux gcc step builds the kernel and asserts
   `_has_cpp`, so Tier 3 runs in CI. The register §2c portability shim
   (`__builtin_popcountll` / `__builtin_ctzll`) is what unblocked the gcc build;
   see also struck `TODO.md` item 3.

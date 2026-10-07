@@ -1486,28 +1486,29 @@ replay from startpos, wrong for FEN-started games — reachable since
 
 > Verification (2026-10-06): test-first `FenStartNavigationTests` (5 tests,
 > Black-to-move FEN `rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1`
-> + `e7e5 b1c3 g8f6 g1f3`): pre-fix 5 FAIL recorded (mid-view
-> `rnbqkbnr/pppp1ppp/8/4P3/8/2n5/PPPPPPPP/R1BQKBNR w KQkq - 0 2` vs expected
-> `...2N5/... b KQkq - 1 2`; `history_fens_and_moves` 3 vs 4 with e5 dropped;
-> `move_history_san` `['Nc3','Nf6','Nf3']`; empty-FEN navigate shows startpos).
-> Post-fix 11/11 navigation green. Clamp: `_board_from_full_history`,
-> `_restore_live_board` (`set_fen`), `navigate_to` (`set_fen`),
-> `move_history_san`, `history_fens_and_moves` replay from `_initial_fen`;
-> `export_pgn` threads it as a `to_pgn(initial_fen)` parameter (no new state;
-> `GameState.setup()` only when non-standard, so standard exports
-> byte-identical). `_history_with_colors` already clamped (P2-T09, untouched);
-> `start_analysis`/`get_mentor_eval`/`get_book_moves` take an explicit fen
-> (correctly-startpos, untouched); `import_pgn` resets to STARTING_FEN
-> (verified by reading + `test_import_pgn_resets_start_to_standard` green).
-> Edge: empty-history FEN navigate returns the FEN with live sentinel, no
-> crash. Full gate green (counts in commit body).
+>
+> - `e7e5 b1c3 g8f6 g1f3`): pre-fix 5 FAIL recorded (mid-view
+>   `rnbqkbnr/pppp1ppp/8/4P3/8/2n5/PPPPPPPP/R1BQKBNR w KQkq - 0 2` vs expected
+>   `...2N5/... b KQkq - 1 2`; `history_fens_and_moves` 3 vs 4 with e5 dropped;
+>   `move_history_san` `['Nc3','Nf6','Nf3']`; empty-FEN navigate shows startpos).
+>   Post-fix 11/11 navigation green. Clamp: `_board_from_full_history`,
+>   `_restore_live_board` (`set_fen`), `navigate_to` (`set_fen`),
+>   `move_history_san`, `history_fens_and_moves` replay from `_initial_fen`;
+>   `export_pgn` threads it as a `to_pgn(initial_fen)` parameter (no new state;
+>   `GameState.setup()` only when non-standard, so standard exports
+>   byte-identical). `_history_with_colors` already clamped (P2-T09, untouched);
+>   `start_analysis`/`get_mentor_eval`/`get_book_moves` take an explicit fen
+>   (correctly-startpos, untouched); `import_pgn` resets to STARTING_FEN
+>   (verified by reading + `test_import_pgn_resets_start_to_standard` green).
+>   Edge: empty-history FEN navigate returns the FEN with live sentinel, no
+>   crash. Full gate green (counts in commit body).
 
 ### P4-T10 — Download progress bar in UI (TODO.md:1) ✅ DONE
 
 > Verification (2026-10-06): test-first both levels. BACKEND
 > `tests/test_maia3_progress.py` (3 tests): pre-fix FAIL recorded
 > (`TypeError: handle_maia3_cache() got an unexpected keyword argument
-> 'push_fn'`, zero pushes); post-fix green (0→100 in order, stoppage,
+'push_fn'`, zero pushes); post-fix green (0→100 in order, stoppage,
 > terminal passthrough). RENDERER `SettingsPanel.test.tsx` +3: pre-fix 2
 > FAIL (no subscription, no element) + 1 vacuous guard green; post-fix 5/5.
 > Push shape mirrors `clock_tick` (P3-T01), not the `analysisCallbacks`
@@ -1531,7 +1532,7 @@ hijack, not the surfacing); docs re-promise it in three places.
 - **Test:** stubbed downloader → progress events observed 0→100 in order.
 - **Done when:** downloading shows in-UI progress; terminal-only claims gone.
 
-### P4-T11 — Compiled kernel default-on evaluation
+### P4-T11 — Compiled kernel default-on evaluation ✅ DONE
 
 P4-T06 NO-SHIP exit clause: ~6x end-to-end but mate/stalemate-blind
 (Scholar's −80 vs −99995, queen-up −1002), so the flag stays off until
@@ -1542,6 +1543,25 @@ quality is proven.
   closes honestly).
 - **Test:** quality bar + benchmark, same contracts as Tier 3.
 - **Done when:** flag state decided with evidence, recorded.
+- **Verification (2026-10-06):** DECISION — default ON with proof.
+  Quality bar (defined before measuring): exact fallback parity on
+  terminals (mate = −MATE+ply; stalemate/insufficient = 0), sign
+  agreement on non-terminal game positions, fresh benchmark showing no
+  end-to-end regression. Fixability: wrapper-level terminal passthrough
+  in `cpp_engine/__init__.py` (mirrors `MentorEngine.evaluate` arms;
+  no C++ movegen, no PST/search changes, no rebuild). Test-first:
+  4 new Tier-3 tests (mate parity ×3 FENs, stalemate-0 ×2, insufficient-0
+  ×3, batch terminal parity) — 8 subtests FAIL pre-fix with the
+  documented blindness (Scholar's −80, Fool's 0 sign-blind, KQ-mate −997,
+  stale −133/−1002, KB/KN-vs-K +350); all green post-fix (11/11 Tier 3).
+  Fresh benchmark (P4-T06 method, interleaved warmed rounds): game-like
+  set ~4.1x singles+batch best (~296µs vs ~1.2ms), ~1.4x via
+  `get_mentor_eval`; pure-terminal sets parity (~0.8–1.2x, movegen-bound
+  both sides). Flag flipped ON in `ChessEngineManager.settings` +
+  `settings_schema.engine_defaults` (+ dispatch test now asserts ON);
+  consumer parity exact on all terminals (white-relative mate scores
+  equal), non-terminals same-sign close-magnitude per the Tier-3
+  property contract. Full gate green — see commit body for counts/times.
 
 ### P4-T12 — AnalysisView callback stabilization (2 warnings) — LAST TASK
 

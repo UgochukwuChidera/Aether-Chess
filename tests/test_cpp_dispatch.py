@@ -83,10 +83,12 @@ class CppDispatchLoaderTests(unittest.TestCase):
 
 
 class CppDispatchFlagTests(unittest.TestCase):
-    def test_flag_exists_and_defaults_off(self):
+    def test_flag_exists_and_defaults_on(self):
+        # P4-T11: default flipped OFF -> ON (terminal parity proven,
+        # ~4x re-measured). Explicit False still restores the Python path.
         mgr = ChessEngineManager()
         self.assertIn("mentor_use_cpp", mgr.settings)
-        self.assertFalse(mgr.settings["mentor_use_cpp"])
+        self.assertTrue(mgr.settings["mentor_use_cpp"])
 
     def test_flag_off_ignores_injected_dispatch(self):
         mgr = ChessEngineManager()

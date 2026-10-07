@@ -93,9 +93,9 @@ def engine_defaults() -> Dict[str, Any]:
         "stockfish_path": "stockfish",
         "maia3_model": "maia3-5m",
         "maia3_device": "cpu",
-        # P4-T03: compiled-kernel dispatch, default OFF (see
+        # P4-T11: compiled-kernel dispatch, default ON (see
         # ChessEngineManager.settings -- the two must agree).
-        "mentor_use_cpp": False,
+        "mentor_use_cpp": True,
     }
 
 

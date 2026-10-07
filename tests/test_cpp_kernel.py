@@ -18,25 +18,30 @@ exact-equality with ``MentorEngine``; the two are different evaluations):
 - batch equals elementwise singles,
 - malformed FEN raises ``ValueError`` (Change-1 wrapper), never silent 0.
 
-Deliberate non-assertions, probed live 2026-10-06 (compiled ``.so``,
-``_has_cpp True``; same probes re-run with the kernel forced out --
-fallback column):
+Deliberate non-assertions (P4-T06 record; CLOSED by P4-T11 -- the
+probes below are the pre-fix blindness, kept as history; the parity
+tests above now assert what was documented-not-asserted):
 
-- "mate = mate score" does NOT hold for this kernel and is not asserted:
+- "mate = mate score" did NOT hold pre-P4-T11 and was not asserted:
   the kernel is a static evaluator with no legal-move generation, so a
-  mate scores its material/PST value, not a mate constant (Scholar's:
+  mate scored its material/PST value, not a mate constant (Scholar's:
   kernel -80 vs fallback -MATE_SCORE+ply = -99995; Fool's mate, equal
-  material: kernel 0 vs fallback -99996). The internal +/-100000
-  king-absence arms of ``evaluate()`` are unreachable by design -- the
-  wrapper rejects kingless FEN before C++ runs -- so no mate-score
-  constant exists on the public path to assert. Asserting one would test
-  a fiction; asserting ``< 0`` survives a future mate term (it only gets
-  more negative). Both kernels agree on the SIGN.
-- "stalemate ~= 0" holds only for near-equal material and is asserted
-  only there (pawn-up stalemate: kernel -133, fallback exactly 0).
-  Queen-up stalemate scores -1002 on the kernel (fallback 0) -- the
-  kernel cannot see the stalemate, only the queen. Documented, not
-  asserted, so a future stalemate term stays unblocked.
+  material: kernel 0 vs fallback -99996 -- sign-blind, not just
+  magnitude-blind). P4-T11 adds a wrapper-level terminal passthrough
+  (``cpp_engine`` checks checkmate/stalemate/insufficient-material via
+  python-chess before dispatching, mirroring ``MentorEngine.evaluate``),
+  so mate parity now holds EXACTLY and is asserted. The internal
+  +/-100000 king-absence arms of ``evaluate()`` remain unreachable by
+  design -- the wrapper rejects kingless FEN before C++ runs -- so no
+  mate-score constant exists on the C++ public path; the passthrough
+  lives in the Python wrapper, where movegen exists.
+- "stalemate ~= 0" held only for near-equal material pre-P4-T11 and was
+  asserted only there (pawn-up stalemate: kernel -133, fallback exactly
+  0). Queen-up stalemate scored -1002 on the kernel (fallback 0) -- the
+  kernel could not see the stalemate, only the queen. P4-T11 closes
+  this the same way: stalemate and insufficient-material (KB-vs-K 350,
+  KN-vs-K 350 pre-fix) now return exactly 0 via the passthrough and
+  are asserted, including in batch.
 - Antisymmetry mirror keeps the side to move, so it NEGATES the score
   but does NOT preserve terminal states (mate/stalemate are
   turn-relative): mirrored Scholar's scores +80 and is not mate;
@@ -73,11 +78,40 @@ BARE_KINGS = "4k3/8/8/8/8/8/8/4K3 w - - 0 1"
 EXTRA_QUEEN = "4k3/8/8/8/8/8/4Q3/4K3 w - - 0 1"
 # Scholar's mate, Black mated and to move (kernel probed at -80).
 SCHOLARS_MATE = "r1bqkbnr/pppp1Qpp/2n5/4p3/2B1P3/8/PPPP1PPP/RNB1K1NR b KQkq - 0 3"
+# Fool's mate, White mated and to move (kernel probed at 0 -- dead-even
+# on a mated position: not just magnitude-blind, sign-blind).
+FOOLS_MATE = "rnb1kbnr/pppp1ppp/8/4p3/6Pq/5P2/PPPPP2P/RNBQKBNR w KQkq - 1 3"
+# KQ-vs-K back-rank mate, Black mated and to move (kernel probed -997).
+MATE_KQ = "k7/1Q6/2K5/8/8/8/8/8 b - - 0 1"
 # Pawn-up stalemate, Black to move (kernel probed at -133).
 STALEMATE_PAWN = "5k2/5P2/5K2/8/8/8/8/8 b - - 0 1"
+# Queen-up stalemate, Black to move (kernel probed at -1002).
+STALEMATE_QUEEN = "7k/5Q2/6K1/8/8/8/8/8 b - - 0 1"
+# Insufficient material (kernel probed: bare kings 0, KB-vs-K 350,
+# KN-vs-K 350 -- a lone minor scores a full piece in a dead draw).
+KB_VS_K = "4k3/8/8/8/8/8/5B2/4K3 w - - 0 1"
+KN_VS_K = "4k3/8/8/8/8/8/5N2/4K3 w - - 0 1"
 
 # Fixed set shared with the P4-T06 benchmark (commit body).
 BENCH_FENS = [STARTPOS, ITALIAN, MIDGAME, BARE_KINGS, EXTRA_QUEEN, SCHOLARS_MATE]
+
+# P4-T11 quality-bar terminal set: every FEN here must score EXACTLY
+# what MentorEngine.evaluate returns (mate magnitude / 0), on singles
+# and in batch. Pre-fix probes (2026-10-06, compiled .so, _has_cpp
+# True) -- the blindness this item closes:
+#   SCHOLARS_MATE -80 vs -99995 | FOOLS_MATE 0 vs -99996 (sign-blind)
+#   MATE_KQ -997 vs -99999 | STALEMATE_PAWN -133 vs 0
+#   STALEMATE_QUEEN -1002 vs 0 | KB_VS_K 350 vs 0 | KN_VS_K 350 vs 0.
+TERM_FENS = [
+    SCHOLARS_MATE,
+    FOOLS_MATE,
+    MATE_KQ,
+    STALEMATE_PAWN,
+    STALEMATE_QUEEN,
+    BARE_KINGS,
+    KB_VS_K,
+    KN_VS_K,
+]
 
 
 def mirror_keep_turn(fen: str) -> str:
@@ -146,6 +180,60 @@ class CppKernelTests(unittest.TestCase):
         board = chess.Board(STALEMATE_PAWN)
         self.assertTrue(board.is_stalemate(), "premise: the FEN must be stalemate")
         self.assertLess(abs(cpp_engine.evaluate_fen(STALEMATE_PAWN)), 200)
+
+    def test_checkmate_reports_mate_score_parity(self):
+        # P4-T11 QB1: the kernel must REPORT mate when mated -- exactly
+        # what MentorEngine.evaluate returns (-MATE_SCORE + ply,
+        # side-to-move-relative), not a static material score. Fails
+        # pre-fix (Scholar's -80, Fool's 0, KQ-mate -997).
+        from aether_chess.engines.mentor_engine import MATE_SCORE
+
+        for fen in (SCHOLARS_MATE, FOOLS_MATE, MATE_KQ):
+            with self.subTest(fen=fen):
+                board = chess.Board(fen)
+                self.assertTrue(board.is_checkmate(), "premise: FEN must be mate")
+                self.assertEqual(
+                    cpp_engine.evaluate_fen(fen), -MATE_SCORE + board.ply()
+                )
+
+    def test_stalemate_scores_zero(self):
+        # P4-T11 QB2: stalemate is 0, whatever the material imbalance.
+        # Fails pre-fix (pawn-up -133, queen-up -1002).
+        for fen in (STALEMATE_PAWN, STALEMATE_QUEEN):
+            with self.subTest(fen=fen):
+                board = chess.Board(fen)
+                self.assertTrue(board.is_stalemate(), "premise: FEN must be stale")
+                self.assertEqual(cpp_engine.evaluate_fen(fen), 0)
+
+    def test_insufficient_material_scores_zero(self):
+        # P4-T11 QB3: dead-draw material is 0, not a piece value. Fails
+        # pre-fix (KB-vs-K 350, KN-vs-K 350; bare kings 0 by coincidence).
+        for fen in (BARE_KINGS, KB_VS_K, KN_VS_K):
+            with self.subTest(fen=fen):
+                board = chess.Board(fen)
+                self.assertTrue(
+                    board.is_insufficient_material(), "premise: dead material"
+                )
+                self.assertEqual(cpp_engine.evaluate_fen(fen), 0)
+
+    def test_batch_terminal_parity(self):
+        # P4-T11: batch must agree with singles AND with the fallback on
+        # every terminal in the set (batch takes its own C++ path, so a
+        # singles-only fix would leave it blind). Fails pre-fix.
+        from aether_chess.engines.mentor_engine import MATE_SCORE
+
+        expected = []
+        for fen in TERM_FENS:
+            board = chess.Board(fen)
+            if board.is_checkmate():
+                expected.append(-MATE_SCORE + board.ply())
+            else:
+                expected.append(0)
+        self.assertEqual(cpp_engine.evaluate_batch(TERM_FENS), expected)
+        self.assertEqual(
+            cpp_engine.evaluate_batch(TERM_FENS),
+            [cpp_engine.evaluate_fen(f) for f in TERM_FENS],
+        )
 
     def test_batch_matches_elementwise_singles(self):
         fens = BENCH_FENS + [STALEMATE_PAWN]

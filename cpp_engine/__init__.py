@@ -137,22 +137,58 @@ def _validate_fen(fen: str) -> None:
     on syntactically bad FEN, and both kings are required to mirror the
     kernel's own ``king_sq < 0 -> false`` rule. Raises ``ValueError``.
     """
+    _load_board(fen)
+
+
+def _load_board(fen: str):
+    """Parse + validate ``fen``, returning the ``chess.Board`` (P4-T11).
+
+    Same contract as ``_validate_fen`` (raises ``ValueError`` on garbage
+    or kingless FEN), but hands the board back so callers can check
+    terminal states without parsing twice. ``_validate_fen`` delegates
+    here and stays the public name.
+    """
     import chess
 
     board = chess.Board(fen)  # raises ValueError on malformed FEN
     if board.king(chess.WHITE) is None or board.king(chess.BLACK) is None:
         raise ValueError(f"FEN has no legal position (missing king): {fen!r}")
+    return board
+
+
+def _terminal_score(board) -> int | None:
+    """Mate/stalemate-term passthrough, side-to-move-relative (P4-T11).
+
+    The C++ kernel is a static evaluator with no legal-move generation,
+    so terminal positions scored their material/PST value (Scholar's
+    -80, Fool's 0, queen-up stalemate -1002) where ``MentorEngine``
+    reports mate magnitude / 0. Teaching the kernel movegen would be an
+    evaluator redesign -- out of scope -- so the wrapper checks the
+    exact ``MentorEngine.evaluate`` terminal arms here, once, before
+    dispatching: checkmate -> ``-MATE_SCORE + ply``, stalemate or
+    insufficient material -> 0. Returns ``None`` when non-terminal.
+    Applies to BOTH branches (the fallback would compute the same
+    values a millisecond later; returning early keeps kernel and
+    fallback bit-identical by construction).
+    """
+    if board.is_checkmate():
+        from aether_chess.engines.mentor_engine import MATE_SCORE
+
+        return -MATE_SCORE + board.ply()
+    if board.is_stalemate() or board.is_insufficient_material():
+        return 0
+    return None
 
 
 def evaluate_fen(fen: str) -> int:
     """Evaluate a FEN position. Uses C++ if available."""
-    _validate_fen(fen)
+    board = _load_board(fen)
+    terminal = _terminal_score(board)
+    if terminal is not None:
+        return terminal
     if _has_cpp:
         return _evaluate_cpp(fen)
     # Pure Python fallback
-    import chess
-
-    board = chess.Board(fen)
     from aether_chess.engines.mentor_engine import MentorEngine
 
     eng = MentorEngine()
@@ -161,8 +197,18 @@ def evaluate_fen(fen: str) -> int:
 
 def evaluate_batch(fens: list) -> list:
     """Evaluate multiple FEN positions in batch."""
-    for fen in fens:
-        _validate_fen(fen)
+    boards = [_load_board(fen) for fen in fens]
+    terminals = [_terminal_score(board) for board in boards]
     if _evaluate_batch_cpp:
-        return _evaluate_batch_cpp(fens)
-    return [evaluate_fen(f) for f in fens]
+        scores = list(_evaluate_batch_cpp(fens))
+        # P4-T11: the C++ batch path is terminal-blind like the single
+        # path was -- overlay the passthrough per item so batch agrees
+        # with singles and with the fallback on terminals.
+        return [
+            score if terminal is None else terminal
+            for score, terminal in zip(scores, terminals, strict=True)
+        ]
+    return [
+        terminal if terminal is not None else evaluate_fen(fen)
+        for fen, terminal in zip(fens, terminals, strict=True)
+    ]
