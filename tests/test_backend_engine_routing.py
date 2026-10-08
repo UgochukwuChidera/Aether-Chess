@@ -85,6 +85,16 @@ class EngineRoutingTests(unittest.TestCase):
         )
         if cls._uci_best_move(cls.stub) != cls.marker:
             raise AssertionError("stub engine is not a usable UCI engine")
+        # Seed a PATH-visible `stockfish` so the backend's availability gate
+        # passes hermetically: canonical stockfish must be AVAILABLE for the
+        # configured-path tests to reach the stub, but CI has no real engine
+        # (and neither may any other clean checkout). The seed plays e2e4, a
+        # sane non-marker move, so the auto-resolution test (which asserts a
+        # non-marker answer) stays meaningful instead of skipping.
+        cls.seedbin = os.path.join(cls._shared.name, "bin")
+        cls.seed = write_stub_engine(cls.seedbin, "stockfish", "Stockfish 17", "e2e4")
+        if cls._uci_best_move(cls.seed) != "e2e4":
+            raise AssertionError("seed engine is not a usable UCI engine")
 
     @staticmethod
     def _uci_best_move(engine_path):
@@ -119,7 +129,11 @@ class EngineRoutingTests(unittest.TestCase):
             stderr=subprocess.PIPE,
             text=True,
             cwd=str(service.parent.parent),
-            env={**os.environ, "PYTHONPATH": str(service.parent.parent)},
+            env={
+                **os.environ,
+                "PYTHONPATH": str(service.parent.parent),
+                "PATH": self.seedbin + os.pathsep + os.environ.get("PATH", ""),
+            },
         )
         reply = {}
         # Drain backend stderr (bot-manager fallback notes, tracebacks).

@@ -231,7 +231,9 @@ class BotManager:
                 if skipped:
                     parts.append(f"unavailable: {', '.join(skipped)}")
                 if tried:
-                    parts.append(f"failed: {', '.join(tried)}")
+                    # tried lists ATTEMPTED ids, including the one that
+                    # ultimately succeeded -- "tried", not "failed".
+                    parts.append(f"tried: {', '.join(tried)}")
                 detail = "; ".join(parts) or "no alternative available"
                 move.note = f"fell back from {requested} ({detail})"
             return move
