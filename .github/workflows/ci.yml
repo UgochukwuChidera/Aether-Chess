@@ -110,6 +110,23 @@ jobs:
             exit 1
           fi
 
+      - name: Install pinned Stockfish build
+        # No Git LFS, no repo weight: pull the official build once per run.
+        # Version pinned by release tag in one place (below); bump the tag
+        # deliberately, never floating. Gives the resolver + auto-routing
+        # tests a REAL subject (option negotiation, real info-line parsing,
+        # version discovery) alongside the deterministic stubs. engines/
+        # stays gitignored by design -- this lands in the runner temp dir.
+        run: |
+          SF_TAG="sf_17"
+          curl -sL --max-time 120 -o "${RUNNER_TEMP}/stockfish.tar" "https://github.com/official-stockfish/Stockfish/releases/download/${SF_TAG}/stockfish-ubuntu-x86-64.tar"
+          mkdir -p "${RUNNER_TEMP}/stockfish-bin"
+          tar -xf "${RUNNER_TEMP}/stockfish.tar" -C "${RUNNER_TEMP}/stockfish-bin"
+          SF_BIN=$(find "${RUNNER_TEMP}/stockfish-bin" -name "stockfish*" -type f | head -1)
+          chmod +x "$SF_BIN"
+          printf 'uci\nquit\n' | "$SF_BIN" | grep -q "uciok" && echo "Stockfish smoke OK: $SF_BIN"
+          echo "$(dirname "$SF_BIN")" >> "$GITHUB_PATH"
+
       - name: Stockfish resolver tests
         env:
           # runner context is allowed in step env (not job env).
