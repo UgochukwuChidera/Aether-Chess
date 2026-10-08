@@ -116,12 +116,16 @@ class EngineRoutingTests(unittest.TestCase):
             [sys.executable, str(service)],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
             text=True,
             cwd=str(service.parent.parent),
             env={**os.environ, "PYTHONPATH": str(service.parent.parent)},
         )
         reply = {}
+        # Drain backend stderr (bot-manager fallback notes, tracebacks).
+        # DEVNULL here once discarded the only diagnostic for a routing
+        # failure; keep the tail and quote it in assertion messages below.
+        err_lines: list = []
 
         def read_reply():
             assert proc.stdout is not None
@@ -135,8 +139,15 @@ class EngineRoutingTests(unittest.TestCase):
                     continue
                 return
 
+        def read_stderr():
+            assert proc.stderr is not None
+            for line in proc.stderr:
+                err_lines.append(line.rstrip("\n"))
+
         reader = threading.Thread(target=read_reply, daemon=True)
         reader.start()
+        err_drain = threading.Thread(target=read_stderr, daemon=True)
+        err_drain.start()
         assert proc.stdin is not None
         proc.stdin.write(
             json.dumps(
@@ -158,9 +169,11 @@ class EngineRoutingTests(unittest.TestCase):
         reader.join(timeout)
         proc.kill()
         proc.wait(timeout=30)
-        for stream in (proc.stdin, proc.stdout):
+        err_drain.join(timeout=5)
+        for stream in (proc.stdin, proc.stdout, proc.stderr):
             if stream is not None:
                 stream.close()
+        self._last_backend_stderr = "\n".join(err_lines[-25:])
         return reply
 
     @staticmethod
@@ -181,14 +194,18 @@ class EngineRoutingTests(unittest.TestCase):
         self.assertEqual(
             self.marker,
             self.move_of(reply),
-            f"backend did not use the configured engine; reply={reply}",
+            f"backend did not use the configured engine; reply={reply}\n"
+            f"backend stderr tail:\n{getattr(self, '_last_backend_stderr', '')}",
         )
         self.assertNotIn("error", reply)
 
     def test_configured_engine_is_not_marked_as_a_fallback(self):
         reply = self.ask_backend(self.stub)
 
-        self.assertFalse(self.result_of(reply).get("_fallback"), reply)
+        self.assertFalse(
+            self.result_of(reply).get("_fallback"),
+            f"{reply}\nbackend stderr tail:\n{getattr(self, '_last_backend_stderr', '')}",
+        )
 
     def test_missing_engine_falls_back_to_mentor_not_another_stockfish(self):
         """A bad path must not be papered over by quietly using a different engine."""
