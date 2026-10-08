@@ -56,10 +56,35 @@ export const AnalysisView: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-once analysis subscription; callbacks use stable store actions, and the store.fen fallback applies only when the backend omits fen
   }, []);
 
+  // P4-T12: stable starter -- reads EVERYTHING via getState() with
+  // useCallback([]), so its identity is static and the restart effect below
+  // can list it without refiring every render. (A useCallback whose deps
+  // change per render would still be per-render: no gain, restart loop.)
+  const handleStartAnalysis = useCallback(async () => {
+    const storeState = useGameStore.getState();
+    const settingsState = useSettingsStore.getState();
+    runningRef.current = true;
+    storeState.setAnalysis({ running: true });
+    try {
+    await window.electronAPI.startAnalysis({
+      fen: storeState.fen,
+      multipv: settingsState.multipv,
+      callback_id: ANALYSIS_CB_ID,
+      stockfish_path: settingsState.stockfishPath,
+      engine_type: settingsState.playEngine === 'maia3' ? 'stockfish' : settingsState.playEngine,
+      threads: settingsState.threads,
+      hash_mb: settingsState.hashMb,
+    });
+    } catch (err) {
+      storeState.pushToast(`Analysis failed: ${err}`, 'error');
+      storeState.setAnalysis({ running: false });
+    }
+  }, []);
+
   // Stop analysis immediately on FEN / settings change; debounce the restart
   useEffect(() => {
     void window.electronAPI.stopAnalysis().catch(() => {});
-    store.setAnalysis({ running: false });
+    useGameStore.getState().setAnalysis({ running: false });
 
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);
@@ -77,26 +102,7 @@ export const AnalysisView: React.FC = () => {
         debounceRef.current = null;
       }
     };
-  }, [store.fen, settings.multipv, settings.playEngine, settings.stockfishPath, settings.threads, settings.hashMb]);
-
-  async function handleStartAnalysis() {
-    runningRef.current = true;
-    store.setAnalysis({ running: true });
-    try {
-    await window.electronAPI.startAnalysis({
-      fen: store.fen,
-      multipv: settings.multipv,
-      callback_id: ANALYSIS_CB_ID,
-      stockfish_path: settings.stockfishPath,
-      engine_type: settings.playEngine === 'maia3' ? 'stockfish' : settings.playEngine,
-      threads: settings.threads,
-      hash_mb: settings.hashMb,
-    });
-    } catch (err) {
-      store.pushToast(`Analysis failed: ${err}`, 'error');
-      store.setAnalysis({ running: false });
-    }
-  }
+  }, [store.fen, settings.multipv, settings.playEngine, settings.stockfishPath, settings.threads, settings.hashMb, handleStartAnalysis]);
 
   async function handleStopAnalysis() {
     runningRef.current = false;
@@ -107,7 +113,10 @@ export const AnalysisView: React.FC = () => {
   const handleNavigate = useCallback(async (index: number) => {
     try {
       const result = await window.electronAPI.navigateToMove({ index }) as BackendMoveResult;
-      store.applyMoveResult(result);
+      // P4-T12: getState() keeps this useCallback([]) identity static, so the
+      // four nav callbacks below can list it without defeating memoization
+      // (listing render-scope `store` would refire them on every update).
+      useGameStore.getState().applyMoveResult(result);
     } catch {/* ignore */}
   }, []);
 

@@ -1563,7 +1563,7 @@ quality is proven.
   equal), non-terminals same-sign close-magnitude per the Tier-3
   property contract. Full gate green — see commit body for counts/times.
 
-### P4-T12 — AnalysisView callback stabilization (2 warnings) — LAST TASK
+### P4-T12 — AnalysisView callback stabilization (2 warnings) — LAST TASK ✅ DONE
 
 UNOWNED candidate, declined twice as scope creep, accepted residual since
 P2-T18: per-render `handleStartAnalysis` + snapshot reads can't join effect
@@ -1573,6 +1573,35 @@ deps without restart loops.
 - **Test:** existing single-start + engine-switch tests green + lint zero
   warnings file-wide.
 - **Done when:** 0 warnings, behavior identical. Closes the program.
+
+> Verification (2026-10-08): exact pre-state warnings quoted --
+> `AnalysisView.tsx:80 exhaustive-deps missing 'handleStartAnalysis' and
+> 'store'`, `:112 useCallback missing 'store'` (the only 2 in this file;
+> the third repo warning `PlayView.tsx:189` is out of scope, pre-existing).
+> Stability analysis: the :80 effect called the per-render starter and read
+> render-scope `store` without listing them; naively adding them would CREATE
+> the restart loop (fresh callback identity every render -> effect refires
+> every render -> stop + 350 ms restart churn). Fix: starter becomes
+> `useCallback([])` reading EVERYTHING via `useGameStore`/`useSettingsStore`
+> `.getState()`, effect body `setAnalysis` via `getState()`, deps list the
+> now-stable callback alongside the unchanged primitive triggers
+> (fen/multipv/playEngine/stockfishPath/threads/hashMb); `handleNavigate`
+> likewise via `getState()` under `useCallback([])`. No behavior, timing
+> (350 ms), engine-mapping, or UI change. Test-first
+> `AnalysisView.test.tsx` +53: new STABLE test drives 5 rounds of
+> settings-unrelated churn (soundEnabled/showEvalBar toggles, toast pushes,
+> bare re-renders) then flushes past the debounce -- honest pre-state
+> recorded: it PASSES pre-fix (count already stable; the warnings flag
+> potential, not an actual loop), pins the invariant post-fix; P2-T18
+> single-start + engine-switch pair byte-unmodified and green. Lint:
+> file-zero (2 -> 0, quoted pre/post); `rg eslint-disable` count unchanged
+> (5 pre-existing scoped disables, none added, none removed). Hygiene note:
+> the file-edit tool reformatted `AnalysisView.tsx` whole-file mid-item
+> (quote/wrap churn) -- reverted via `git checkout --` and re-applied
+> surgically with a python script; final diff additive-only. Full gate
+> green: python 254 OK (2 skips) / 221.6s, ruff clean, pyright 0, electron
+> 78 pass, lint 0 errors, build succeeds, typecheck:renderer clean,
+> test:renderer 47/47, test:e2e 4/4 (1.7m, listener-leak green this run).
 
 ---
 

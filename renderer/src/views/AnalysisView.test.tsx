@@ -147,6 +147,59 @@ function lastStartParams(
   return last[0] as Record<string, unknown>;
 }
 
+describe("P4-T12 callback stabilization (no restart loops)", () => {
+  it("STABLE: settings-unrelated churn + bare re-renders cause zero restarts", async () => {
+    // P4-T12 stability analysis (ships in the commit): the :80 effect calls
+    // the per-render `handleStartAnalysis` and reads render-scope `store`
+    // without listing them, and `handleNavigate` (:112) reads `store` under
+    // `useCallback([])`. Naively adding them to the dep arrays would CREATE
+    // a restart loop (fresh callback identity / fresh store snapshot every
+    // render -> effect refires every render -> stop + 350 ms restart churn).
+    // The fix reads everything via getState() with useCallback([]), so both
+    // identities are static and the effect fires only on real triggers
+    // (fen / analysis settings). Honest pre-state: the count is ALREADY
+    // stable pre-fix -- the warnings flag potential, not an actual loop,
+    // because the unlisted callback is never re-invoked by the effect. This
+    // test therefore passes pre AND post; it pins the no-restart invariant
+    // while the P2-T18 pair below carries behavior and lint-zero (2 -> 0)
+    // is the stabilization proof.
+    const backend = createAnalysisBackend();
+    resetStoresForAnalysis();
+    vi.useFakeTimers();
+    const rendered = render(<AnalysisView />);
+    try {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(350);
+      });
+      expect(backend.startAnalysis).toHaveBeenCalledTimes(1);
+      backend.startAnalysis.mockClear();
+
+      // N settings-unrelated re-renders: toggle fields the restart effect
+      // does NOT depend on (soundEnabled / showEvalBar), push toasts (game
+      // store churn that must not retrigger), and force bare re-renders.
+      for (let i = 0; i < 5; i++) {
+        act(() => {
+          useSettingsStore.getState().update({ soundEnabled: i % 2 === 0 });
+          useSettingsStore.getState().update({ showEvalBar: i % 2 === 1 });
+          useGameStore.getState().pushToast(`churn-${i}`, "info");
+        });
+        rendered.rerender(<AnalysisView />);
+      }
+      // Flush past the 350 ms debounce: any restart loop would have
+      // scheduled (and fired) timers here.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(400);
+      });
+
+      // No restart loop: start count stable, not growing with churn.
+      expect(backend.startAnalysis).toHaveBeenCalledTimes(0);
+    } finally {
+      rendered.unmount();
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe("P2-T18 duplicate analysis start + missing engine dep", () => {
   it("SINGLE-START: navigating fires exactly one startAnalysis, for the navigated fen", async () => {
     const backend = createAnalysisBackend();
