@@ -1,8 +1,8 @@
 {
   "$schemaNote": "Coordinator-owned phase ledger for the AetherChess remediation. Shape follows the pre-flight-protocol skill: status, phase, workItems, decisions, session.os. Sub-agent outcomes live in commit bodies + coordinator chat (subagent depth limit forbids nested .spec/agents writes). workItem statuses: completed | active | todo. P1-T01 is flagged next:true.",
   "status": "executing",
-  "phase": "phase-4",
-  "phaseLabel": "Phase 4 — Final sweep (P4-T07 next, P4-T12 last)",
+  "phase": "complete",
+  "phaseLabel": "Remediation complete — all items closed",
   "phases": [
     {
       "id": "phase-0",
@@ -31,7 +31,7 @@
     {
       "id": "phase-4",
       "label": "Phase 4 — Unfinished features",
-      "status": "active",
+      "status": "completed",
       "note": "P4-T01..P4-T05. P4-T03 Tier 3 gated on §2c portability precondition."
     }
   ],
@@ -46,7 +46,7 @@
     "authority": "docs/VERIFICATION_REGISTER.md outranks docs/REMEDIATION_PLAN.md where they disagree (register §5 adjudication)."
   },
   "gate": {
-    "baseline": "python 242 passed · ruff clean · pyright 0 errors · electron 78 passed · lint clean · build succeeds",
+    "baseline": "python 254 passed · ruff clean · pyright 0 errors · electron 78 passed · lint clean · build succeeds",
     "phaseExits": {
       "phase-0": "python 122 passed",
       "phase-1": "python 130 passed",
@@ -376,8 +376,8 @@
       "id": "P2-T20",
       "title": "cancelled (orphaned UCI subprocess)",
       "phase": "phase-2",
-      "status": "todo",
-      "note": "No action — file deleted by P3-T06. If P3-T06 descoped, try/except quit."
+      "status": "completed",
+      "note": "CLOSED with P3-T06: uci_engine.py deleted, orphaned-subprocess defect gone with it. No action ever required."
     },
     {
       "id": "P2-T22",
@@ -519,8 +519,8 @@
       "id": "P4-T03",
       "title": "C++ evaluation engine",
       "phase": "phase-4",
-      "status": "todo",
-      "note": "HARD PRECONDITION (register §2c): MSVC-intrinsic shim + clean gcc -Wall -Wextra build before Tier 3. Tiers 1-2 independent; benchmark before enabling."
+      "status": "completed",
+      "note": "CLOSED by P4-T06 (PARTIAL tier-3-blocked shipped Tiers 1-2+flag; NO-SHIP exit). See P4-T06/P4-T11."
     },
     {
       "id": "P4-T04",
@@ -550,44 +550,49 @@
       "id": "P4-T07",
       "title": "Docs drift sweep (post-Phase-4 touch-ups)",
       "phase": "phase-4",
-      "status": "todo",
-      "note": "BACKEND_API not-yet + ARCHITECTURE planned-not-wired + TODO C++ strike.",
-      "next": true
+      "status": "completed",
+      "note": "Docs drift sweep; audit empty.",
+      "commit": "99ed44f22ad33b6fe14d21cf0b2c5b1af30c56ed"
     },
     {
       "id": "P4-T08",
       "title": "Dead UI surface: unused skill flag + no-op drawer",
       "phase": "phase-4",
-      "status": "todo",
-      "note": "Wire-or-drop flag; REMOVE drawer button (implementing out of track)."
+      "status": "completed",
+      "note": "Skill flag wired (Mentor truth-fix); drawer removed.",
+      "commit": "25fc49db84b97ffc283b667aa0b9fe0672723975"
     },
     {
       "id": "P4-T09",
       "title": "FEN-startpos navigation replay",
       "phase": "phase-4",
-      "status": "todo",
-      "note": "Clamp replay to retained _initial_fen; P2-T09 residual."
+      "status": "completed",
+      "note": "Replay clamped to retained startpos; 11/11 navigation.",
+      "commit": "1e1b1dfa37c2b9e049b763a6461ec1c18b8f6896"
     },
     {
       "id": "P4-T10",
       "title": "Download progress bar in UI (TODO.md:1)",
       "phase": "phase-4",
-      "status": "todo",
-      "note": "maia3_cache push + onDownloadProgress IPC + panel progress."
+      "status": "completed",
+      "note": "Download progress push + panel bar; TODO-1 struck in follow-up.",
+      "commit": "d512ff2f3bc7b76124be114bf7e9da9875982ab1"
     },
     {
       "id": "P4-T11",
       "title": "Compiled kernel default-on evaluation",
       "phase": "phase-4",
-      "status": "todo",
-      "note": "P4-T06 NO-SHIP exit: quality work + benchmark-gated decision."
+      "status": "completed",
+      "note": "Kernel default ON with terminal parity; ~4x; flag on.",
+      "commit": "256b327a3d91fa3eb89bf23da641d6118dc79d2f"
     },
     {
       "id": "P4-T12",
       "title": "AnalysisView callback stabilization (2 warnings) — LAST TASK",
       "phase": "phase-4",
-      "status": "todo",
-      "note": "UNOWNED x3: useCallback+getState, no restart loops. Closes the program."
+      "status": "completed",
+      "note": "Callback stabilization; 0 warnings file-wide; P2-T18 pair intact. LAST TASK.",
+      "commit": "cced9da8e298b0564b6731f8d4976cc563d51349"
     }
   ],
   "decisions": [
