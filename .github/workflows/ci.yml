@@ -31,12 +31,10 @@ jobs:
         # Runs first and on its own so a failure points straight at engine
         # discovery. These tests build their own throwaway UCI stubs, so no
         # Stockfish binary is needed on the runner (engines/ is gitignored).
-        # DIAGNOSTIC (2026-10-08): a CI run showed tsc exiting silently with
-        # no dist-test emit; list what tsc compiles and assert the emit dir.
-        run: |
-          npx tsc -p tsconfig.test.json --listFiles | tail -5
-          test -d dist-test || { echo "DIAG: dist-test missing after tsc"; ls; exit 1; }
-          node --test --test-reporter=tap dist-test/
+        # NOTE: the glob (not the directory) is passed to node --test on
+        # purpose: Node 22 treats a directory argument as a single failing
+        # test instead of discovering files (only newer Node traverses it).
+        run: npm run test:electron
 
       - name: Build renderer + Electron
         run: npm run build
