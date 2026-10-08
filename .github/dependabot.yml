@@ -1,0 +1,16 @@
+# Dependabot: GitHub Actions ONLY. npm is deliberately excluded -- JS deps
+# are pinned by explicit decisions (vitest v2 for vite 5, eslint 9 for
+# compat) and automated npm PRs would "fix" those into breakage.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    commit-message:
+      prefix: "ci"
+    # No auto-merge (default off, stays off): every bump is a PR that must
+    # go green on CI and be merged by a human. The weekly rhythm is the
+    # cooling-off period -- supply-chain compromises (axios-class) burn
+    # within hours as yanked releases; nothing here merges itself.
